@@ -1,0 +1,79 @@
+use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slicable, Slice};
+use std::fmt::Display;
+use std_reset::prelude::Deref;
+
+#[derive(PartialEq, Debug, Clone, Deref)]
+pub struct Ident(pub Slice);
+
+impl Ident {
+    pub fn new(start_end: [usize; 2], code: &Code) -> Self {
+        Self(Slice::new(start_end, code))
+    }
+}
+
+impl Display for Ident {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ident({})", self.0)
+    }
+}
+
+impl Parse for Ident {
+    fn parse(code: &Code) -> Option<Self> {
+        let code = &mut code.clone();
+
+        let start_rule = |char: char| char.is_alphabetic() || char == '_';
+
+        Whitespaces::parse_and_consume(code);
+
+        let mut iter = code.clone().iter();
+        let (i, char) = iter.next()?;
+        let start = start_rule(char).then_some(i)?;
+
+        let end = if start == code.len() - 1 {
+            start
+        } else {
+            iter.find_map(|(i, char)| {
+                if start_rule(char) || char.is_digit(10) {
+                    (i == code.len() - 1).then_some(i)
+                } else {
+                    Some(i - 1)
+                }
+            })?
+        };
+
+        Some(Self::new([start, end], code))
+    }
+}
+
+impl Slicable for Ident {
+    fn get_end(&self) -> usize {
+        self.0.get_end()
+    }
+}
+
+#[test]
+fn parse_ident() {
+    let check = |a, b| {
+        let code = &mut Code::new(a);
+        assert_eq!(Ident::parse(code), Some(Ident::new(b, code)));
+    };
+    let check_none = |a| {
+        assert_eq!(Ident::parse(&mut Code::new(a)), None);
+    };
+
+    check("abc", [0, 2]);
+    check("  abc", [2, 4]);
+    check("  abc  ", [2, 4]);
+    check("abc123", [0, 5]);
+    check(" abc__123 ", [1, 8]);
+    check(" _123 ", [1, 4]);
+    check(" abc_=s23 ", [1, 4]);
+
+    check("a", [0, 0]);
+    check(" a ", [1, 1]);
+    check(" _ ", [1, 1]);
+
+    // errors
+    check_none("  2sdf ");
+    check_none("  ");
+}

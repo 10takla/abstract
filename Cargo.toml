@@ -1,0 +1,14 @@
+[package]
+name = "abstract_"
+edition = "2021"
+
+[dependencies]
+colored = "2.1.0"
+std-reset = "0.1.5"
+macros = { workspace = true }
+
+[workspace]
+members = ["macros"]
+
+[workspace.dependencies]
+macros = { path = "macros" }

@@ -8,7 +8,6 @@ use crate::lexer::{
     },
     Code, Parse, Slicable,
 };
-use macros::Parse;
 use std::fmt::Display;
 
 #[derive(PartialEq, Debug)]

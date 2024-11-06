@@ -1,10 +1,7 @@
 use super::unnamed::UnnamedBlock;
 use crate::lexer::{
     check,
-    items::{
-        item::{ident::Ident, Item},
-        shared::whitespaces::Whitespaces,
-    },
+    items::item::{ident::Ident, Item},
     Code, Parse, Slicable,
 };
 use macros::Parse;

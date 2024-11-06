@@ -1,7 +1,7 @@
 use crate::lexer::{
     check, check_none,
     items::{item::ident::Ident, shared::distribution::Distribution},
-    Code, Parse, Slicable, Slice,
+    Parse, Slicable, Slice,
 };
 use macros::Parse;
 use std::fmt::{Debug, Display};

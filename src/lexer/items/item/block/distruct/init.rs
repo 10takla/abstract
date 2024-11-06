@@ -7,7 +7,7 @@ use crate::lexer::{
         },
         shared::distribution::Distribution,
     },
-    Code, Parse, Slicable, Slice,
+    Parse, Slicable, Slice,
 };
 use macros::Parse;
 use std::fmt::Display;

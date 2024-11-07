@@ -8,6 +8,6 @@ use macros::Parse;
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 pub enum Block {
-    Init(Init),
     Distruct(Distruct),
+    Init(Init),
 }

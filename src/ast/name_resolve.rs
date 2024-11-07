@@ -2,7 +2,7 @@ use crate::lexer::items::{
     item::{
         assign_expr::{assign::Assign, AssignExpr, AssignExprType},
         block::{
-            distruct::{named::CallBlockDistruct, Distruct},
+            distruct::{self, init::InitBlockDistruct, named::CallBlockDistruct, Distruct},
             init::{named::NamedBlock, Init},
             Block,
         },
@@ -41,16 +41,26 @@ pub fn name_resolve<'a>(
 
         match item {
             Item::Block(block) => match block {
-                Block::Distruct(Distruct::Call(call_block_distruct)) => {
-                    item_refs.insert(item, {
-                        if let Some(v) = block_stack.get(call_block_distruct.name.source) {
-                            v
+                Block::Distruct(distruct) => match distruct {
+                    Distruct::Call(call) => {
+                        item_refs.insert(item, {
+                            if let Some(v) = block_stack.get(call.name.source) {
+                                v
+                            } else {
+                                errors.push((Error::NotInited, &item));
+                                continue;
+                            }
+                        });
+                    }
+                    Distruct::Init(init) => {
+                        if block_stack.get(init.named_block.name.source).is_none() {
+                            block_stack.insert(init.named_block.name.source, item);
                         } else {
-                            errors.push((Error::NotInited, &item));
+                            errors.push((Error::AlreadyInited, &item));
                             continue;
                         }
-                    });
-                }
+                    }
+                },
                 Block::Init(Init::Named(named_block)) => {
                     if block_stack.get(named_block.name.source).is_none() {
                         block_stack.insert(named_block.name.source, item);

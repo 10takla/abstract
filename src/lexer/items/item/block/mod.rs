@@ -2,12 +2,12 @@ pub mod distruct;
 pub mod init;
 
 use crate::lexer::{Parse, Slicable};
-use distruct::DistructBlock;
-use init::InitBlock;
+use distruct::Distruct;
+use init::Init;
 use macros::Parse;
 
-#[derive(PartialEq, Debug, Parse)]
+#[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 pub enum Block {
-    InitBlock(InitBlock),
-    DistructBlock(DistructBlock),
+    Init(Init),
+    Distruct(Distruct),
 }

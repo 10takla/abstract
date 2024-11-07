@@ -9,7 +9,7 @@ use left_right::LeftRight;
 use std::fmt::Display;
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Debug, Clone, Deref)]
+#[derive(PartialEq, Debug, Clone, Deref, Hash, Eq)]
 pub struct Assign(pub LeftRight<Ident, Literal>);
 
 impl Assign {

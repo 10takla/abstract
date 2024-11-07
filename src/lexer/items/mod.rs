@@ -1,5 +1,5 @@
 pub mod item;
-mod shared;
+pub mod shared;
 
 use super::{Code, Parse, Slicable};
 use item::{
@@ -10,8 +10,8 @@ use item::{
 use std::fmt::Debug;
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Debug, Deref)]
-pub struct Items(Vec<Item>);
+#[derive(PartialEq, Debug, Deref, Hash, Eq, Clone)]
+pub struct Items(pub Vec<Item>);
 
 impl Parse for Items {
     fn parse(code: &Code) -> Option<Self> {

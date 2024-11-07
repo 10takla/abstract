@@ -8,7 +8,7 @@ use block::Block;
 use ident::Ident;
 use macros::Parse;
 
-#[derive(Debug, PartialEq, Parse)]
+#[derive(Debug, PartialEq, Parse, Hash, Eq, Clone)]
 pub enum Item {
     Block(Block),
     AssignExpr(AssignExpr),

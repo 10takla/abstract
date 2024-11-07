@@ -3,10 +3,10 @@ pub mod named;
 
 use init::InitBlockDistruct;
 use macros::Parse;
-use named::BlockDistruct;
+use named::CallBlockDistruct;
 
-#[derive(PartialEq, Debug, Parse)]
-pub enum DistructBlock {
-    Named(BlockDistruct),
+#[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
+pub enum Distruct {
     Init(InitBlockDistruct),
+    Call(CallBlockDistruct),
 }

@@ -58,10 +58,10 @@ impl Display for Code {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub struct Slice {
-    start_end: [usize; 2],
-    source: &'static str,
+    pub start_end: [usize; 2],
+    pub source: &'static str,
 }
 
 impl Slicable for Slice {

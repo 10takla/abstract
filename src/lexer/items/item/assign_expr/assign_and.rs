@@ -15,7 +15,7 @@ pub struct AssignAnd {
     pub val: Assign,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub enum AssignAndType {
     Add,
     Sub,

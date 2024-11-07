@@ -9,13 +9,13 @@ use number::parse_number;
 use std::fmt::Display;
 use string::parse_string;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub struct Literal {
     pub type_: LiteralType,
     pub slice: Slice,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub enum LiteralType {
     Number,
     String,

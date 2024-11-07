@@ -1,4 +1,4 @@
-use super::{named::NamedBlock, InitBlock};
+use super::{named::NamedBlock, Init};
 use crate::lexer::{
     check, check_none,
     items::{
@@ -10,7 +10,7 @@ use crate::lexer::{
 };
 use std::fmt::Display;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Hash, Eq, Clone)]
 pub struct UnnamedBlock {
     pub items: Items,
     pub open_bracket_pos: usize,
@@ -83,11 +83,11 @@ pub fn parse_block() {
     });
 
     check("{asdasd asdasd asdasd { dsf } }", |code| {
-        Block::InitBlock(InitBlock::Unnamed(UnnamedBlock::new(
+        Block::Init(Init::Unnamed(UnnamedBlock::new(
             vec![
                 Item::Ident(Ident::new([1, 6], code)),
                 Item::Ident(Ident::new([8, 13], code)),
-                Item::Block(Block::InitBlock(InitBlock::Named(NamedBlock {
+                Item::Block(Block::Init(Init::Named(NamedBlock {
                     name: Ident::new([15, 20], code),
                     block: UnnamedBlock {
                         items: Items(vec![Item::Ident(Ident::new([24, 26], code))]),

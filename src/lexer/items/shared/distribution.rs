@@ -2,7 +2,7 @@ use super::whitespaces::Whitespaces;
 use crate::lexer::{check, check_none, Code, Parse, Slicable, Slice};
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Clone, Debug, Deref)]
+#[derive(PartialEq, Clone, Debug, Deref, Hash, Eq)]
 pub struct Distribution(pub Slice);
 
 impl Parse for Distribution {

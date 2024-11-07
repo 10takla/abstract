@@ -2,7 +2,7 @@ use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slicabl
 use std::fmt::Display;
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Debug, Clone, Deref)]
+#[derive(PartialEq, Debug, Clone, Deref, Eq, Hash)]
 pub struct Ident(pub Slice);
 
 impl Ident {

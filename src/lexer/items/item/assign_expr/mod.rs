@@ -14,13 +14,13 @@ use assign_and::{AssignAnd, AssignAndType};
 use literal::LiteralType;
 use std::fmt::Display;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub struct AssignExpr {
     pub type_: AssignExprType,
     pub val: Assign,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub enum AssignExprType {
     Assign,
     AssignAnd(AssignAndType),

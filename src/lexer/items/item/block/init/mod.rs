@@ -6,8 +6,8 @@ use macros::Parse;
 use named::NamedBlock;
 use unnamed::UnnamedBlock;
 
-#[derive(PartialEq, Debug, Parse)]
-pub enum InitBlock {
+#[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
+pub enum Init {
     Named(NamedBlock),
     Unnamed(UnnamedBlock),
 }
@@ -15,9 +15,9 @@ pub enum InitBlock {
 #[test]
 pub fn parse_init_block() {
     check("main {}", |code| {
-        InitBlock::Named(NamedBlock::new([0, 3], (vec![], [5, 6]), code))
+        Init::Named(NamedBlock::new([0, 3], (vec![], [5, 6]), code))
     });
     check(" {  } ", |_| {
-        InitBlock::Unnamed(UnnamedBlock::new(vec![], [1, 4]))
+        Init::Unnamed(UnnamedBlock::new(vec![], [1, 4]))
     });
 }

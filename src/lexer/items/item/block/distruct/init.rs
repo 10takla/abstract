@@ -12,13 +12,13 @@ use crate::lexer::{
 use macros::Parse;
 use std::fmt::Display;
 
-#[derive(PartialEq, Debug, Parse)]
+#[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 #[grammar(
     NamedBlock Distribution
 )]
 pub struct InitBlockDistruct {
-    named_block: NamedBlock,
-    distr: Distribution,
+    pub named_block: NamedBlock,
+    pub distr: Distribution,
 }
 
 impl Display for InitBlockDistruct {

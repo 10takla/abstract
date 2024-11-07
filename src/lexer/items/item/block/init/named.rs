@@ -7,7 +7,7 @@ use crate::lexer::{
 use macros::Parse;
 use std::fmt::{Debug, Display};
 
-#[derive(PartialEq, Debug, Parse)]
+#[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 #[grammar(
     Ident UnnamedBlock
 )]
@@ -31,7 +31,7 @@ impl NamedBlock {
 
 impl Display for NamedBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NamedBlock({})", self.block.items)
+        write!(f, "NamedBlock({} => {})", self.name, self.block.items)
     }
 }
 

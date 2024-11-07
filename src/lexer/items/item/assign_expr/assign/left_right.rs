@@ -1,6 +1,6 @@
 use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slicable};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub struct LeftRight<L: Parse, R: Parse> {
     pub left: L,
     pub right: R,

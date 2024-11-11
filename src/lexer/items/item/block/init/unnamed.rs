@@ -54,6 +54,9 @@ impl Parse for UnnamedBlock {
 }
 
 impl Slicable for UnnamedBlock {
+    fn get_start(&self) -> usize {
+        self.open_bracket_pos
+    }
     fn get_end(&self) -> usize {
         self.close_bracket_pos
     }

@@ -1,4 +1,4 @@
-use abstract_::lexer::{items::Items, Code, Parse};
+use r#abstract::lexer::{items::Items, Code, Parse};
 
 fn main() {
     let code = r#"sdfsf = 2 sdfsdf sdf 

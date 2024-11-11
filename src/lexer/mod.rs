@@ -1,7 +1,11 @@
 pub mod items;
 
 use colored::Colorize;
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    iter::Enumerate,
+    str::Lines,
+};
 
 const IGNORE: [char; 3] = [' ', '\n', '\t'];
 
@@ -65,6 +69,9 @@ pub struct Slice {
 }
 
 impl Slicable for Slice {
+    fn get_start(&self) -> usize {
+        self.start_end[0]
+    }
     fn get_end(&self) -> usize {
         self.start_end[1]
     }
@@ -97,6 +104,7 @@ pub trait Parse: Slicable + Sized {
 }
 
 pub trait Slicable {
+    fn get_start(&self) -> usize;
     fn get_end(&self) -> usize;
 }
 

@@ -23,7 +23,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                 unreachable!()
             };
 
-            let conformity = tokens.clone().into_iter().map(|v| {
+            let mut conformity = tokens.clone().into_iter().map(|v| {
                 let TokenTree::Ident(ident) = v else {
                     unreachable!()
                 };
@@ -53,7 +53,10 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
 
             let fields = named.iter().map(|Field { ident, .. }| ident);
 
-            let last = &conformity.last().unwrap().ident;
+            let [first, last] = [
+                &conformity.next().unwrap().ident,
+                &conformity.last().unwrap().ident
+            ];
             quote! {
                 impl crate::lexer::Parse for #ident {
                     fn parse(code: &crate::lexer::Code) -> Option<Self> {
@@ -66,6 +69,9 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                 }
 
                 impl crate::lexer::Slicable for #ident {
+                    fn get_start(&self) -> usize {
+                        self. #first .get_start()
+                    }
                     fn get_end(&self) -> usize {
                         self. #last .get_end()
                     }
@@ -99,6 +105,11 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                 }
 
                 impl crate::lexer::Slicable for #ident {
+                    fn get_start(&self) -> usize {
+                        match self {
+                            #( Self:: #b (v) => v.get_start(), )*
+                        }
+                    }
                     fn get_end(&self) -> usize {
                         match self {
                             #( Self:: #b (v) => v.get_end(), )*

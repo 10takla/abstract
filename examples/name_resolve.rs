@@ -1,4 +1,4 @@
-use abstract_::{
+use r#abstract::{
     compile,
     lexer::{items::Items, Code, Parse},
 };

@@ -25,6 +25,9 @@ impl<L: Parse, R: Parse> LeftRight<L, R> {
 }
 
 impl<L: Parse, R: Parse> Slicable for LeftRight<L, R> {
+    fn get_start(&self) -> usize {
+        self.left.get_start()
+    }
     fn get_end(&self) -> usize {
         self.right.get_end()
     }

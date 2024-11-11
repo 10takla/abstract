@@ -46,6 +46,9 @@ impl Parse for Literal {
 }
 
 impl Slicable for Literal {
+    fn get_start(&self) -> usize {
+        self.slice.get_start()
+    }
     fn get_end(&self) -> usize {
         self.slice.get_end()
     }

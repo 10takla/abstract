@@ -36,6 +36,9 @@ impl Parse for Assign {
 }
 
 impl Slicable for Assign {
+    fn get_start(&self) -> usize {
+        self.left.get_start()
+    }
     fn get_end(&self) -> usize {
         self.right.get_end()
     }

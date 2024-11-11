@@ -1,0 +1,9 @@
+[package]
+name = "lsp-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+abstract = { workspace = true }
+tokio = { version = "1.41.1", features = ["full"] }
+tower-lsp = "0.20.0"

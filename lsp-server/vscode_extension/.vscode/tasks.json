@@ -1,0 +1,32 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Подготовка к отладке",
+			"dependsOn": [
+				"client", "server"
+			],
+			"dependsOrder": "sequence",
+			"problemMatcher": []
+		},
+		{
+			"label": "client",
+			"type": "npm",
+			"script": "compile",
+			"problemMatcher": "$tsc-watch",
+			"isBackground": true,
+			"presentation": {
+				"reveal": "never"
+			},
+			"group": "build"
+		},
+		{
+			"label": "server",
+			"type": "shell",
+			"options": {
+				"cwd": "${workspaceFolder}/.."
+			},
+			"command": "cargo build"
+		}
+	]
+}

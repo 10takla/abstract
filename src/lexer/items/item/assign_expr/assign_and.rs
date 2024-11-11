@@ -63,6 +63,9 @@ impl Parse for AssignAnd {
 }
 
 impl Slicable for AssignAnd {
+    fn get_start(&self) -> usize {
+        self.val.get_start()
+    }
     fn get_end(&self) -> usize {
         self.val.get_end()
     }

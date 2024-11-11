@@ -1,5 +1,5 @@
 [package]
-name = "abstract_"
+name = "abstract"
 edition = "2021"
 
 [dependencies]
@@ -8,7 +8,8 @@ std-reset = "0.1.5"
 macros = { workspace = true }
 
 [workspace]
-members = ["macros"]
+members = ["lsp-server", "macros"]
 
 [workspace.dependencies]
 macros = { path = "macros" }
+abstract = { path = "./" }

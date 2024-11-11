@@ -1,0 +1,10 @@
+{
+    "editor.tokenColorCustomizations": {
+        "semanticTokenColors": {
+            "namedBlock": {
+                "foreground": "#FFFF00",
+                "fontStyle": "bold"
+            }
+        }
+    }
+}

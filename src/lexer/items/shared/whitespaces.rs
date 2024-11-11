@@ -27,6 +27,9 @@ impl Parse for Whitespaces {
 }
 
 impl Slicable for Whitespaces {
+    fn get_start(&self) -> usize {
+        self.0.get_start()
+    }
     fn get_end(&self) -> usize {
         self.0.get_end()
     }

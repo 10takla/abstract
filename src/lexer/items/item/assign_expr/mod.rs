@@ -42,6 +42,9 @@ impl Parse for AssignExpr {
 }
 
 impl Slicable for AssignExpr {
+    fn get_start(&self) -> usize {
+        self.val.get_start()
+    }
     fn get_end(&self) -> usize {
         self.val.get_end()
     }

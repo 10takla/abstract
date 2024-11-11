@@ -1,0 +1,61 @@
+{
+  "name": "abstract",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:abstract"
+  ],
+  "contributes": {
+    "semanticTokenTypes": [
+      {
+        "id": "namedBlock",
+        "superType": "function",
+        "description": "named block looks like function"
+      }
+    ],
+    "configurationDefaults": {
+      "editor.semanticHighlighting.enabled": true,
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "function": "#00ff59"
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "abstract",
+        "extensions": [
+          ".abs"
+        ],
+        "icon": {
+          "light": "./images/icon-light.svg",
+          "dark": "./images/icon-dark.svg"
+        }
+      }
+    ],
+    "themes": [
+      {
+        "label": "Abstract Theme",
+        "path": "./themes/theme.json",
+        "uiTheme": "vs-dark"
+      }
+    ]
+  },
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^5.6.3",
+    "vscode-languageclient": "^9.0.1"
+  }
+}

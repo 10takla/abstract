@@ -5,10 +5,8 @@ pub mod ast;
 pub mod lexer;
 pub mod parser;
 
-pub fn compile(code: &'static str) -> Option<()> {
-    let items = Items::parse(&Code::new(code))?;
-    println!("{}\n", items);
+pub fn compile(code: &'static str) -> Result<Items, ()> {
+    let items = Items::parse(&Code::new(code)).ok_or(())?;
     let (refs, _) = name_resolve(&items, None);
-    println!("{}", expand(&items, &refs));
-    Some(())
+    Ok(expand(&items, &refs))
 }

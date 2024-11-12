@@ -22,7 +22,7 @@ impl Parse for Whitespaces {
             }
         }
         
-        Some(Self(Slice::new([code.cursor, end?], code)))
+        Some(Self(Slice::new(code.cursor..=end?, code)))
     }
 }
 
@@ -37,9 +37,9 @@ impl Slicable for Whitespaces {
 
 #[test]
 fn parse_whitespace() {
-    check(" ", |code| Whitespaces(Slice::new([0, 0], code)));
-    check("     ", |code| Whitespaces(Slice::new([0, 4], code)));
-    check("     f", |code| Whitespaces(Slice::new([0, 4], code)));
+    check(" ", |code| Whitespaces(Slice::new(0..=0, code)));
+    check("     ", |code| Whitespaces(Slice::new(0..=4, code)));
+    check("     f", |code| Whitespaces(Slice::new(0..=4, code)));
     check_none::<Whitespaces>("f     f");
     check_none::<Whitespaces>("f");
     check_none::<Whitespaces>("");

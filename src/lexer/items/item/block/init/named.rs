@@ -5,7 +5,7 @@ use crate::lexer::{
     Code, Parse, Slicable,
 };
 use macros::Parse;
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 #[grammar(
@@ -18,7 +18,7 @@ pub struct NamedBlock {
 
 impl NamedBlock {
     pub fn new(
-        idnet_slice: [usize; 2],
+        idnet_slice: RangeInclusive<usize>,
         (items, brackets): (Vec<Item>, [usize; 2]),
         code: &Code,
     ) -> Self {
@@ -38,15 +38,15 @@ impl Display for NamedBlock {
 #[test]
 fn parse_named() {
     check("main {}", |code| NamedBlock {
-        name: Ident::new([0, 3], code),
+        name: Ident::new(0..=3, code),
         block: UnnamedBlock::new(vec![], [5, 6]),
     });
     check("  main   {  }  ", |code| NamedBlock {
-        name: Ident::new([2, 5], code),
+        name: Ident::new(2..=5, code),
         block: UnnamedBlock::new(vec![], [9, 12]),
     });
     check("  main   { dsffds }  ", |code| NamedBlock {
-        name: Ident::new([2, 5], code),
-        block: UnnamedBlock::new(vec![Item::Ident(Ident::new([11, 16], code))], [9, 18]),
+        name: Ident::new(2..=5, code),
+        block: UnnamedBlock::new(vec![Item::Ident(Ident::new(11..=16, code))], [9, 18]),
     });
 }

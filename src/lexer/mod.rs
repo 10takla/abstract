@@ -5,6 +5,7 @@ use colored::Colorize;
 use std::{
     fmt::{Debug, Display},
     iter::Enumerate,
+    ops::RangeInclusive,
     str::Lines,
 };
 
@@ -107,16 +108,16 @@ fn new_cursor() {
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub struct Slice {
-    pub start_end: [usize; 2],
+    pub range: RangeInclusive<usize>,
     pub source: &'static str,
 }
 
 impl Slicable for Slice {
     fn get_start(&self) -> usize {
-        self.start_end[0]
+        *self.range.start()
     }
     fn get_end(&self) -> usize {
-        self.start_end[1]
+        *self.range.end()
     }
 }
 
@@ -127,10 +128,10 @@ impl Display for Slice {
 }
 
 impl Slice {
-    pub fn new(start_end: [usize; 2], code: &Code) -> Self {
+    pub fn new(range: RangeInclusive<usize>, code: &Code) -> Self {
         Self {
-            start_end,
-            source: &code.source[start_end[0]..=start_end[1]],
+            range: range.clone(),
+            source: &code.source[range],
         }
     }
 }

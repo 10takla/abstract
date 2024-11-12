@@ -7,7 +7,7 @@ use crate::lexer::{
     items::{Code, Slicable},
     Parse,
 };
-use std::fmt::Display;
+use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct AssignAnd {
@@ -26,7 +26,10 @@ pub enum AssignAndType {
 impl AssignAnd {
     pub fn new(
         type_: AssignAndType,
-        (slice, (literal_type, literal_slice)): ([usize; 2], (LiteralType, [usize; 2])),
+        (slice, (literal_type, literal_slice)): (
+            RangeInclusive<usize>,
+            (LiteralType, RangeInclusive<usize>),
+        ),
         code: &Code,
     ) -> Self {
         Self {
@@ -101,28 +104,28 @@ fn parse_assign_and() {
     check(" abc += 6", |code| {
         AssignAnd::new(
             AssignAndType::Add,
-            ([1, 3], (LiteralType::Number, [8, 8])),
+            (1..=3, (LiteralType::Number, 8..=8)),
             code,
         )
     });
     check(" abc -= 6", |code| {
         AssignAnd::new(
             AssignAndType::Sub,
-            ([1, 3], (LiteralType::Number, [8, 8])),
+            (1..=3, (LiteralType::Number, 8..=8)),
             code,
         )
     });
     check(" abc *= 6", |code| {
         AssignAnd::new(
             AssignAndType::Mul,
-            ([1, 3], (LiteralType::Number, [8, 8])),
+            (1..=3, (LiteralType::Number, 8..=8)),
             code,
         )
     });
     check(" abc /= 6", |code| {
         AssignAnd::new(
             AssignAndType::Div,
-            ([1, 3], (LiteralType::Number, [8, 8])),
+            (1..=3, (LiteralType::Number, 8..=8)),
             code,
         )
     });
@@ -130,7 +133,7 @@ fn parse_assign_and() {
     check("abc+=6", |code| {
         AssignAnd::new(
             AssignAndType::Add,
-            ([0, 2], (LiteralType::Number, [5, 5])),
+            (0..=2, (LiteralType::Number, 5..=5)),
             code,
         )
     });

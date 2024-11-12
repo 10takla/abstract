@@ -6,7 +6,7 @@ use crate::lexer::{
     Parse, Slicable, Slice,
 };
 use left_right::LeftRight;
-use std::fmt::Display;
+use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Clone, Deref, Hash, Eq)]
@@ -14,8 +14,8 @@ pub struct Assign(pub LeftRight<Ident, Literal>);
 
 impl Assign {
     pub fn new(
-        ident_slice: [usize; 2],
-        (literal_type, literal_slice): (LiteralType, [usize; 2]),
+        ident_slice: RangeInclusive<usize>,
+        (literal_type, literal_slice): (LiteralType, RangeInclusive<usize>),
         code: &Code,
     ) -> Self {
         Self(LeftRight {
@@ -52,7 +52,7 @@ impl Display for Assign {
 
 #[test]
 fn parse_assign() {
-    let check = |a, b: ([usize; 2], (LiteralType, [usize; 2]))| {
+    let check = |a, b: (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>))| {
         let code = &mut Code::new(a);
         assert_eq!(
             Assign::parse(&mut Code::new(a)),
@@ -69,10 +69,10 @@ fn parse_assign() {
         assert_eq!(Assign::parse(&mut Code::new(a)), None);
     };
 
-    check(" abc = 6", ([1, 3], (LiteralType::Number, [7, 7])));
-    check("abc=6", ([0, 2], (LiteralType::Number, [4, 4])));
-    check(" abc=6 ", ([1, 3], (LiteralType::Number, [5, 5])));
-    check(" abc = \"root\"", ([1, 3], (LiteralType::String, [7, 12])));
+    check(" abc = 6", (1..=3, (LiteralType::Number, 7..=7)));
+    check("abc=6", (0..=2, (LiteralType::Number, 4..=4)));
+    check(" abc=6 ", (1..=3, (LiteralType::Number, 5..=5)));
+    check(" abc = \"root\"", (1..=3, (LiteralType::String, 7..=12)));
 
     check_none("abc =");
     check_none("abc = ");

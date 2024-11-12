@@ -11,7 +11,7 @@ pub fn parse_string(code: &Code) -> Option<Slice> {
 
     for (i, char) in iter {
         if char == '"' {
-            return Some(Slice::new([start, i], code));
+            return Some(Slice::new(start..=i, code));
         }
     }
     None
@@ -27,12 +27,12 @@ fn parse_string_test() {
         assert_eq!(parse_string(&mut Code::new(a)), None);
     };
 
-    check(r#""abc""#, |code| Slice::new([0, 4], code));
-    check(r#""abc"  "#, |code| Slice::new([0, 4], code));
-    check(r#"  "abc"  "#, |code| Slice::new([2, 6], code));
-    check(r#"  " ab s3fsf d2_c "  "#, |code| Slice::new([2, 18], code));
-    check(r#""""#, |code| Slice::new([0, 1], code));
-    check(r#" " " "#, |code| Slice::new([1, 3], code));
+    check(r#""abc""#, |code| Slice::new(0..=4, code));
+    check(r#""abc"  "#, |code| Slice::new(0..=4, code));
+    check(r#"  "abc"  "#, |code| Slice::new(2..=6, code));
+    check(r#"  " ab s3fsf d2_c "  "#, |code| Slice::new(2..=18, code));
+    check(r#""""#, |code| Slice::new(0..=1, code));
+    check(r#" " " "#, |code| Slice::new(1..=3, code));
 
     // errors
     check_none(" 2sdf ");

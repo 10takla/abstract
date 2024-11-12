@@ -20,10 +20,10 @@ fn parse_element() {
     check(" abc = \"abc\"", |code| {
         Item::AssignExpr(AssignExpr {
             type_: AssignExprType::Assign,
-            val: Assign::new([1, 3], (LiteralType::String, [7, 11]), code),
+            val: Assign::new(1..=3, (LiteralType::String, 7..=11), code),
         })
     });
-    check(" abc = \"a", |code| Item::Ident(Ident::new([1, 3], code)));
+    check(" abc = \"a", |code| Item::Ident(Ident::new(1..=3, code)));
 
     // errors
     check_none::<Item>("  ");

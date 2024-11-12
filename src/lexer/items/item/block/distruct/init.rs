@@ -31,10 +31,10 @@ impl Display for InitBlockDistruct {
 fn parse_init_distruct() {
     check(" main {}..", |code| InitBlockDistruct {
         named_block: NamedBlock {
-            name: Ident::new([1, 4], code),
+            name: Ident::new(1..=4, code),
             block: UnnamedBlock::new(vec![], [6, 7]),
         },
-        distr: Distribution(Slice::new([8, 9], code)),
+        distr: Distribution(Slice::new(8..=9, code)),
     });
 
     check_none::<InitBlockDistruct>(" main }..");

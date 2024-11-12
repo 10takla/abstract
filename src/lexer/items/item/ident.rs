@@ -1,13 +1,13 @@
 use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slicable, Slice};
-use std::fmt::Display;
+use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Clone, Deref, Eq, Hash)]
 pub struct Ident(pub Slice);
 
 impl Ident {
-    pub fn new(start_end: [usize; 2], code: &Code) -> Self {
-        Self(Slice::new(start_end, code))
+    pub fn new(range: RangeInclusive<usize>, code: &Code) -> Self {
+        Self(Slice::new(range, code))
     }
 }
 
@@ -41,7 +41,7 @@ impl Parse for Ident {
             })?
         };
 
-        Some(Self::new([start, end], code))
+        Some(Self::new(start..=end, code))
     }
 }
 
@@ -64,17 +64,17 @@ fn parse_ident() {
         assert_eq!(Ident::parse(&mut Code::new(a)), None);
     };
 
-    check("abc", [0, 2]);
-    check("  abc", [2, 4]);
-    check("  фbc  ", [2, 4]);
-    check("abc123", [0, 5]);
-    check(" abc__123 ", [1, 8]);
-    check(" _123 ", [1, 4]);
-    check(" abc_=s23 ", [1, 4]);
+    check("abc", 0..=2);
+    check("  abc", 2..=4);
+    check("  фbc  ", 2..=4);
+    check("abc123", 0..=5);
+    check(" abc__123 ", 1..=8);
+    check(" _123 ", 1..=4);
+    check(" abc_=s23 ", 1..=4);
 
-    check("a", [0, 0]);
-    check(" a ", [1, 1]);
-    check(" _ ", [1, 1]);
+    check("a", 0..=0);
+    check(" a ", 1..=1);
+    check(" _ ", 1..=1);
 
     // errors
     check_none("  2sdf ");

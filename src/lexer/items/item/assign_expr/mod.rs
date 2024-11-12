@@ -12,7 +12,7 @@ use crate::{
 use assign::Assign;
 use assign_and::{AssignAnd, AssignAndType};
 use literal::LiteralType;
-use std::fmt::Display;
+use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub struct AssignExpr {
@@ -71,7 +71,7 @@ impl Display for AssignExpr {
 
 #[test]
 fn parse_assign_expr() {
-    let check = |a, b: (AssignExprType, ([usize; 2], (LiteralType, [usize; 2])))| {
+    let check = |a, b: (AssignExprType, (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>)))| {
         let code = &mut Code::new(a);
         assert_eq!(
             AssignExpr::parse(code),
@@ -89,28 +89,28 @@ fn parse_assign_expr() {
         " abc=6",
         (
             AssignExprType::Assign,
-            ([1, 3], (LiteralType::Number, [5, 5])),
+            (1..=3, (LiteralType::Number, 5..=5)),
         ),
     );
     check(
         " abc = 6",
         (
             AssignExprType::Assign,
-            ([1, 3], (LiteralType::Number, [7, 7])),
+            (1..=3, (LiteralType::Number, 7..=7)),
         ),
     );
     check(
         " abc = \"root\"",
         (
             AssignExprType::Assign,
-            ([1, 3], (LiteralType::String, [7, 12])),
+            (1..=3, (LiteralType::String, 7..=12)),
         ),
     );
     check(
         " abc += 6",
         (
             AssignExprType::AssignAnd(AssignAndType::Add),
-            ([1, 3], (LiteralType::Number, [8, 8])),
+            (1..=3, (LiteralType::Number, 8..=8)),
         ),
     );
 

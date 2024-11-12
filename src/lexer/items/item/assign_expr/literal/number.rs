@@ -9,7 +9,7 @@ pub fn parse_number(code: &Code) -> Option<Slice> {
     let (i, char) = iter.next()?;
     let start = if char.is_digit(10) {
         if i == code.len() - 1 {
-            return Some(Slice::new([i, i], code));
+            return Some(Slice::new(i..=i, code));
         }
         i
     } else {
@@ -33,7 +33,7 @@ pub fn parse_number(code: &Code) -> Option<Slice> {
     };
     let end = t()?;
 
-    Some(Slice::new([start, end], code))
+    Some(Slice::new(start..=end, code))
 }
 
 #[test]
@@ -46,13 +46,13 @@ fn parse_number_test() {
         assert_eq!(parse_number(&mut Code::new(a)), None);
     };
 
-    check("2", [0, 0]);
-    check("2 ", [0, 0]);
-    check(" 2", [1, 1]);
-    check("  2  ", [2, 2]);
-    check("  233", [2, 4]);
-    check("  443  ", [2, 4]);
-    check("3434", [0, 3]);
+    check("2", 0..=0);
+    check("2 ", 0..=0);
+    check(" 2", 1..=1);
+    check("  2  ", 2..=2);
+    check("  233", 2..=4);
+    check("  443  ", 2..=4);
+    check("3434", 0..=3);
 
     // errors
     check_none("");

@@ -6,7 +6,7 @@ use crate::{
     parse_variants,
 };
 use number::parse_number;
-use std::fmt::Display;
+use std::{fmt::Display, ops::RangeInclusive};
 use string::parse_string;
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
@@ -22,7 +22,7 @@ pub enum LiteralType {
 }
 
 impl Literal {
-    pub fn new(type_: LiteralType, slice: [usize; 2], code: &Code) -> Self {
+    pub fn new(type_: LiteralType, slice: RangeInclusive<usize>, code: &Code) -> Self {
         Self {
             type_,
             slice: Slice::new(slice, code),
@@ -62,7 +62,7 @@ impl Display for Literal {
 
 #[test]
 fn parse_literal() {
-    let check = |a, b: (LiteralType, [usize; 2])| {
+    let check = |a, b: (LiteralType, RangeInclusive<usize>)| {
         let code = &mut Code::new(a);
         assert_eq!(
             Literal::parse(code),
@@ -76,18 +76,18 @@ fn parse_literal() {
         assert_eq!(Literal::parse(&mut Code::new(a)), None);
     };
 
-    check("2", (LiteralType::Number, [0, 0]));
-    check("2 ", (LiteralType::Number, [0, 0]));
-    check(" 2", (LiteralType::Number, [1, 1]));
-    check("  2  ", (LiteralType::Number, [2, 2]));
-    check("  233", (LiteralType::Number, [2, 4]));
-    check("  443  ", (LiteralType::Number, [2, 4]));
-    check("3434", (LiteralType::Number, [0, 3]));
+    check("2", (LiteralType::Number, 0..=0));
+    check("2 ", (LiteralType::Number, 0..=0));
+    check(" 2", (LiteralType::Number, 1..=1));
+    check("  2  ", (LiteralType::Number, 2..=2));
+    check("  233", (LiteralType::Number, 2..=4));
+    check("  443  ", (LiteralType::Number, 2..=4));
+    check("3434", (LiteralType::Number, 0..=3));
 
-    check(r#""abc""#, (LiteralType::String, [0, 4]));
-    check(r#""abc"  "#, (LiteralType::String, [0, 4]));
-    check(r#"  "abc"  "#, (LiteralType::String, [2, 6]));
-    check(r#"  " ab s3fsf d2_c "  "#, (LiteralType::String, [2, 18]));
+    check(r#""abc""#, (LiteralType::String, 0..=4));
+    check(r#""abc"  "#, (LiteralType::String, 0..=4));
+    check(r#"  "abc"  "#, (LiteralType::String, 2..=6));
+    check(r#"  " ab s3fsf d2_c "  "#, (LiteralType::String, 2..=18));
 
     // errors
     check_none(" 2sdf ");

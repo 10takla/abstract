@@ -58,18 +58,25 @@ fn parse_elements() {
     check(" abc = \"abc\"", |code| {
         vec![Item::AssignExpr(AssignExpr {
             type_: AssignExprType::Assign,
-            val: Assign::new([1, 3], (LiteralType::String, [7, 11]), code),
+            val: Assign::new(1..=3, (LiteralType::String, 7..=11), code),
         })]
     });
     check(" abc = \"abc\" abc", |code| {
         vec![
             Item::AssignExpr(AssignExpr {
                 type_: AssignExprType::Assign,
-                val: Assign::new([1, 3], (LiteralType::String, [7, 11]), code),
+                val: Assign::new(1..=3, (LiteralType::String, 7..=11), code),
             }),
-            Item::Ident(Ident::new([13, 15], code)),
+            Item::Ident(Ident::new(13..=15, code)),
         ]
     });
 
     check("   ", |_| vec![]);
+
+    check(" abc abc ", |code| {
+        vec![
+            Item::Ident(Ident::new(1..=3, code)),
+            Item::Ident(Ident::new(5..=7, code)),
+        ]
+    });
 }

@@ -24,12 +24,12 @@ impl Display for CallBlockDistruct {
 #[test]
 fn parse_named_distruct() {
     check("main..", |code| CallBlockDistruct {
-        name: Ident::new([0, 3], code),
-        dist: Distribution(Slice::new([4, 5], code)),
+        name: Ident::new(0..=3, code),
+        dist: Distribution(Slice::new(4..=5, code)),
     });
     check(" main  ..  ", |code| CallBlockDistruct {
-        name: Ident::new([1, 4], code),
-        dist: Distribution(Slice::new([7, 8], code)),
+        name: Ident::new(1..=4, code),
+        dist: Distribution(Slice::new(7..=8, code)),
     });
 
     // error

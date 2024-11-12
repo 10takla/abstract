@@ -14,7 +14,7 @@ impl Parse for Distribution {
         matches!(code.get_slice(2), Some("..")).then(|| {
             code.offset(2);
         })?;
-        Some(Self(Slice::new([start, code.cursor - 1], code)))
+        Some(Self(Slice::new(start..=code.cursor - 1, code)))
     }
 }
 
@@ -29,9 +29,9 @@ impl Slicable for Distribution {
 
 #[test]
 fn parse_distribution() {
-    check(" .. ", |code| Distribution(Slice::new([1, 2], code)));
-    check(" ..", |code| Distribution(Slice::new([1, 2], code)));
-    check("..", |code| Distribution(Slice::new([0, 1], code)));
+    check(" .. ", |code| Distribution(Slice::new(1..=2, code)));
+    check(" ..", |code| Distribution(Slice::new(1..=2, code)));
+    check("..", |code| Distribution(Slice::new(0..=1, code)));
 
     // errors
     check_none::<Distribution>(".");

@@ -77,9 +77,9 @@ pub fn parse_block() {
     check("{asdasd asdasd asdasd}", |code| {
         UnnamedBlock::new(
             vec![
-                Item::Ident(Ident::new([1, 6], code)),
-                Item::Ident(Ident::new([8, 13], code)),
-                Item::Ident(Ident::new([15, 20], code)),
+                Item::Ident(Ident::new(1..=6, code)),
+                Item::Ident(Ident::new(8..=13, code)),
+                Item::Ident(Ident::new(15..=20, code)),
             ],
             [0, 21],
         )
@@ -88,12 +88,12 @@ pub fn parse_block() {
     check("{asdasd asdasd asdasd { dsf } }", |code| {
         Block::Init(Init::Unnamed(UnnamedBlock::new(
             vec![
-                Item::Ident(Ident::new([1, 6], code)),
-                Item::Ident(Ident::new([8, 13], code)),
+                Item::Ident(Ident::new(1..=6, code)),
+                Item::Ident(Ident::new(8..=13, code)),
                 Item::Block(Block::Init(Init::Named(NamedBlock {
-                    name: Ident::new([15, 20], code),
+                    name: Ident::new(15..=20, code),
                     block: UnnamedBlock {
-                        items: Items(vec![Item::Ident(Ident::new([24, 26], code))]),
+                        items: Items(vec![Item::Ident(Ident::new(24..=26, code))]),
                         open_bracket_pos: 22,
                         close_bracket_pos: 28,
                     },

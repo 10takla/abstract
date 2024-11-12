@@ -25,7 +25,7 @@ impl Parse for Ident {
 
         Whitespaces::parse_and_consume(code);
 
-        let mut iter = code.clone().iter();
+        let mut iter = code.iter();
         let (i, char) = iter.next()?;
         let start = start_rule(char).then_some(i)?;
 
@@ -66,7 +66,7 @@ fn parse_ident() {
 
     check("abc", [0, 2]);
     check("  abc", [2, 4]);
-    check("  abc  ", [2, 4]);
+    check("  фbc  ", [2, 4]);
     check("abc123", [0, 5]);
     check(" abc__123 ", [1, 8]);
     check(" _123 ", [1, 4]);

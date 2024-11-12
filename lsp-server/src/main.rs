@@ -195,7 +195,7 @@ impl Backend {
                 };
 
                 self.client
-                    .publish_diagnostics(uri.clone(), vec![diagnostic], None)
+                    .publish_diagnostics(uri, vec![diagnostic], None)
                     .await;
             }
         }

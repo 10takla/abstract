@@ -41,7 +41,7 @@ impl Parse for AssignAnd {
         let mut assign_type = None;
 
         LeftRight::parse(code, |code| {
-            let mut iter = code.clone().iter();
+            let mut iter = code.iter();
 
             let (_, char) = iter.next()?;
             match char {

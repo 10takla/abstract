@@ -9,6 +9,7 @@ impl Parse for Distribution {
     fn parse(code: &Code) -> Option<Self> {
         let code = &mut code.clone();
         Whitespaces::parse_and_consume(code);
+
         let start = code.cursor;
         matches!(code.get_slice(2), Some("..")).then(|| {
             code.offset(2);

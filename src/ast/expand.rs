@@ -14,7 +14,7 @@ use crate::lexer::items::{
 pub fn expand(items: &Items, refs: &Refs) -> Items {
     let mut new_items = Vec::new();
 
-    for item in items.clone().iter() {
+    for item in items.iter() {
         if let Item::Block(block) = item {
             match block {
                 Block::Init(tmp) => match tmp {

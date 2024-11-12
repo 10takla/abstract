@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use ast::{expand::expand, name_resolve::name_resolve};
 use lexer::{items::Items, Code, Parse};
 

@@ -73,7 +73,7 @@ fn parse_elements() {
 
     check("   ", |_| vec![]);
 
-    check(" abc abc ", |code| {
+    check(" aыы aыы ", |code| {
         vec![
             Item::Ident(Ident::new(1..=3, code)),
             Item::Ident(Ident::new(5..=7, code)),

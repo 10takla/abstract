@@ -11,7 +11,7 @@ impl Parse for Distribution {
         Whitespaces::parse_and_consume(code);
 
         let start = code.cursor;
-        matches!(code.get_slice(2), Some("..")).then(|| {
+        matches!(code.get_offset_slice(2), Some("..")).then(|| {
             code.offset(2);
         })?;
         Some(Self(Slice::new(start..=code.cursor - 1, code)))

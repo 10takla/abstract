@@ -64,11 +64,22 @@ impl Code {
         self.byte_indices.len()
     }
 
-    pub fn get_slice(&self, offset: usize) -> Option<&str> {
+    pub fn get_offset_slice(&self, offset: usize) -> Option<&str> {
         self.byte_indices
             .get(self.cursor + offset - 1)
-            .map(|v| v)
-            .and_then(|v| self.source.get(self.byte_indices[self.cursor]..=*v))
+            .cloned()
+            .and_then(|end| self.source.get(self.byte_indices[self.cursor]..=end))
+    }
+
+    pub fn get_slice<'a>(&self, range: RangeInclusive<usize>) -> Option<&'static str> {
+        self.byte_indices
+            .get(*range.start())
+            .zip(
+                self.byte_indices
+                    .get(*range.end() + 1)
+                    .or(self.byte_indices.get(*range.end())),
+            )
+            .and_then(|(&start, &end)| self.source.get(start..end))
     }
 }
 
@@ -103,7 +114,7 @@ fn new_cursor() {
     println!("{code}");
     code.consume(2);
     println!("{code}");
-    dbg!(code.get_slice(3));
+    dbg!(code.get_offset_slice(3));
 }
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
@@ -131,7 +142,7 @@ impl Slice {
     pub fn new(range: RangeInclusive<usize>, code: &Code) -> Self {
         Self {
             range: range.clone(),
-            source: &code.source[range],
+            source: code.get_slice(range).unwrap(),
         }
     }
 }

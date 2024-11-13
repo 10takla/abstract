@@ -86,20 +86,23 @@ impl Code {
 impl Display for Code {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if !self.byte_indices.is_empty() {
-            let cursor_byte_index = self.byte_indices[self.cursor];
-            let next_byte_index = self
-                .byte_indices
-                .get(self.cursor + 1)
-                .map(|v| *v)
-                .unwrap_or(self.source.len());
+            if let Some(&cursor_byte_index) = self.byte_indices.get(self.cursor) {
+                let next_byte_index = self
+                    .byte_indices
+                    .get(self.cursor + 1)
+                    .map(|v| *v)
+                    .unwrap_or(self.source.len());
 
-            write!(
-                f,
-                "{}{}{}",
-                &self.source[..cursor_byte_index],
-                &self.source[cursor_byte_index..next_byte_index].underline(),
-                &self.source[next_byte_index..]
-            )
+                write!(
+                    f,
+                    "{}{}{}",
+                    &self.source[..cursor_byte_index],
+                    &self.source[cursor_byte_index..next_byte_index].underline(),
+                    &self.source[next_byte_index..]
+                )
+            } else {
+                write!(f, "{}", self.source)
+            }
         } else {
             write!(f, "",)
         }
@@ -147,7 +150,7 @@ impl Slice {
     }
 }
 
-pub trait Parse: Slicable + Sized + Debug {
+pub trait Parse: Slicable + Sized {
     fn parse(code: &Code) -> Option<Self>;
 
     fn parse_and_consume(code: &mut Code) -> Option<Self> {

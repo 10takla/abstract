@@ -18,8 +18,20 @@ impl Parse for Items {
         let mut items = Vec::new();
 
         let code = &mut code.clone();
-        while let Some(item) = Item::parse_and_consume(code) {
-            items.push(item);
+        loop {
+            println!("{code}");
+            if let Some(item) = Item::parse_and_consume(code) {
+                println!("{item}");
+                items.push(item);
+            } else {
+                if code.cursor >= code.len() - 1 {
+                    break;
+                }
+                code.offset(1);
+            }
+            if code.cursor >= code.len() - 1 {
+                break;
+            }
         }
 
         Some(Self(items))
@@ -73,7 +85,14 @@ fn parse_elements() {
 
     check("   ", |_| vec![]);
 
-    check(" aыы aыы ", |code| {
+    check(" aыы aыы", |code| {
+        vec![
+            Item::Ident(Ident::new(1..=3, code)),
+            Item::Ident(Ident::new(5..=7, code)),
+        ]
+    });
+
+    check(" aыы;aыы", |code| {
         vec![
             Item::Ident(Ident::new(1..=3, code)),
             Item::Ident(Ident::new(5..=7, code)),

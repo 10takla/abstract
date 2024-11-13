@@ -18,6 +18,7 @@ impl Parse for Items {
         let mut items = Vec::new();
 
         let code = &mut code.clone();
+
         loop {
             println!("{code}");
             if let Some(item) = Item::parse_and_consume(code) {
@@ -33,6 +34,10 @@ impl Parse for Items {
                 break;
             }
         }
+        // while  let Some(item) = Item::parse_and_consume(code) {
+        //     println!("{item}");
+        //     items.push(item);
+        // }
 
         Some(Self(items))
     }
@@ -98,4 +103,10 @@ fn parse_elements() {
             Item::Ident(Ident::new(5..=7, code)),
         ]
     });
+}
+
+
+#[test]
+fn dota2() {
+    dbg!(Items::parse(&Code::new("ddsdfd sdf sdf; sdf sdf s")));
 }

@@ -77,9 +77,10 @@ impl Code {
             .zip(
                 self.byte_indices
                     .get(*range.end() + 1)
-                    .or(self.byte_indices.get(*range.end())),
+                    .map(|v| v - 1)
+                    .or(Some(self.source.len() - 1)),
             )
-            .and_then(|(&start, &end)| self.source.get(start..end))
+            .and_then(|(&start, end)| self.source.get(start..=end))
     }
 }
 

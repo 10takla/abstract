@@ -6,12 +6,14 @@ use crate::{
     parse_variants,
 };
 use std::{fmt::Display, ops::RangeInclusive};
+use macros::Slicable;
 use number::Number;
 use string::String;
 
-#[derive(PartialEq, Debug, Clone, Hash, Eq)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq, Slicable)]
 pub struct Literal<'s> {
     pub type_: LiteralType,
+    #[slice]
     pub slice: Slice<'s>,
 }
 
@@ -42,15 +44,6 @@ impl<'s> Parse<'s> for Literal<'s> {
                 slice: v.0,
             })
         )
-    }
-}
-
-impl Slicable for Literal<'_> {
-    fn get_start(&self) -> usize {
-        self.slice.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.slice.get_end()
     }
 }
 

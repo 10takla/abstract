@@ -11,11 +11,14 @@ use crate::{
 use assign::Assign;
 use assign_and::{AssignAnd, AssignAndType};
 use literal::LiteralType;
+use macros::Slicable;
+use core::slice;
 use std::{fmt::Display, ops::RangeInclusive};
 
-#[derive(PartialEq, Debug, Clone, Hash, Eq)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq, Slicable)]
 pub struct AssignExpr<'s> {
     pub type_: AssignExprType,
+    #[slice]
     pub val: Assign<'s>,
 }
 
@@ -37,15 +40,6 @@ impl<'s> Parse<'s> for AssignExpr<'s> {
                 val: v.val,
             })
         )
-    }
-}
-
-impl Slicable for AssignExpr<'_> {
-    fn get_start(&self) -> usize {
-        self.val.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.val.get_end()
     }
 }
 

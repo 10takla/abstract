@@ -1,8 +1,9 @@
 use super::whitespaces::Whitespaces;
 use crate::lexer::{check, check_none, Code, Parse, Slicable, Slice};
+use macros::Slicable;
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Clone, Debug, Deref, Hash, Eq)]
+#[derive(PartialEq, Clone, Debug, Deref, Hash, Eq, Slicable)]
 pub struct Distribution<'s>(pub Slice<'s>);
 
 impl<'s> Parse<'s> for Distribution<'s> {
@@ -15,15 +16,6 @@ impl<'s> Parse<'s> for Distribution<'s> {
             code.offset(2);
         })?;
         Some(Self(Slice::new(start..=code.cursor - 1, code)))
-    }
-}
-
-impl Slicable for Distribution<'_> {
-    fn get_start(&self) -> usize {
-        self.0.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.0.get_end()
     }
 }
 

@@ -125,11 +125,8 @@ pub struct Slice<'s> {
 }
 
 impl Slicable for Slice<'_> {
-    fn get_start(&self) -> usize {
-        *self.range.start()
-    }
-    fn get_end(&self) -> usize {
-        *self.range.end()
+    fn get_slice(&self) -> RangeInclusive<usize> {
+        self.range.clone()
     }
 }
 
@@ -160,11 +157,19 @@ pub trait Parse<'s>: Slicable + Sized {
 }
 
 pub trait Slicable {
-    fn get_start(&self) -> usize;
-    fn get_end(&self) -> usize;
+    fn get_slice(&self) -> RangeInclusive<usize>;
+    fn get_start(&self) -> usize {
+        *self.get_slice().start()
+    }
+    fn get_end(&self) -> usize {
+        *self.get_slice().end()
+    }
 }
 
-fn check<'s, T: Parse<'s> + PartialEq + Debug>(source: &'s str, get_item: impl FnOnce(&Code<'s>) -> T) {
+fn check<'s, T: Parse<'s> + PartialEq + Debug>(
+    source: &'s str,
+    get_item: impl FnOnce(&Code<'s>) -> T,
+) {
     let code = &mut Code::new(source);
     assert_eq!(T::parse(code), Some(get_item(code)));
 }

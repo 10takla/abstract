@@ -255,7 +255,10 @@ fn tokenize<'a, T: Iterator<Item = &'a Item<'a>> + Debug>(
     let mut lines = lines.peekable();
     let (mut last_start, mut last_line, mut len) = (None, 0, 0);
     'l: while let Some(item) = items.next() {
-        let [start, end] = [item.get_start(), item.get_end()];
+        let [start, end] = (|| {
+            let v = item.get_slice();
+            [*v.start(), *v.end()]
+        })();
         while let Some(&(i, line)) = lines.peek() {
             let tmp_len = len + glen(line);
             if start < tmp_len {

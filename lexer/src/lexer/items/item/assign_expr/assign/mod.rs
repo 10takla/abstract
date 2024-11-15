@@ -10,10 +10,11 @@ use crate::{
     Slice,
 };
 use left_right::LeftRight;
+use macros::Slicable;
 use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Debug, Clone, Deref, Hash, Eq)]
+#[derive(PartialEq, Debug, Clone, Deref, Hash, Eq, Slicable)]
 pub struct Assign<'s>(pub LeftRight<'s, Ident<'s>, Literal<'s>>);
 
 impl<'s> Assign<'s> {
@@ -37,15 +38,6 @@ impl<'s> Parse<'s> for Assign<'s> {
             (char == '=').then_some(i)
         })
         .map(Self)
-    }
-}
-
-impl Slicable for Assign<'_> {
-    fn get_start(&self) -> usize {
-        self.left.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.right.get_end()
     }
 }
 

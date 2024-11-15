@@ -17,7 +17,7 @@ pub enum Item<'s> {
 }
 
 #[test]
-fn parse_element() {
+fn parse_item() {
     check(" abc = \"abc\"", |code| {
         Item::AssignExpr(AssignExpr {
             type_: AssignExprType::Assign,

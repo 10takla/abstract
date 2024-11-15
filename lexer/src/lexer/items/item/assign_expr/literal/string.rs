@@ -1,9 +1,11 @@
+use macros::Slicable;
+
 use crate::{
     lexer::{check, check_none, items::shared::whitespaces::Whitespaces, Code, Parse, Slice},
     Slicable,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Slicable)]
 pub struct String<'s>(pub Slice<'s>);
 
 impl<'s> Parse<'s> for String<'s> {
@@ -22,15 +24,6 @@ impl<'s> Parse<'s> for String<'s> {
             }
         }
         None
-    }
-}
-
-impl Slicable for String<'_> {
-    fn get_start(&self) -> usize {
-        self.0.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.0.get_end()
     }
 }
 

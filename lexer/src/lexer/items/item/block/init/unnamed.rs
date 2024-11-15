@@ -1,9 +1,13 @@
-use crate::{items::item::{block::Block, ident::Ident}, lexer::{
-    check, check_none, items::{item::Item, shared::whitespaces::Whitespaces, Items}, Code, Parse, Slicable
-}};
-use std::fmt::Display;
-
 use super::{named::NamedBlock, Init};
+use crate::{
+    items::item::{block::Block, ident::Ident},
+    lexer::{
+        check, check_none,
+        items::{item::Item, shared::whitespaces::Whitespaces, Items},
+        Code, Parse, Slicable,
+    },
+};
+use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Hash, Eq, Clone)]
 pub struct UnnamedBlock<'s> {
@@ -49,11 +53,8 @@ impl<'s> Parse<'s> for UnnamedBlock<'s> {
 }
 
 impl Slicable for UnnamedBlock<'_> {
-    fn get_start(&self) -> usize {
-        self.open_bracket_pos
-    }
-    fn get_end(&self) -> usize {
-        self.close_bracket_pos
+    fn get_slice(&self) -> std::ops::RangeInclusive<usize> {
+        RangeInclusive::new(self.open_bracket_pos, self.close_bracket_pos)
     }
 }
 

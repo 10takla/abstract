@@ -4,8 +4,8 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenTree;
 use quote::quote;
 use syn::{
-    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, FieldsNamed, Meta,
-    MetaList, Type, Variant,
+    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, FieldsNamed,
+    FieldsUnnamed, Ident, ItemStruct, Meta, MetaList, Type, Variant,
 };
 
 #[proc_macro_derive(Parse, attributes(grammar))]
@@ -74,17 +74,17 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                 }
 
                 impl crate::lexer::Slicable for #ident<'_> {
-                    fn get_start(&self) -> usize {
-                        self. #first .get_start()
-                    }
-                    fn get_end(&self) -> usize {
-                        self. #last .get_end()
+                    fn get_slice(&self) -> std::ops::RangeInclusive<usize> {
+                        std::ops::RangeInclusive::new(
+                            self. #first .get_start(),
+                            self. #last .get_end(),
+                        )
                     }
                 }
             }
         }
         Data::Enum(DataEnum { variants, .. }) => {
-            let (a, b): (Vec<_>, Vec<_>) = variants
+            let (confirms, variants): (Vec<_>, Vec<_>) = variants
                 .into_iter()
                 .map(|Variant { ident, fields, .. }| {
                     let attr = &fields.iter().next().unwrap();
@@ -104,20 +104,15 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                     fn parse(code: &crate::lexer::Code<'s>) -> Option<Self> {
                         crate::parse_variants!(
                             code
-                            #( #a )*
+                            #( #confirms )*
                         )
                     }
                 }
 
                 impl crate::lexer::Slicable for #ident<'_> {
-                    fn get_start(&self) -> usize {
+                    fn get_slice(&self) -> std::ops::RangeInclusive<usize> {
                         match self {
-                            #( Self:: #b (v) => v.get_start(), )*
-                        }
-                    }
-                    fn get_end(&self) -> usize {
-                        match self {
-                            #( Self:: #b (v) => v.get_end(), )*
+                            #( Self:: #variants (v) => v.get_slice(), )*
                         }
                     }
                 }
@@ -128,7 +123,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                             f,
                             "{}",
                             match self {
-                                #( Self:: #b (v) => v.to_string(), )*
+                                #( Self:: #variants (v) => v.to_string(), )*
                             }
                         )
                     }
@@ -136,6 +131,69 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
             }
         }
         _ => unreachable!(),
+    }
+    .into()
+}
+
+#[proc_macro_derive(Slicable, attributes(slice, start_, end))]
+pub fn derive_slicable(input: TokenStream) -> TokenStream {
+    let ItemStruct {
+        ident,
+        generics,
+        fields,
+        ..
+    } = parse_macro_input!(input);
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let body = match fields {
+        Fields::Unnamed(FieldsUnnamed { unnamed, .. }) if unnamed.len() == 1 => {
+            quote! {self.0.get_slice()}
+        }
+        Fields::Named(FieldsNamed { named, .. }) => {
+            let acc = named.iter().fold(
+                (None, None, None),
+                |(mut slice, mut start, mut end), Field { attrs, ident, .. }| {
+                    let fast = |at| attrs.iter().any(|attr| attr.meta.path().is_ident(at));
+                    let check = |a: Option<&Ident>, b| {
+                        if a.is_some() {
+                            panic!("#[{b}] already defined earlier");
+                        }
+                    };
+
+                    if fast("slice") {
+                        check(start, "start_");
+                        check(end, "end");
+                        slice = Some(ident.as_ref().unwrap())
+                    }
+                    if fast("start_") {
+                        check(slice, "slice");
+                        start = Some(ident.as_ref().unwrap())
+                    }
+                    if fast("end") {
+                        check(slice, "slice");
+                        end = Some(ident.as_ref().unwrap())
+                    }
+                    (slice, start, end)
+                },
+            );
+
+            match acc {
+                (Some(ident), None, None) => quote! {self. #ident .get_slice()},
+                (None, Some(start), Some(end)) => {
+                    quote! {std::ops::RangeInclusive::new(self. #start .get_start(), self. #end .get_end())}
+                }
+                _ => unreachable!(),
+            }
+        }
+        _ => unreachable!(),
+    };
+
+    quote! {
+        impl #impl_generics crate::lexer::Slicable for #ident #ty_generics  #where_clause {
+            fn get_slice(&self) -> std::ops::RangeInclusive<usize> {
+                #body
+            }
+        }
     }
     .into()
 }

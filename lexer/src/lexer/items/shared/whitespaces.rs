@@ -1,7 +1,8 @@
 use crate::lexer::{check, check_none, Code, Parse, Slicable, Slice, IGNORE};
+use macros::Slicable;
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Clone, Debug, Deref)]
+#[derive(PartialEq, Clone, Debug, Deref, Slicable)]
 pub struct Whitespaces<'s>(Slice<'s>);
 
 impl<'s> Parse<'s> for Whitespaces<'s> {
@@ -23,15 +24,6 @@ impl<'s> Parse<'s> for Whitespaces<'s> {
         }
 
         Some(Self(Slice::new(code.cursor..=end?, code)))
-    }
-}
-
-impl Slicable for Whitespaces<'_> {
-    fn get_start(&self) -> usize {
-        self.0.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.0.get_end()
     }
 }
 

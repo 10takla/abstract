@@ -1,3 +1,5 @@
+use macros::Slicable;
+
 use super::{
     assign::{left_right::LeftRight, Assign},
     literal::LiteralType,
@@ -7,9 +9,10 @@ use crate::lexer::{
 };
 use std::{fmt::Display, ops::RangeInclusive};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Slicable)]
 pub struct AssignAnd<'s> {
     pub type_: AssignAndType,
+    #[slice]
     pub val: Assign<'s>,
 }
 
@@ -60,15 +63,6 @@ impl<'s> Parse<'s> for AssignAnd<'s> {
             type_: assign_type.unwrap(),
             val: Assign(lr),
         })
-    }
-}
-
-impl Slicable for AssignAnd<'_> {
-    fn get_start(&self) -> usize {
-        self.val.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.val.get_end()
     }
 }
 

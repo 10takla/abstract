@@ -8,7 +8,7 @@ use item::{
     ident::Ident,
     Item,
 };
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Deref, Hash, Eq, Clone)]
@@ -39,11 +39,11 @@ impl<'s> Parse<'s> for Items<'s> {
 }
 
 impl Slicable for Items<'_> {
-    fn get_start(&self) -> usize {
-        self.first().unwrap().get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.last().unwrap().get_end()
+    fn get_slice(&self) -> RangeInclusive<usize> {
+        RangeInclusive::new(
+            self.first().unwrap().get_start(),
+            self.last().unwrap().get_end(),
+        )
     }
 }
 
@@ -61,7 +61,7 @@ impl std::fmt::Display for Items<'_> {
 }
 
 #[test]
-fn parse_elements() {
+fn parse_items() {
     fn fast<'s>(source: &'s str, f: fn(&Code<'s>) -> Vec<Item<'s>>) {
         check(source, |code| Items(f(code)));
     }

@@ -1,3 +1,5 @@
+use macros::Slicable;
+
 use crate::{
     lexer::{
         check, check_none, items::shared::whitespaces::Whitespaces, Code, Parse, Slice, IGNORE,
@@ -5,7 +7,7 @@ use crate::{
     Slicable,
 };
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Slicable)]
 pub struct Number<'s>(pub Slice<'s>);
 
 impl<'s> Parse<'s> for Number<'s> {
@@ -43,15 +45,6 @@ impl<'s> Parse<'s> for Number<'s> {
         let end = t()?;
 
         Some(Self(Slice::new(start..=end, code)))
-    }
-}
-
-impl Slicable for Number<'_> {
-    fn get_start(&self) -> usize {
-        self.0.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.0.get_end()
     }
 }
 

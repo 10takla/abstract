@@ -2,9 +2,10 @@ use crate::lexer::{
     check, check_none, items::shared::whitespaces::Whitespaces, Code, Parse, Slicable, Slice,
 };
 use std::{fmt::Display, ops::RangeInclusive};
+use macros::Slicable;
 use std_reset::prelude::Deref;
 
-#[derive(PartialEq, Debug, Clone, Deref, Eq, Hash)]
+#[derive(PartialEq, Debug, Clone, Deref, Eq, Hash, Slicable)]
 pub struct Ident<'s>(pub Slice<'s>);
 
 impl<'s> Ident<'s> {
@@ -44,15 +45,6 @@ impl<'s> Parse<'s> for Ident<'s> {
         };
 
         Some(Self::new(start..=end, code))
-    }
-}
-
-impl Slicable for Ident<'_> {
-    fn get_start(&self) -> usize {
-        self.0.get_start()
-    }
-    fn get_end(&self) -> usize {
-        self.0.get_end()
     }
 }
 

@@ -1,12 +1,9 @@
-use r#abstract::{
-    compile,
-    lexer::{items::Items, Code, Parse},
-};
+use ast::name_resolve::name_resolve;
+use lexer::{items::Items, parse, Code, Parse};
 
 fn main() {
-    compile(
+    let items = parse(
         r#"
-           
             main {
                 a = 2
                 a += 200
@@ -27,4 +24,5 @@ fn main() {
             result = 502
             "#,
     );
+    let (refs, _) = name_resolve(&items, None);
 }

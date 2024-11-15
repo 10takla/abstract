@@ -71,7 +71,11 @@ impl Display for AssignExpr {
 
 #[test]
 fn parse_assign_expr() {
-    let check = |a, b: (AssignExprType, (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>)))| {
+    let check = |a,
+                 b: (
+        AssignExprType,
+        (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>)),
+    )| {
         let code = &mut Code::new(a);
         assert_eq!(
             AssignExpr::parse(code),

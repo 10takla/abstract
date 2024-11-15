@@ -40,7 +40,7 @@ impl Parse for Ident {
                 }
             })?
         };
-        
+
         Some(Self::new(start..=end, code))
     }
 }
@@ -75,7 +75,7 @@ fn parse_ident() {
     check("a", 0..=0);
     check(" a ", 1..=1);
     check(" _ ", 1..=1);
-    
+
     check(" фc", 1..=2);
     check(" ффф ", 1..=3);
     check(" dъя", 1..=3);

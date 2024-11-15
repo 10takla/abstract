@@ -3,7 +3,11 @@ pub mod block;
 pub mod ident;
 
 use crate::lexer::{check, check_none, Parse, Slicable};
-use assign_expr::{assign::Assign, literal::LiteralType, AssignExpr, AssignExprType};
+use assign_expr::{
+    assign::Assign,
+    literal::{Literal, LiteralType},
+    AssignExpr, AssignExprType,
+};
 use block::Block;
 use ident::Ident;
 use macros::Parse;
@@ -13,6 +17,7 @@ pub enum Item {
     Block(Block),
     AssignExpr(AssignExpr),
     Ident(Ident),
+    Literal(Literal),
 }
 
 #[test]

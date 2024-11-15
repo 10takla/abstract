@@ -5,7 +5,10 @@ use crate::lexer::{
     Code, Parse, Slicable,
 };
 use macros::Parse;
-use std::{fmt::{Debug, Display}, ops::RangeInclusive};
+use std::{
+    fmt::{Debug, Display},
+    ops::RangeInclusive,
+};
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 #[grammar(

@@ -1,12 +1,9 @@
 pub mod items;
-pub mod new_cursor;
 
 use colored::Colorize;
 use std::{
     fmt::{Debug, Display},
-    iter::Enumerate,
     ops::RangeInclusive,
-    str::Lines,
 };
 
 const IGNORE: [char; 3] = [' ', '\n', '\t'];
@@ -112,7 +109,7 @@ impl Display for Code {
 
 #[test]
 #[ignore]
-fn new_cursor() {
+fn code() {
     let mut code = Code::new("a◕◕fadф");
     code.offset(2);
     println!("{code}");

@@ -21,7 +21,7 @@ impl Parse for Whitespaces {
                 break;
             }
         }
-        
+
         Some(Self(Slice::new(code.cursor..=end?, code)))
     }
 }

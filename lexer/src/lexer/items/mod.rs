@@ -20,9 +20,7 @@ impl Parse for Items {
         let code = &mut code.clone();
 
         loop {
-            println!("{code}");
             if let Some(item) = Item::parse_and_consume(code) {
-                println!("{item}");
                 items.push(item);
             } else {
                 if code.cursor >= code.len() - 1 {
@@ -34,10 +32,6 @@ impl Parse for Items {
                 break;
             }
         }
-        // while  let Some(item) = Item::parse_and_consume(code) {
-        //     println!("{item}");
-        //     items.push(item);
-        // }
 
         Some(Self(items))
     }
@@ -104,7 +98,6 @@ fn parse_elements() {
         ]
     });
 }
-
 
 #[test]
 fn dota2() {

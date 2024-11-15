@@ -1,20 +1,17 @@
-use r#abstract::{
-    ast::name_resolve,
-    lexer::{
-        items::{
-            item::{
-                assign_expr::{AssignExpr, AssignExprType},
-                block::{
-                    distruct::Distruct,
-                    init::{self, unnamed::UnnamedBlock, Init},
-                    Block,
-                },
-                Item,
+use lexer::{
+    items::{
+        item::{
+            assign_expr::{AssignExpr, AssignExprType},
+            block::{
+                distruct::Distruct,
+                init::{self, unnamed::UnnamedBlock, Init},
+                Block,
             },
-            Items,
+            Item,
         },
-        Code, Parse, Slicable,
+        Items,
     },
+    Code, Parse, Slicable,
 };
 use std::{fmt::Debug, iter::Enumerate, str::Lines, sync::RwLock};
 use tower_lsp::{jsonrpc::Result, lsp_types::*, Client, LanguageServer, LspService, Server};
@@ -246,6 +243,7 @@ fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
                 AssignExprType::Assign => token_type(SemanticTokenType::FUNCTION),
                 AssignExprType::AssignAnd(_) => token_type(SemanticTokenType::FUNCTION),
             },
+            _ => 0,
         };
 
         SemanticToken {

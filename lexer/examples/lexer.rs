@@ -1,21 +1,18 @@
-use r#abstract::lexer::{items::Items, Code, Parse};
+use lexer::parse;
 
 fn main() {
     let code = r#"sdfsf = 2 sdfsdf sdf 
     sd = 2434 sfdfsdf sdfs ffdsf sdf sdf s"#;
-    println!("{}", Items::parse(&mut Code::new(code)).unwrap());
+    println!("{}", parse(code));
 
     println!(
         "{}",
-        Items::parse(&mut Code::new(
-            r#"abc = 2 def = "test" xyz = 100 name = "John" age = 30"#
-        ))
-        .unwrap()
+        parse(r#"abc = 2 def = "test" xyz = 100 name = "John" age = 30"#)
     );
 
     println!(
         "{}",
-        Items::parse(&mut Code::new(
+        parse(
             r#"
             afsg__223
             afsg___
@@ -38,7 +35,6 @@ fn main() {
 
             result = 502
             "#
-        ))
-        .unwrap()
+        )
     );
 }

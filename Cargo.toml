@@ -3,13 +3,14 @@ name = "abstract"
 edition = "2021"
 
 [dependencies]
-colored = "2.1.0"
-std-reset = "0.1.5"
-macros = { workspace = true }
+lexer = { workspace = true }
+ast = { workspace = true }
 
 [workspace]
-members = ["lsp-server", "macros"]
+members = ["lexer", "ast", "lsp-server", "macros"]
+default-members = ["lexer"]
 
 [workspace.dependencies]
 macros = { path = "macros" }
-abstract = { path = "./" }
+lexer = { path = "lexer" }
+ast = { path = "ast" }

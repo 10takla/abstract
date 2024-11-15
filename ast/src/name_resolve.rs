@@ -1,4 +1,4 @@
-use crate::lexer::items::{
+use lexer::items::{
     item::{
         assign_expr::{assign::Assign, AssignExpr, AssignExprType},
         block::{
@@ -98,6 +98,7 @@ pub fn name_resolve<'a>(
                     }
                 });
             }
+            _ => {}
         }
     }
 

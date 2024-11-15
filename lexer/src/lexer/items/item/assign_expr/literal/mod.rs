@@ -2,12 +2,12 @@ mod number;
 mod string;
 
 use crate::{
-    lexer::{Code, Parse, Slicable, Slice},
+    lexer::{check, check_none, Code, Parse, Slicable, Slice},
     parse_variants,
 };
-use number::parse_number;
 use std::{fmt::Display, ops::RangeInclusive};
-use string::parse_string;
+use number::Number;
+use string::String;
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub struct Literal<'s> {
@@ -33,13 +33,13 @@ impl<'s> Literal<'s> {
 impl<'s> Parse<'s> for Literal<'s> {
     fn parse(code: &Code<'s>) -> Option<Self> {
         parse_variants!(
-            parse_number(code).map(|slice| Self {
+            Number::parse(code).map(|v| Self {
                 type_: LiteralType::Number,
-                slice,
+                slice: v.0,
             }),
-            parse_string(code).map(|slice| Self {
+            String::parse(code).map(|v| Self {
                 type_: LiteralType::String,
-                slice,
+                slice: v.0,
             })
         )
     }
@@ -62,18 +62,11 @@ impl Display for Literal<'_> {
 
 #[test]
 fn parse_literal() {
-    let check = |a, b: (LiteralType, RangeInclusive<usize>)| {
-        let code = &mut Code::new(a);
-        assert_eq!(
-            Literal::parse(code),
-            Some(Literal {
-                type_: b.0,
-                slice: Slice::new(b.1, code)
-            })
-        );
-    };
-    let check_none = |a| {
-        assert_eq!(Literal::parse(&mut Code::new(a)), None);
+    let check = |source, v: (LiteralType, RangeInclusive<usize>)| {
+        check(source, |code| Literal {
+            type_: v.0,
+            slice: Slice::new(v.1, code),
+        });
     };
 
     check("2", (LiteralType::Number, 0..=0));
@@ -90,6 +83,6 @@ fn parse_literal() {
     check(r#"  " ab s3fsf d2_c "  "#, (LiteralType::String, 2..=18));
 
     // errors
-    check_none(" 2sdf ");
-    check_none(" \"2sdf ");
+    check_none::<Literal>(" 2sdf ");
+    check_none::<Literal>(" \"2sdf ");
 }

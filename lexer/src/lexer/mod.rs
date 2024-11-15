@@ -164,9 +164,9 @@ pub trait Slicable {
     fn get_end(&self) -> usize;
 }
 
-fn check<'s, T: Parse<'s> + PartialEq + Debug>(code: &'s str, b: fn(&Code<'s>) -> T) {
-    let code = &mut Code::new(code);
-    assert_eq!(T::parse(code), Some(b(code)));
+fn check<'s, T: Parse<'s> + PartialEq + Debug>(source: &'s str, get_item: impl FnOnce(&Code<'s>) -> T) {
+    let code = &mut Code::new(source);
+    assert_eq!(T::parse(code), Some(get_item(code)));
 }
 
 fn check_none<'s, T: Parse<'s> + PartialEq + Debug>(code: &'s str) {

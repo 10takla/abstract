@@ -1,41 +1,54 @@
-use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slice};
+use crate::{
+    lexer::{check, check_none, items::shared::whitespaces::Whitespaces, Code, Parse, Slice},
+    Slicable,
+};
 
-pub fn parse_string<'s>(code: &Code<'s>) -> Option<Slice<'s>> {
-    let code = &mut code.clone();
+#[derive(Debug, PartialEq)]
+pub struct String<'s>(pub Slice<'s>);
 
-    Whitespaces::parse_and_consume(code);
-    let mut iter = code.iter();
+impl<'s> Parse<'s> for String<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
+        let code = &mut code.clone();
 
-    let (i, char) = iter.next()?;
-    let start = (char == '"').then_some(i)?;
+        Whitespaces::parse_and_consume(code);
+        let mut iter = code.iter();
 
-    for (i, char) in iter {
-        if char == '"' {
-            return Some(Slice::new(start..=i, code));
+        let (i, char) = iter.next()?;
+        let start = (char == '"').then_some(i)?;
+
+        for (i, char) in iter {
+            if char == '"' {
+                return Some(Self(Slice::new(start..=i, code)));
+            }
         }
+        None
     }
-    None
+}
+
+impl Slicable for String<'_> {
+    fn get_start(&self) -> usize {
+        self.0.get_start()
+    }
+    fn get_end(&self) -> usize {
+        self.0.get_end()
+    }
 }
 
 #[test]
-fn parse_string_test() {
-    fn check<'s>(a: &'s str, b: fn(&Code<'s>) -> Slice<'s>) {
-        let code = &mut Code::new(a);
-        assert_eq!(parse_string(code), Some(b(code)));
-    }
-    let check_none = |a| {
-        assert_eq!(parse_string(&mut Code::new(a)), None);
+fn parse_string() {
+    let check = |source, range| {
+        check(source, |code| String(Slice::new(range, code)));
     };
 
-    check(r#""abc""#, |code| Slice::new(0..=4, code));
-    check(r#""abc"  "#, |code| Slice::new(0..=4, code));
-    check(r#"  "abc"  "#, |code| Slice::new(2..=6, code));
-    check(r#"  " ab s3fsf d2_c "  "#, |code| Slice::new(2..=18, code));
-    check(r#""""#, |code| Slice::new(0..=1, code));
-    check(r#" " " "#, |code| Slice::new(1..=3, code));
+    check(r#""abc""#, 0..=4);
+    check(r#""abc"  "#, 0..=4);
+    check(r#"  "abc"  "#, 2..=6);
+    check(r#"  " ab s3fsf d2_c "  "#, 2..=18);
+    check(r#""""#, 0..=1);
+    check(r#" " " "#, 1..=3);
 
     // errors
-    check_none(" 2sdf ");
-    check_none(" \"2sdf ");
-    check_none(" \" ");
+    check_none::<String>(" 2sdf ");
+    check_none::<String>(" \"2sdf ");
+    check_none::<String>(" \" ");
 }

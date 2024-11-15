@@ -2,7 +2,12 @@ pub mod item;
 pub mod shared;
 
 use super::{Code, Parse, Slicable};
-use item::{assign_expr::{assign::Assign, literal::LiteralType, AssignExpr, AssignExprType}, ident::Ident, Item};
+use crate::lexer::check;
+use item::{
+    assign_expr::{assign::Assign, literal::LiteralType, AssignExpr, AssignExprType},
+    ident::Ident,
+    Item,
+};
 use std::fmt::Debug;
 use std_reset::prelude::Deref;
 
@@ -57,18 +62,17 @@ impl std::fmt::Display for Items<'_> {
 
 #[test]
 fn parse_elements() {
-    fn check<'s>(a: &'s str, b: fn(&Code<'s>) -> Vec<Item<'s>>) {
-        let code = &mut Code::new(a);
-        assert_eq!(Items::parse(code), Some(Items(b(code))));
+    fn fast<'s>(source: &'s str, f: fn(&Code<'s>) -> Vec<Item<'s>>) {
+        check(source, |code| Items(f(code)));
     }
 
-    check(" abc = \"abc\"", |code| {
+    fast(" abc = \"abc\"", |code| {
         vec![Item::AssignExpr(AssignExpr {
             type_: AssignExprType::Assign,
             val: Assign::new(1..=3, (LiteralType::String, 7..=11), code),
         })]
     });
-    check(" abc = \"abc\" abc", |code| {
+    fast(" abc = \"abc\" abc", |code| {
         vec![
             Item::AssignExpr(AssignExpr {
                 type_: AssignExprType::Assign,
@@ -78,16 +82,16 @@ fn parse_elements() {
         ]
     });
 
-    check("   ", |_| vec![]);
+    fast("   ", |_| vec![]);
 
-    check(" aыы aыы", |code| {
+    fast(" aыы aыы", |code| {
         vec![
             Item::Ident(Ident::new(1..=3, code)),
             Item::Ident(Ident::new(5..=7, code)),
         ]
     });
 
-    check(" aыы;aыы", |code| {
+    fast(" aыы;aыы", |code| {
         vec![
             Item::Ident(Ident::new(1..=3, code)),
             Item::Ident(Ident::new(5..=7, code)),

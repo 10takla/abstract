@@ -1,10 +1,14 @@
 pub mod left_right;
 
 use super::literal::{Literal, LiteralType};
-use crate::{lexer::{
-    items::{item::ident::Ident, Code},
-    Parse, Slicable,
-}, Slice};
+use crate::{
+    lexer::{
+        check, check_none,
+        items::{item::ident::Ident, Code},
+        Parse, Slicable,
+    },
+    Slice,
+};
 use left_right::LeftRight;
 use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
@@ -53,22 +57,17 @@ impl Display for Assign<'_> {
 
 #[test]
 fn parse_assign() {
-    let check = |a, b: (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>))| {
-        let code = &mut Code::new(a);
-        assert_eq!(
-            Assign::parse(&mut Code::new(a)),
-            Some(Assign(LeftRight {
-                left: Ident::new(b.0, code),
+    let check = |source, v: (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>))| {
+        check(source, |code| {
+            Assign(LeftRight {
+                left: Ident::new(v.0, code),
                 right: Literal {
-                    type_: b.1 .0,
-                    slice: Slice::new(b.1 .1, code)
+                    type_: v.1 .0,
+                    slice: Slice::new(v.1 .1, code),
                 },
-                _marker: Default::default()
-            }))
-        );
-    };
-    let check_none = |a| {
-        assert_eq!(Assign::parse(&mut Code::new(a)), None);
+                _marker: Default::default(),
+            })
+        });
     };
 
     check(" abc = 6", (1..=3, (LiteralType::Number, 7..=7)));
@@ -76,7 +75,7 @@ fn parse_assign() {
     check(" abc=6 ", (1..=3, (LiteralType::Number, 5..=5)));
     check(" abc = \"root\"", (1..=3, (LiteralType::String, 7..=12)));
 
-    check_none("abc =");
-    check_none("abc = ");
-    check_none("abc=");
+    check_none::<Assign>("abc =");
+    check_none::<Assign>("abc = ");
+    check_none::<Assign>("abc=");
 }

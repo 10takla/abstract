@@ -1,4 +1,6 @@
-use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slicable, Slice};
+use crate::lexer::{
+    check, check_none, items::shared::whitespaces::Whitespaces, Code, Parse, Slicable, Slice,
+};
 use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
@@ -56,12 +58,8 @@ impl Slicable for Ident<'_> {
 
 #[test]
 fn parse_ident() {
-    let check = |a, b| {
-        let code = &mut Code::new(a);
-        assert_eq!(Ident::parse(code), Some(Ident::new(b, code)));
-    };
-    let check_none = |a| {
-        assert_eq!(Ident::parse(&mut Code::new(a)), None);
+    let check = |source, range| {
+        check(source, move |code| Ident::new(range, code));
     };
 
     check("abc", 0..=2);
@@ -81,6 +79,6 @@ fn parse_ident() {
     check(" dъя", 1..=3);
 
     // errors
-    check_none("  2sdf ");
-    check_none("  ");
+    check_none::<Ident>("  2sdf ");
+    check_none::<Ident>("  ");
 }

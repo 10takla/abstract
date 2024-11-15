@@ -4,8 +4,7 @@ pub mod literal;
 
 use crate::{
     lexer::{
-        items::{Code, Slicable},
-        Parse,
+        check, check_none, items::{Code, Slicable}, Parse
     },
     parse_variants,
 };
@@ -71,22 +70,15 @@ impl Display for AssignExpr<'_> {
 
 #[test]
 fn parse_assign_expr() {
-    let check = |a,
-                 b: (
+    let check = |source,
+                 f: (
         AssignExprType,
         (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>)),
     )| {
-        let code = &mut Code::new(a);
-        assert_eq!(
-            AssignExpr::parse(code),
-            Some(AssignExpr {
-                type_: b.0,
-                val: Assign::new(b.1 .0, (b.1 .1 .0, b.1 .1 .1), code)
-            })
-        );
-    };
-    let check_none = |a| {
-        assert_eq!(AssignExpr::parse(&mut Code::new(a)), None);
+        check(source, |code| AssignExpr {
+            type_: f.0,
+            val: Assign::new(f.1 .0, (f.1 .1 .0, f.1 .1 .1), code),
+        });
     };
 
     check(
@@ -119,6 +111,6 @@ fn parse_assign_expr() {
     );
 
     // errors
-    check_none("");
-    check_none(" ");
+    check_none::<AssignExpr>("");
+    check_none::<AssignExpr>(" ");
 }

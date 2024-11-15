@@ -1,8 +1,6 @@
-use crate::lexer::{
-    check, check_none,
-    items::{item::ident::Ident, shared::distribution::Distribution},
-    Parse, Slicable, Slice,
-};
+use crate::{lexer::{
+    check, check_none, items::{item::ident::Ident, shared::distribution::Distribution}, Parse, Slicable
+}, Slice};
 use macros::Parse;
 use std::fmt::{Debug, Display};
 
@@ -10,12 +8,12 @@ use std::fmt::{Debug, Display};
 #[grammar(
     Ident Distribution
 )]
-pub struct CallBlockDistruct {
-    pub name: Ident,
-    pub dist: Distribution,
+pub struct CallBlockDistruct<'s> {
+    pub name: Ident<'s>,
+    pub dist: Distribution<'s>,
 }
 
-impl Display for CallBlockDistruct {
+impl Display for CallBlockDistruct<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "NamedDistruct({})", self.name)
     }

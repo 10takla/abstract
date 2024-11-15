@@ -7,7 +7,7 @@ use init::Init;
 use macros::Parse;
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
-pub enum Block {
-    Distruct(Distruct),
-    Init(Init),
+pub enum Block<'s> {
+    Distruct(Distruct<'s>),
+    Init(Init<'s>),
 }

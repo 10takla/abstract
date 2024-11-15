@@ -18,17 +18,21 @@ pub enum Error {
     NotInited,
 }
 
-pub type Refs<'a> = HashMap<&'a Item, &'a Item>;
+pub type Refs<'s, 'i> = HashMap<&'i Item<'s>, &'i Item<'s>>;
 
-pub fn name_resolve<'a>(
-    items: &'a Items,
-    globals: Option<HashMap<&str, &'a Item>>,
-) -> (Refs<'a>, Vec<(Error, &'a Item)>) {
+/// 's - code source
+/// 'i - items
+pub fn name_resolve<'s, 'i>(
+    items: &'i Items<'s>,
+    globals: Option<HashMap<&'s str, &'i Item<'s>>>,
+) -> (Refs<'s, 'i>, Vec<(Error, &'i Item<'s>)>) {
     let mut errors = vec![];
 
     let mut item_refs: Refs = HashMap::new();
-    let (mut block_stack, mut assign_stack): (HashMap<&str, &Item>, HashMap<&str, &Item>) =
-        (HashMap::new(), globals.map(|v| v).unwrap_or_default());
+    let (mut block_stack, mut assign_stack) = (
+        HashMap::<&str, &Item>::new(),
+        globals.map(|v| v).unwrap_or_default(),
+    );
 
     for item in items.0.iter() {
         if let Item::Block(Block::Init(init)) = item {

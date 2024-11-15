@@ -6,7 +6,7 @@ use macros::Parse;
 use named::CallBlockDistruct;
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
-pub enum Distruct {
-    Init(InitBlockDistruct),
-    Call(CallBlockDistruct),
+pub enum Distruct<'s> {
+    Init(InitBlockDistruct<'s>),
+    Call(CallBlockDistruct<'s>),
 }

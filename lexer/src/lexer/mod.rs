@@ -9,14 +9,14 @@ use std::{
 const IGNORE: [char; 3] = [' ', '\n', '\t'];
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Code {
-    pub source: &'static str,
+pub struct Code<'s> {
+    pub source: &'s str,
     byte_indices: Vec<usize>,
     pub cursor: usize,
 }
 
-impl Code {
-    pub fn new(source: &'static str) -> Self {
+impl<'s> Code<'s> {
+    pub fn new(source: &'s str) -> Self {
         Self {
             source,
             cursor: 0,
@@ -68,7 +68,7 @@ impl Code {
             .and_then(|end| self.source.get(self.byte_indices[self.cursor]..=end))
     }
 
-    pub fn get_slice<'a>(&self, range: RangeInclusive<usize>) -> Option<&'static str> {
+    pub fn get_slice(&self, range: RangeInclusive<usize>) -> Option<&'s str> {
         self.byte_indices
             .get(*range.start())
             .zip(
@@ -81,7 +81,7 @@ impl Code {
     }
 }
 
-impl Display for Code {
+impl Display for Code<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if !self.byte_indices.is_empty() {
             if let Some(&cursor_byte_index) = self.byte_indices.get(self.cursor) {
@@ -119,12 +119,12 @@ fn code() {
 }
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
-pub struct Slice {
+pub struct Slice<'s> {
     pub range: RangeInclusive<usize>,
-    pub source: &'static str,
+    pub source: &'s str,
 }
 
-impl Slicable for Slice {
+impl Slicable for Slice<'_> {
     fn get_start(&self) -> usize {
         *self.range.start()
     }
@@ -133,14 +133,14 @@ impl Slicable for Slice {
     }
 }
 
-impl Display for Slice {
+impl Display for Slice<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)
     }
 }
 
-impl Slice {
-    pub fn new(range: RangeInclusive<usize>, code: &Code) -> Self {
+impl<'s> Slice<'s> {
+    pub fn new(range: RangeInclusive<usize>, code: &Code<'s>) -> Self {
         Self {
             range: range.clone(),
             source: code.get_slice(range).unwrap(),
@@ -148,10 +148,10 @@ impl Slice {
     }
 }
 
-pub trait Parse: Slicable + Sized {
-    fn parse(code: &Code) -> Option<Self>;
+pub trait Parse<'s>: Slicable + Sized {
+    fn parse(code: &Code<'s>) -> Option<Self>;
 
-    fn parse_and_consume(code: &mut Code) -> Option<Self> {
+    fn parse_and_consume(code: &mut Code<'s>) -> Option<Self> {
         Self::parse(code).map(|v| {
             code.end(&v);
             v
@@ -164,12 +164,12 @@ pub trait Slicable {
     fn get_end(&self) -> usize;
 }
 
-fn check<T: Parse + PartialEq + Debug>(code: &'static str, b: fn(&Code) -> T) {
+fn check<'s, T: Parse<'s> + PartialEq + Debug>(code: &'s str, b: fn(&Code<'s>) -> T) {
     let code = &mut Code::new(code);
     assert_eq!(T::parse(code), Some(b(code)));
 }
 
-fn check_none<T: Parse + PartialEq + Debug>(code: &'static str) {
+fn check_none<'s, T: Parse<'s> + PartialEq + Debug>(code: &'s str) {
     assert_eq!(T::parse(&mut Code::new(code)), None);
 }
 

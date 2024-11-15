@@ -2,10 +2,10 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenTree;
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{
-    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, FieldsNamed,
-    ItemEnum, Meta, MetaList, Variant,
+    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, FieldsNamed, Meta,
+    MetaList, Type, Variant,
 };
 
 #[proc_macro_derive(Parse, attributes(grammar))]
@@ -30,13 +30,18 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
 
                 named
                     .iter()
-                    .find(|Field { ty, .. }| ty.to_token_stream().to_string() == ident.to_string())
-                    .unwrap()
+                    .find(|Field { ty, .. }| {
+                        let Type::Path(ty) = &ty else {unreachable!()};
+                        let ty = &ty.path.segments.iter().next().unwrap().ident;
+                        *ty == ident
+                    }).unwrap()
             });
 
             let body = conformity
                 .clone()
                 .map(|Field { ty, ident, .. }| {
+                    let Type::Path(ty) = &ty else {unreachable!()};
+                        let ty = &ty.path.segments.iter().next().unwrap().ident;
                     quote! {
                         let #ident = #ty ::parse_and_consume(code)?;
                     }
@@ -58,8 +63,8 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                 &conformity.last().unwrap().ident
             ];
             quote! {
-                impl crate::lexer::Parse for #ident {
-                    fn parse(code: &crate::lexer::Code) -> Option<Self> {
+                impl<'s> crate::lexer::Parse<'s> for #ident<'s> {
+                    fn parse(code: &crate::lexer::Code<'s>) -> Option<Self> {
                         let code = &mut code.clone();
 
                         #body
@@ -68,7 +73,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl crate::lexer::Slicable for #ident {
+                impl crate::lexer::Slicable for #ident<'_> {
                     fn get_start(&self) -> usize {
                         self. #first .get_start()
                     }
@@ -95,8 +100,8 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                 .unzip();
 
             quote! {
-                impl crate::lexer::Parse for #ident {
-                    fn parse(code: &crate::lexer::Code) -> Option<Self> {
+                impl<'s> crate::lexer::Parse<'s> for #ident<'s> {
+                    fn parse(code: &crate::lexer::Code<'s>) -> Option<Self> {
                         crate::parse_variants!(
                             code
                             #( #a )*
@@ -104,7 +109,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl crate::lexer::Slicable for #ident {
+                impl crate::lexer::Slicable for #ident<'_> {
                     fn get_start(&self) -> usize {
                         match self {
                             #( Self:: #b (v) => v.get_start(), )*
@@ -117,7 +122,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl std::fmt::Display for #ident {
+                impl std::fmt::Display for #ident<'_> {
                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                         write!(
                             f,

@@ -1,14 +1,6 @@
-use crate::lexer::{
-    check, check_none,
-    items::{
-        item::{
-            block::init::{named::NamedBlock, unnamed::UnnamedBlock},
-            ident::Ident,
-        },
-        shared::distribution::Distribution,
-    },
-    Parse, Slicable, Slice,
-};
+use crate::{items::item::{block::init::unnamed::UnnamedBlock, ident::Ident}, lexer::{
+    check, check_none, items::{item::block::init::named::NamedBlock, shared::distribution::Distribution}, Parse, Slicable
+}, Slice};
 use macros::Parse;
 use std::fmt::Display;
 
@@ -16,12 +8,12 @@ use std::fmt::Display;
 #[grammar(
     NamedBlock Distribution
 )]
-pub struct InitBlockDistruct {
-    pub named_block: NamedBlock,
-    pub distr: Distribution,
+pub struct InitBlockDistruct<'s> {
+    pub named_block: NamedBlock<'s>,
+    pub distr: Distribution<'s>,
 }
 
-impl Display for InitBlockDistruct {
+impl Display for InitBlockDistruct<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "InitDistruct({})", self.named_block.block.items)
     }

@@ -1,8 +1,6 @@
 use super::unnamed::UnnamedBlock;
 use crate::lexer::{
-    check,
-    items::item::{ident::Ident, Item},
-    Code, Parse, Slicable,
+    check, items::item::{ident::Ident, Item}, Code, Parse, Slicable
 };
 use macros::Parse;
 use std::{
@@ -14,16 +12,16 @@ use std::{
 #[grammar(
     Ident UnnamedBlock
 )]
-pub struct NamedBlock {
-    pub name: Ident,
-    pub block: UnnamedBlock,
+pub struct NamedBlock<'s> {
+    pub name: Ident<'s>,
+    pub block: UnnamedBlock<'s>,
 }
 
-impl NamedBlock {
+impl<'s> NamedBlock<'s> {
     pub fn new(
         idnet_slice: RangeInclusive<usize>,
-        (items, brackets): (Vec<Item>, [usize; 2]),
-        code: &Code,
+        (items, brackets): (Vec<Item<'s>>, [usize; 2]),
+        code: &Code<'s>,
     ) -> Self {
         Self {
             name: Ident::new(idnet_slice, code),
@@ -32,7 +30,7 @@ impl NamedBlock {
     }
 }
 
-impl Display for NamedBlock {
+impl Display for NamedBlock<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "NamedBlock({} => {})", self.name, self.block.items)
     }

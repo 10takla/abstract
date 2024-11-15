@@ -11,8 +11,8 @@ use lexer::items::{
     Items,
 };
 
-pub fn expand(items: &Items, refs: &Refs) -> Items {
-    let mut new_items = Vec::new();
+pub fn expand<'s, 'i>(items: &'i Items<'s>, refs: &Refs<'s, 'i>) -> Items<'s> {
+    let mut new_items: Vec<Item<'s>> = Vec::new();
 
     for item in items.iter() {
         if let Item::Block(block) = item {
@@ -30,7 +30,7 @@ pub fn expand(items: &Items, refs: &Refs) -> Items {
                     Distruct::Call(CallBlockDistruct { .. }) => {
                         if let Some(on) = refs.get(item) {
                             if let Item::Block(block) = on {
-                                let mut fast = |NamedBlock { block, .. }: &NamedBlock| {
+                                let mut fast = |NamedBlock { block, .. }: &NamedBlock<'s>| {
                                     let n = expand(&block.items, refs);
                                     new_items.extend(n.0);
                                 };
@@ -57,7 +57,6 @@ pub fn expand(items: &Items, refs: &Refs) -> Items {
                         continue;
                     }
                 },
-                _ => {}
             }
         }
 

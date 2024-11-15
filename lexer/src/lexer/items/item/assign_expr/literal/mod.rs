@@ -10,9 +10,9 @@ use std::{fmt::Display, ops::RangeInclusive};
 use string::parse_string;
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
-pub struct Literal {
+pub struct Literal<'s> {
     pub type_: LiteralType,
-    pub slice: Slice,
+    pub slice: Slice<'s>,
 }
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
@@ -21,8 +21,8 @@ pub enum LiteralType {
     String,
 }
 
-impl Literal {
-    pub fn new(type_: LiteralType, slice: RangeInclusive<usize>, code: &Code) -> Self {
+impl<'s> Literal<'s> {
+    pub fn new(type_: LiteralType, slice: RangeInclusive<usize>, code: &Code<'s>) -> Self {
         Self {
             type_,
             slice: Slice::new(slice, code),
@@ -30,8 +30,8 @@ impl Literal {
     }
 }
 
-impl Parse for Literal {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for Literal<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         parse_variants!(
             parse_number(code).map(|slice| Self {
                 type_: LiteralType::Number,
@@ -45,7 +45,7 @@ impl Parse for Literal {
     }
 }
 
-impl Slicable for Literal {
+impl Slicable for Literal<'_> {
     fn get_start(&self) -> usize {
         self.slice.get_start()
     }
@@ -54,7 +54,7 @@ impl Slicable for Literal {
     }
 }
 
-impl Display for Literal {
+impl Display for Literal<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Literal({:?}({}))", self.type_, self.slice)
     }

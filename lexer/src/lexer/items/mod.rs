@@ -2,19 +2,15 @@ pub mod item;
 pub mod shared;
 
 use super::{Code, Parse, Slicable};
-use item::{
-    assign_expr::{assign::Assign, literal::LiteralType, AssignExpr, AssignExprType},
-    ident::Ident,
-    Item,
-};
+use item::{assign_expr::{assign::Assign, literal::LiteralType, AssignExpr, AssignExprType}, ident::Ident, Item};
 use std::fmt::Debug;
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Deref, Hash, Eq, Clone)]
-pub struct Items(pub Vec<Item>);
+pub struct Items<'s>(pub Vec<Item<'s>>);
 
-impl Parse for Items {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for Items<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         let mut items = Vec::new();
 
         let code = &mut code.clone();
@@ -37,7 +33,7 @@ impl Parse for Items {
     }
 }
 
-impl Slicable for Items {
+impl Slicable for Items<'_> {
     fn get_start(&self) -> usize {
         self.first().unwrap().get_start()
     }
@@ -46,7 +42,7 @@ impl Slicable for Items {
     }
 }
 
-impl std::fmt::Display for Items {
+impl std::fmt::Display for Items<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -61,10 +57,10 @@ impl std::fmt::Display for Items {
 
 #[test]
 fn parse_elements() {
-    let check = |a, b: fn(&Code) -> Vec<Item>| {
+    fn check<'s>(a: &'s str, b: fn(&Code<'s>) -> Vec<Item<'s>>) {
         let code = &mut Code::new(a);
         assert_eq!(Items::parse(code), Some(Items(b(code))));
-    };
+    }
 
     check(" abc = \"abc\"", |code| {
         vec![Item::AssignExpr(AssignExpr {

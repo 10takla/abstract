@@ -3,21 +3,17 @@ pub mod block;
 pub mod ident;
 
 use crate::lexer::{check, check_none, Parse, Slicable};
-use assign_expr::{
-    assign::Assign,
-    literal::{Literal, LiteralType},
-    AssignExpr, AssignExprType,
-};
+use assign_expr::{assign::Assign, literal::{Literal, LiteralType}, AssignExpr, AssignExprType};
 use block::Block;
 use ident::Ident;
 use macros::Parse;
 
 #[derive(Debug, PartialEq, Parse, Hash, Eq, Clone)]
-pub enum Item {
-    Block(Block),
-    AssignExpr(AssignExpr),
-    Ident(Ident),
-    Literal(Literal),
+pub enum Item<'s> {
+    Block(Block<'s>),
+    AssignExpr(AssignExpr<'s>),
+    Ident(Ident<'s>),
+    Literal(Literal<'s>),
 }
 
 #[test]

@@ -1,24 +1,19 @@
-use super::{named::NamedBlock, Init};
-use crate::lexer::{
-    check, check_none,
-    items::{
-        item::{block::Block, ident::Ident, Item},
-        shared::whitespaces::Whitespaces,
-        Items,
-    },
-    Code, Parse, Slicable,
-};
+use crate::{items::item::{block::Block, ident::Ident}, lexer::{
+    check, check_none, items::{item::Item, shared::whitespaces::Whitespaces, Items}, Code, Parse, Slicable
+}};
 use std::fmt::Display;
 
+use super::{named::NamedBlock, Init};
+
 #[derive(PartialEq, Debug, Hash, Eq, Clone)]
-pub struct UnnamedBlock {
-    pub items: Items,
+pub struct UnnamedBlock<'s> {
+    pub items: Items<'s>,
     pub open_bracket_pos: usize,
     pub close_bracket_pos: usize,
 }
 
-impl UnnamedBlock {
-    pub fn new(items: Vec<Item>, [open_bracket_pos, close_bracket_pos]: [usize; 2]) -> Self {
+impl<'s> UnnamedBlock<'s> {
+    pub fn new(items: Vec<Item<'s>>, [open_bracket_pos, close_bracket_pos]: [usize; 2]) -> Self {
         Self {
             items: Items(items),
             open_bracket_pos,
@@ -27,8 +22,8 @@ impl UnnamedBlock {
     }
 }
 
-impl Parse for UnnamedBlock {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for UnnamedBlock<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         let code = &mut code.clone();
 
         Whitespaces::parse_and_consume(code);
@@ -53,7 +48,7 @@ impl Parse for UnnamedBlock {
     }
 }
 
-impl Slicable for UnnamedBlock {
+impl Slicable for UnnamedBlock<'_> {
     fn get_start(&self) -> usize {
         self.open_bracket_pos
     }
@@ -62,7 +57,7 @@ impl Slicable for UnnamedBlock {
     }
 }
 
-impl Display for UnnamedBlock {
+impl Display for UnnamedBlock<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Block({})", self.items)
     }

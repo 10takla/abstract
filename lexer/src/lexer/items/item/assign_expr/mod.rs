@@ -15,9 +15,9 @@ use literal::LiteralType;
 use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
-pub struct AssignExpr {
+pub struct AssignExpr<'s> {
     pub type_: AssignExprType,
-    pub val: Assign,
+    pub val: Assign<'s>,
 }
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
@@ -26,8 +26,8 @@ pub enum AssignExprType {
     AssignAnd(AssignAndType),
 }
 
-impl Parse for AssignExpr {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for AssignExpr<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         parse_variants!(
             Assign::parse(code).map(|val| Self {
                 type_: AssignExprType::Assign,
@@ -41,7 +41,7 @@ impl Parse for AssignExpr {
     }
 }
 
-impl Slicable for AssignExpr {
+impl Slicable for AssignExpr<'_> {
     fn get_start(&self) -> usize {
         self.val.get_start()
     }
@@ -50,7 +50,7 @@ impl Slicable for AssignExpr {
     }
 }
 
-impl Display for AssignExpr {
+impl Display for AssignExpr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

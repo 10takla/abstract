@@ -150,10 +150,7 @@ impl Backend {
     async fn analyze_syntax(&self, uri: Url) -> Vec<SemanticToken> {
         let mut tokens = Vec::new();
 
-        let Some(text): Option<&'static str> = self.text.read().unwrap().clone().map(|text| {
-            let text: &'static str = Box::leak(text.into());
-            text
-        }) else {
+        let Some(text) = self.text.read().unwrap().clone() else {
             return tokens;
         };
 
@@ -205,7 +202,7 @@ impl Backend {
     }
 }
 
-fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
+fn tokenize<'a, T: Iterator<Item = &'a Item<'a>> + Debug>(
     tokens: &mut Vec<SemanticToken>,
     items: &mut T,
     lines: &mut impl Iterator<Item = (usize, &'a str)>,

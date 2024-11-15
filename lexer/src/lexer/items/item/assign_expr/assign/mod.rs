@@ -1,32 +1,33 @@
 pub mod left_right;
 
 use super::literal::{Literal, LiteralType};
-use crate::lexer::{
+use crate::{lexer::{
     items::{item::ident::Ident, Code},
-    Parse, Slicable, Slice,
-};
+    Parse, Slicable,
+}, Slice};
 use left_right::LeftRight;
 use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Clone, Deref, Hash, Eq)]
-pub struct Assign(pub LeftRight<Ident, Literal>);
+pub struct Assign<'s>(pub LeftRight<'s, Ident<'s>, Literal<'s>>);
 
-impl Assign {
+impl<'s> Assign<'s> {
     pub fn new(
         ident_slice: RangeInclusive<usize>,
         (literal_type, literal_slice): (LiteralType, RangeInclusive<usize>),
-        code: &Code,
+        code: &Code<'s>,
     ) -> Self {
         Self(LeftRight {
             left: Ident::new(ident_slice, code),
             right: Literal::new(literal_type, literal_slice, code),
+            _marker: Default::default(),
         })
     }
 }
 
-impl Parse for Assign {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for Assign<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         LeftRight::parse(code, |code| {
             let (i, char) = code.iter().next()?;
             (char == '=').then_some(i)
@@ -35,7 +36,7 @@ impl Parse for Assign {
     }
 }
 
-impl Slicable for Assign {
+impl Slicable for Assign<'_> {
     fn get_start(&self) -> usize {
         self.left.get_start()
     }
@@ -44,7 +45,7 @@ impl Slicable for Assign {
     }
 }
 
-impl Display for Assign {
+impl Display for Assign<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "AssignAnd({} = {})", self.left, self.right)
     }
@@ -61,7 +62,8 @@ fn parse_assign() {
                 right: Literal {
                     type_: b.1 .0,
                     slice: Slice::new(b.1 .1, code)
-                }
+                },
+                _marker: Default::default()
             }))
         );
     };

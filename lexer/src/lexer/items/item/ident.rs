@@ -3,22 +3,22 @@ use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Clone, Deref, Eq, Hash)]
-pub struct Ident(pub Slice);
+pub struct Ident<'s>(pub Slice<'s>);
 
-impl Ident {
-    pub fn new(range: RangeInclusive<usize>, code: &Code) -> Self {
+impl<'s> Ident<'s> {
+    pub fn new(range: RangeInclusive<usize>, code: &Code<'s>) -> Self {
         Self(Slice::new(range, code))
     }
 }
 
-impl Display for Ident {
+impl Display for Ident<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Ident({})", self.0)
     }
 }
 
-impl Parse for Ident {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for Ident<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         let code = &mut code.clone();
 
         let start_rule = |char: char| char.is_alphabetic() || char == '_';
@@ -45,7 +45,7 @@ impl Parse for Ident {
     }
 }
 
-impl Slicable for Ident {
+impl Slicable for Ident<'_> {
     fn get_start(&self) -> usize {
         self.0.get_start()
     }

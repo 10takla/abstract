@@ -3,16 +3,14 @@ use super::{
     literal::LiteralType,
 };
 use crate::lexer::{
-    check, check_none,
-    items::{Code, Slicable},
-    Parse,
+    check, check_none, items::{Code, Slicable}, Parse
 };
 use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct AssignAnd {
+pub struct AssignAnd<'s> {
     pub type_: AssignAndType,
-    pub val: Assign,
+    pub val: Assign<'s>,
 }
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
@@ -23,14 +21,14 @@ pub enum AssignAndType {
     Div,
 }
 
-impl AssignAnd {
+impl<'s> AssignAnd<'s> {
     pub fn new(
         type_: AssignAndType,
         (slice, (literal_type, literal_slice)): (
             RangeInclusive<usize>,
             (LiteralType, RangeInclusive<usize>),
         ),
-        code: &Code,
+        code: &Code<'s>,
     ) -> Self {
         Self {
             type_,
@@ -39,8 +37,8 @@ impl AssignAnd {
     }
 }
 
-impl Parse for AssignAnd {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for AssignAnd<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         let mut assign_type = None;
 
         LeftRight::parse(code, |code| {
@@ -65,7 +63,7 @@ impl Parse for AssignAnd {
     }
 }
 
-impl Slicable for AssignAnd {
+impl Slicable for AssignAnd<'_> {
     fn get_start(&self) -> usize {
         self.val.get_start()
     }
@@ -74,7 +72,7 @@ impl Slicable for AssignAnd {
     }
 }
 
-impl Display for AssignAnd {
+impl Display for AssignAnd<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

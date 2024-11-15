@@ -2,10 +2,10 @@ use crate::lexer::{check, check_none, Code, Parse, Slicable, Slice, IGNORE};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Clone, Debug, Deref)]
-pub struct Whitespaces(Slice);
+pub struct Whitespaces<'s>(Slice<'s>);
 
-impl Parse for Whitespaces {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for Whitespaces<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         let mut end = None;
         for (i, char) in code.iter() {
             if IGNORE.contains(&char) {
@@ -26,7 +26,7 @@ impl Parse for Whitespaces {
     }
 }
 
-impl Slicable for Whitespaces {
+impl Slicable for Whitespaces<'_> {
     fn get_start(&self) -> usize {
         self.0.get_start()
     }

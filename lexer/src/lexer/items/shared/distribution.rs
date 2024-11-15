@@ -3,10 +3,10 @@ use crate::lexer::{check, check_none, Code, Parse, Slicable, Slice};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Clone, Debug, Deref, Hash, Eq)]
-pub struct Distribution(pub Slice);
+pub struct Distribution<'s>(pub Slice<'s>);
 
-impl Parse for Distribution {
-    fn parse(code: &Code) -> Option<Self> {
+impl<'s> Parse<'s> for Distribution<'s> {
+    fn parse(code: &Code<'s>) -> Option<Self> {
         let code = &mut code.clone();
         Whitespaces::parse_and_consume(code);
 
@@ -18,7 +18,7 @@ impl Parse for Distribution {
     }
 }
 
-impl Slicable for Distribution {
+impl Slicable for Distribution<'_> {
     fn get_start(&self) -> usize {
         self.0.get_start()
     }

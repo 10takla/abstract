@@ -1,6 +1,6 @@
 use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slice};
 
-pub fn parse_string(code: &Code) -> Option<Slice> {
+pub fn parse_string<'s>(code: &Code<'s>) -> Option<Slice<'s>> {
     let code = &mut code.clone();
 
     Whitespaces::parse_and_consume(code);
@@ -19,10 +19,10 @@ pub fn parse_string(code: &Code) -> Option<Slice> {
 
 #[test]
 fn parse_string_test() {
-    let check = |a, b: fn(&Code) -> Slice| {
+    fn check<'s>(a: &'s str, b: fn(&Code<'s>) -> Slice<'s>) {
         let code = &mut Code::new(a);
         assert_eq!(parse_string(code), Some(b(code)));
-    };
+    }
     let check_none = |a| {
         assert_eq!(parse_string(&mut Code::new(a)), None);
     };

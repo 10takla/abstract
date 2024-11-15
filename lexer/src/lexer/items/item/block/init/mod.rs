@@ -1,15 +1,16 @@
 pub mod named;
 pub mod unnamed;
 
-use crate::lexer::check;
 use macros::Parse;
 use named::NamedBlock;
 use unnamed::UnnamedBlock;
 
+use crate::lexer::check;
+
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
-pub enum Init {
-    Named(NamedBlock),
-    Unnamed(UnnamedBlock),
+pub enum Init<'s> {
+    Named(NamedBlock<'s>),
+    Unnamed(UnnamedBlock<'s>),
 }
 
 #[test]

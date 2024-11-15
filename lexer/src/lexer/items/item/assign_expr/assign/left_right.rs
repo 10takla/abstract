@@ -1,15 +1,17 @@
 use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slicable};
+use std::marker::PhantomData;
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
-pub struct LeftRight<L: Parse, R: Parse> {
+pub struct LeftRight<'s, L: Parse<'s>, R: Parse<'s>> {
     pub left: L,
     pub right: R,
+    pub _marker: PhantomData<&'s ()>,
 }
 
-impl<L: Parse, R: Parse> LeftRight<L, R> {
+impl<'s, L: Parse<'s>, R: Parse<'s>> LeftRight<'s, L, R> {
     pub fn parse(
-        code: &Code,
-        mut middle_fn: impl FnMut(&mut Code) -> Option<usize>,
+        code: &Code<'s>,
+        mut middle_fn: impl FnMut(&mut Code<'s>) -> Option<usize>,
     ) -> Option<Self> {
         let code = &mut code.clone();
 
@@ -20,11 +22,15 @@ impl<L: Parse, R: Parse> LeftRight<L, R> {
         Whitespaces::parse_and_consume(code);
         let right = R::parse(code)?;
 
-        Some(Self { left, right })
+        Some(Self {
+            left,
+            right,
+            _marker: Default::default(),
+        })
     }
 }
 
-impl<L: Parse, R: Parse> Slicable for LeftRight<L, R> {
+impl<'s, L: Parse<'s>, R: Parse<'s>> Slicable for LeftRight<'s, L, R> {
     fn get_start(&self) -> usize {
         self.left.get_start()
     }

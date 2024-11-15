@@ -7,10 +7,9 @@ lexer = { workspace = true }
 ast = { workspace = true }
 
 [workspace]
-members = ["lexer", "ast", "lsp-server", "macros"]
+members = ["lexer", "ast", "lsp-server"]
 default-members = ["lexer"]
 
 [workspace.dependencies]
-macros = { path = "macros" }
 lexer = { path = "lexer" }
 ast = { path = "ast" }

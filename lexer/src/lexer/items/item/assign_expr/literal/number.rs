@@ -1,6 +1,6 @@
 use crate::lexer::{items::shared::whitespaces::Whitespaces, Code, Parse, Slice, IGNORE};
 
-pub fn parse_number(code: &Code) -> Option<Slice> {
+pub fn parse_number<'s>(code: &Code<'s>) -> Option<Slice<'s>> {
     let code = &mut code.clone();
 
     Whitespaces::parse_and_consume(code);

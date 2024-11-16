@@ -1,10 +1,11 @@
-pub mod items;
 pub mod diag;
+pub mod items;
 
 use colored::Colorize;
 use std::{
     fmt::{Debug, Display},
     ops::RangeInclusive,
+    rc::Rc,
 };
 
 const IGNORE: [char; 3] = [' ', '\n', '\t'];
@@ -12,7 +13,7 @@ const IGNORE: [char; 3] = [' ', '\n', '\t'];
 #[derive(PartialEq, Debug, Clone)]
 pub struct Code<'s> {
     pub source: &'s str,
-    byte_indices: Vec<usize>,
+    byte_indices: Rc<Vec<usize>>,
     pub cursor: usize,
 }
 
@@ -21,7 +22,7 @@ impl<'s> Code<'s> {
         Self {
             source,
             cursor: 0,
-            byte_indices: source.char_indices().map(|(idx, _)| idx).collect(),
+            byte_indices: Rc::new(source.char_indices().map(|(idx, _)| idx).collect()),
         }
     }
 

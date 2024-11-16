@@ -1,4 +1,5 @@
 pub mod items;
+pub mod diag;
 
 use colored::Colorize;
 use std::{

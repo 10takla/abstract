@@ -1,5 +1,5 @@
-mod number;
-mod string;
+pub mod number;
+pub mod string;
 
 use crate::{
     lexer::{check, check_none, Code, Parse, Slicable, Slice},

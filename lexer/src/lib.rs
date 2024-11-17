@@ -74,6 +74,8 @@
 //!
 
 #![doc(html_no_source)]
+#![feature(type_alias_impl_trait)]
+#![feature(associated_type_defaults)]
 
 mod lexer;
 use items::Items;

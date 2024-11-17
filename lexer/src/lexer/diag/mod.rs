@@ -1,5 +1,19 @@
-use super::{items::shared::whitespaces::Whitespaces, Code, Parse, Slice, IGNORE};
+use super::{items::shared::whitespaces::Whitespaces, Code, Parse, Slicable, Slice, IGNORE};
 use macros::Slicable;
+use std::fmt::Display;
+
+type Diags<T> = Vec<Diag<T>>;
+type Diag<T> = (usize, T);
+pub trait DiagParse<'s>: Sized {
+    type Diag;
+
+    fn diag(code: &Code<'s>) -> Result<Self, Diags<Self::Diag>> {
+        let mut diags = vec![];
+        Self::parse(code, &mut diags).ok_or(diags)
+    }
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self>;
+}
 
 #[derive(PartialEq, Debug)]
 enum Item<'s> {
@@ -7,69 +21,97 @@ enum Item<'s> {
     String(String<'s>),
 }
 
-type Diags = Vec<(usize, std::string::String)>;
+#[derive(PartialEq, Debug)]
+enum ItemDiags {
+    Number(NumberDiags),
+    String(StringDiags),
+}
 
-impl<'s> Item<'s> {
-    fn diag(code: &Code<'s>) -> (Option<Self>, Diags) {
-        let mut diags = vec![];
-        let t = [
+impl<'s> DiagParse<'s> for Item<'s> {
+    type Diag = ItemDiags;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+        [
             Box::new(|| {
-                let (v, d) = Number::diag(code);
-                (v.map(|v| Self::Number(v)), d)
-            }) as Box<dyn Fn() -> (Option<Self>, Diags)>,
+                Number::diag(code).map(|v| Self::Number(v)).map_err(|v| {
+                    v.into_iter()
+                        .map(|(i, v)| (i, ItemDiags::Number(v)))
+                        .collect()
+                })
+            }) as Box<dyn Fn() -> Result<Self, Diags<Self::Diag>>>,
             Box::new(|| {
-                let (v, d) = String::diag(code);
-                (v.map(|v| Self::String(v)), d)
+                String::diag(code).map(|v| Self::String(v)).map_err(|v| {
+                    v.into_iter()
+                        .map(|(i, v)| (i, ItemDiags::String(v)))
+                        .collect()
+                })
             }),
         ]
         .into_iter()
-        .find_map(|f| {
-            let (v, d) = f();
-            diags.extend(d);
-            v
-        });
-        (t, diags)
+        .find_map(|f| match f() {
+            Ok(item) => Some(item),
+            Err(v) => {
+                diags.extend(v);
+                None
+            }
+        })
     }
 }
 
 #[test]
 fn diag_test() {
     let check = |source| {
-        assert_eq!(Item::diag(&Code::new(source)), (None, vec![]));
+        assert_eq!(Item::diag(&Code::new(source)), Err(vec![]));
     };
 
-    check("43c");
+    check("  43c");
 }
 
 #[derive(PartialEq, Debug, Slicable)]
 pub struct Number<'s>(pub Slice<'s>);
 
-impl<'s> Number<'s> {
-    fn diag(code: &Code<'s>) -> (Option<Self>, Diags) {
-        let mut diags = vec![];
-        (Self::parse(code, &mut diags), diags)
+#[derive(PartialEq, Debug)]
+pub enum NumberDiags {
+    StartsWithNumber,
+    MustBeNumber,
+}
+
+impl Display for NumberDiags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use NumberDiags::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                StartsWithNumber => "Должно начинатся с числа",
+                MustBeNumber => "Должно быть число",
+            }
+        )
     }
-    fn parse(code: &Code<'s>, diags: &mut Diags) -> Option<Self> {
+}
+
+impl<'s> DiagParse<'s> for Number<'s> {
+    type Diag = NumberDiags;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         let code = &mut code.clone();
 
         Whitespaces::parse_and_consume(code);
         let mut iter = code.iter();
- 
-        let (i, char) = iter.next().or_else(|| {
-            diags.push((code.cursor, "Должно начинатся с числа".into()));
-            None
-        })?;
+
+        let (i, char) = iter.next()?;
         let start = if char.is_digit(10) {
             if i == code.len() - 1 {
                 return Some(Self(Slice::new(i..=i, code)));
             }
             i
         } else {
+            diags.push((i, NumberDiags::StartsWithNumber));
             return None;
         };
 
-        let t = || {
-            for (i, char) in iter {
+        let end = (|| {
+            for (i, char) in iter.clone() {
                 if IGNORE.contains(&char) {
                     return Some(i - 1);
                 }
@@ -79,11 +121,11 @@ impl<'s> Number<'s> {
                     }
                     continue;
                 }
+                diags.push((i, NumberDiags::MustBeNumber));
                 return None;
             }
             None
-        };
-        let end = t()?;
+        })()?;
 
         Some(Self(Slice::new(start..=end, code)))
     }
@@ -92,25 +134,47 @@ impl<'s> Number<'s> {
 #[derive(Debug, PartialEq, Slicable)]
 pub struct String<'s>(pub Slice<'s>);
 
-impl<'s> String<'s> {
-    fn diag(code: &Code<'s>) -> (Option<Self>, Diags) {
-        let mut diags = vec![];
-        (Self::parse(code, &mut diags), diags)
+#[derive(PartialEq, Debug)]
+pub enum StringDiags {
+    StartsWithQuote,
+    EndsWithQuote,
+}
+
+impl Display for StringDiags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use StringDiags::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                StartsWithQuote => "Должно начинатся с \"",
+                EndsWithQuote => "Должно заканчиватся на \"",
+            }
+        )
     }
-    fn parse(code: &Code<'s>, diags: &mut Diags) -> Option<Self> {
+}
+
+impl<'s> DiagParse<'s> for String<'s> {
+    type Diag = StringDiags;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         let code = &mut code.clone();
 
         Whitespaces::parse_and_consume(code);
         let mut iter = code.iter();
 
         let (i, char) = iter.next()?;
-        let start = (char == '"').then_some(i)?;
+        let start = (char == '"').then_some(i).or_else(|| {
+            diags.push((i, StringDiags::StartsWithQuote));
+            None
+        })?;
 
         for (i, char) in iter {
             if char == '"' {
                 return Some(Self(Slice::new(start..=i, code)));
             }
         }
+        diags.push((code.cursor, StringDiags::EndsWithQuote));
         None
     }
 }

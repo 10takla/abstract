@@ -26,7 +26,7 @@ impl<'s> Code<'s> {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (usize, char)> + '_ + Clone {
+    pub fn iter(&self) -> impl Iterator<Item = (usize, char)> + '_ + Clone{
         self.byte_indices[self.cursor..]
             .iter()
             .enumerate()

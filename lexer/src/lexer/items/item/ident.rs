@@ -1,8 +1,10 @@
 use crate::lexer::{
-    check, check_none, items::shared::whitespaces::Whitespaces, Code, Parse, Slicable, Slice,
+    check, check_diag, check_none, items::shared::whitespaces::Whitespaces, Code, Diag, DiagParse,
+    Diags, Slicable, Slice,
 };
+use colored::Colorize;
+use macros::{Diagn, Slicable};
 use std::{fmt::Display, ops::RangeInclusive};
-use macros::Slicable;
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Clone, Deref, Eq, Hash, Slicable)]
@@ -14,42 +16,55 @@ impl<'s> Ident<'s> {
     }
 }
 
-impl Display for Ident<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ident({})", self.0)
-    }
+#[derive(PartialEq, Debug, Clone, Eq, Hash, Diagn)]
+#[name("Ident")]
+pub enum IdentDiag {
+    #[diagn_expect("начинаться [a-z|A-Z]")]
+    StartsWithNotNumber,
 }
 
-impl<'s> Parse<'s> for Ident<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
+impl<'s> DiagParse<'s> for Ident<'s> {
+    type Diag = IdentDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         let code = &mut code.clone();
 
         let start_rule = |char: char| char.is_alphabetic() || char == '_';
 
-        Whitespaces::parse_and_consume(code);
+        Whitespaces::parse_and_consume(code, &mut vec![]);
 
         let mut iter = code.iter();
         let (i, char) = iter.next()?;
-        let start = start_rule(char).then_some(i)?;
+        let start = start_rule(char).then_some(i).or_else(|| {
+            diags.push((i, IdentDiag::StartsWithNotNumber));
+            None
+        })?;
 
         let end = if start == code.len() - 1 {
             start
         } else {
             iter.find_map(|(i, char)| {
                 if start_rule(char) || char.is_digit(10) {
-                    (i == code.len() - 1).then_some(i)
+                    None
                 } else {
                     Some(i - 1)
                 }
-            })?
+            })
+            .unwrap_or(code.len() - 1)
         };
 
         Some(Self::new(start..=end, code))
     }
 }
 
+impl Display for Ident<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ident({})", self.0)
+    }
+}
+
 #[test]
-fn parse_ident() {
+fn parse() {
     let check = |source, range| {
         check(source, move |code| Ident::new(range, code));
     };
@@ -69,8 +84,15 @@ fn parse_ident() {
     check(" фc", 1..=2);
     check(" ффф ", 1..=3);
     check(" dъя", 1..=3);
+    check(" d;", 1..=1);
 
     // errors
     check_none::<Ident>("  2sdf ");
     check_none::<Ident>("  ");
+}
+
+#[test]
+fn diag() {
+    check_diag::<IdentDiag, Ident>(" 2sdf", vec![(1, IdentDiag::StartsWithNotNumber)]);
+    check_diag::<IdentDiag, Ident>("  ", vec![]);
 }

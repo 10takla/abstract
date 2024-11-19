@@ -1,10 +1,14 @@
 use super::{named::NamedBlock, Init};
 use crate::{
-    items::item::{block::Block, ident::Ident},
+    items::item::{
+        block::Block,
+        ident::{Ident, IdentDiag},
+        ItemDiag,
+    },
     lexer::{
-        check, check_none,
+        check, check_diag, check_none,
         items::{item::Item, shared::whitespaces::Whitespaces, Items},
-        Code, Parse, Slicable,
+        Code, DiagParse, Diags, Slicable,
     },
 };
 use std::{fmt::Display, ops::RangeInclusive};
@@ -16,33 +20,47 @@ pub struct UnnamedBlock<'s> {
     pub close_bracket_pos: usize,
 }
 
-impl<'s> UnnamedBlock<'s> {
-    pub fn new(items: Vec<Item<'s>>, [open_bracket_pos, close_bracket_pos]: [usize; 2]) -> Self {
-        Self {
-            items: Items(items),
-            open_bracket_pos,
-            close_bracket_pos,
-        }
-    }
+#[derive(PartialEq, Debug)]
+pub enum UnnamedBlockDiag {
+    StartsOpenBracket,
+    EndsOpenBracket,
+    Items(Box<ItemDiag>),
 }
 
-impl<'s> Parse<'s> for UnnamedBlock<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
+impl<'s> DiagParse<'s> for UnnamedBlock<'s> {
+    type Diag = UnnamedBlockDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         let code = &mut code.clone();
 
-        Whitespaces::parse_and_consume(code);
+        Whitespaces::parse_and_consume(code, &mut vec![]);
         let (i, char) = code.iter().next()?;
-        let open_bracket_pos = (char == '{').then_some(i)?;
+        let open_bracket_pos = (char == '{').then_some(i).or_else(|| {
+            diags.push((i, UnnamedBlockDiag::StartsOpenBracket));
+            None
+        })?;
         code.consume(open_bracket_pos);
 
-        let items = Items::parse(code).unwrap();
+        let mut d = vec![];
+        let items = Items::parse(code, &mut d).unwrap();
         if !items.is_empty() {
             code.end(&items);
         }
 
-        Whitespaces::parse_and_consume(code);
-        let (i, char) = code.iter().next()?;
-        let close_bracket_pos = (char == '}').then_some(i)?;
+        diags.extend(
+            d.into_iter()
+                .map(|(i, dd)| (i, UnnamedBlockDiag::Items(dd.into()))),
+        );
+
+        Whitespaces::parse_and_consume(code, &mut vec![]);
+        let (i, char) = code.iter().next().or_else(|| {
+            diags.push((code.len() - 1, UnnamedBlockDiag::EndsOpenBracket));
+            None
+        })?;
+        let close_bracket_pos = (char == '}').then_some(i).or_else(|| {
+            diags.push((i, UnnamedBlockDiag::EndsOpenBracket));
+            None
+        })?;
 
         Some(Self {
             items,
@@ -64,8 +82,18 @@ impl Display for UnnamedBlock<'_> {
     }
 }
 
+impl<'s> UnnamedBlock<'s> {
+    pub fn new(items: Vec<Item<'s>>, [open_bracket_pos, close_bracket_pos]: [usize; 2]) -> Self {
+        Self {
+            items: Items(items),
+            open_bracket_pos,
+            close_bracket_pos,
+        }
+    }
+}
+
 #[test]
-pub fn parse_block() {
+pub fn parse() {
     check(" {  } ", |_| UnnamedBlock::new(vec![], [1, 4]));
     check(" {}", |_| UnnamedBlock::new(vec![], [1, 2]));
     check("{}", |_| UnnamedBlock::new(vec![], [0, 1]));
@@ -105,4 +133,30 @@ pub fn parse_block() {
     check_none::<UnnamedBlock>("   ");
     check_none::<UnnamedBlock>(" } ");
     check_none::<UnnamedBlock>(" { ");
+}
+
+#[test]
+fn diag() {
+    check_diag::<UnnamedBlockDiag, UnnamedBlock>(
+        "s",
+        vec![(0, UnnamedBlockDiag::StartsOpenBracket)],
+    );
+    check_diag::<UnnamedBlockDiag, UnnamedBlock>(
+        "{dd",
+        vec![(2, UnnamedBlockDiag::EndsOpenBracket)],
+    );
+    check_diag::<UnnamedBlockDiag, UnnamedBlock>(
+        "  {  ",
+        vec![(4, UnnamedBlockDiag::EndsOpenBracket)],
+    );
+    check_diag::<UnnamedBlockDiag, UnnamedBlock>(
+        "  { 23d ",
+        vec![
+            (
+                6,
+                UnnamedBlockDiag::Items(ItemDiag::Ident(IdentDiag::StartsWithNotNumber).into()),
+            ),
+            (7, UnnamedBlockDiag::EndsOpenBracket),
+        ],
+    );
 }

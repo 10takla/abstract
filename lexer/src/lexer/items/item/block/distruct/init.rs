@@ -1,16 +1,37 @@
-use crate::{items::item::{block::init::unnamed::UnnamedBlock, ident::Ident}, lexer::{
-    check, check_none, items::{item::block::init::named::NamedBlock, shared::distribution::Distribution}, Parse, Slicable
-}, Slice};
+use crate::{
+    items::{
+        item::{
+            block::init::{named::NamedBlockDiag, unnamed::UnnamedBlock},
+            ident::Ident,
+        },
+        shared::distribution::DistributionDiag,
+    },
+    lexer::{
+        check, check_none,
+        items::{item::block::init::named::NamedBlock, shared::distribution::Distribution},
+        DiagParse, Slicable,
+    },
+    Slice,
+};
 use macros::Parse;
 use std::fmt::Display;
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 #[grammar(
-    NamedBlock Distribution
+    NamedBlock Distribution 
 )]
+#[diag(InitBlockDistructDiag)]
 pub struct InitBlockDistruct<'s> {
+    #[diag(NamedBlock)]
     pub named_block: NamedBlock<'s>,
+    #[diag(Distribution)]
     pub distr: Distribution<'s>,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum InitBlockDistructDiag {
+    NamedBlock(NamedBlockDiag),
+    Distribution(DistributionDiag),
 }
 
 impl Display for InitBlockDistruct<'_> {
@@ -20,7 +41,7 @@ impl Display for InitBlockDistruct<'_> {
 }
 
 #[test]
-fn parse_init_distruct() {
+fn parse() {
     check(" main {}..", |code| InitBlockDistruct {
         named_block: NamedBlock {
             name: Ident::new(1..=4, code),

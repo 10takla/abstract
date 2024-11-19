@@ -1,5 +1,5 @@
 use ast::name_resolve::name_resolve;
-use lexer::{items::Items, parse, Code, Parse};
+use lexer::{items::Items, parse, Code, DiagParse};
 
 fn main() {
     let items = parse(

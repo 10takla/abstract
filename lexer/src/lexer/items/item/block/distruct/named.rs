@@ -1,6 +1,15 @@
-use crate::{lexer::{
-    check, check_none, items::{item::ident::Ident, shared::distribution::Distribution}, Parse, Slicable
-}, Slice};
+use crate::{
+    items::{
+        item::{block::init::named::NamedBlockDiag, ident::IdentDiag},
+        shared::distribution::DistributionDiag,
+    },
+    lexer::{
+        check, check_none,
+        items::{item::ident::Ident, shared::distribution::Distribution},
+        DiagParse, Slicable,
+    },
+    Slice,
+};
 use macros::Parse;
 use std::fmt::{Debug, Display};
 
@@ -8,9 +17,18 @@ use std::fmt::{Debug, Display};
 #[grammar(
     Ident Distribution
 )]
+#[diag(CallBlockDistructDiag)]
 pub struct CallBlockDistruct<'s> {
+    #[diag(Name)]
     pub name: Ident<'s>,
+    #[diag(Distribution)]
     pub dist: Distribution<'s>,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum CallBlockDistructDiag {
+    Name(IdentDiag),
+    Distribution(DistributionDiag),
 }
 
 impl Display for CallBlockDistruct<'_> {
@@ -20,7 +38,7 @@ impl Display for CallBlockDistruct<'_> {
 }
 
 #[test]
-fn parse_named_distruct() {
+fn parse() {
     check("main..", |code| CallBlockDistruct {
         name: Ident::new(0..=3, code),
         dist: Distribution(Slice::new(4..=5, code)),

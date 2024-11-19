@@ -11,7 +11,7 @@ use lexer::{
         },
         Items,
     },
-    Code, Parse, Slicable,
+    Code, DiagParse, Slicable,
 };
 use std::{fmt::Debug, iter::Enumerate, str::Lines, sync::RwLock};
 use tower_lsp::{jsonrpc::Result, lsp_types::*, Client, LanguageServer, LspService, Server};
@@ -117,7 +117,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
             result_id: Some("some_id".to_string()),
-            data: dbg!(self.analyze_syntax(uri).await),
+            data: self.analyze_syntax(uri).await,
         })))
     }
 
@@ -154,45 +154,49 @@ impl Backend {
             return tokens;
         };
 
-        match Items::parse(&mut Code::new(&text)) {
-            Some(items) => {
-                let token_type = {
-                    let Some(legend) = self.legend.read().unwrap().clone() else {
-                        return tokens;
-                    };
-                    move |t| {
-                        legend
-                            .token_types
-                            .iter()
-                            .enumerate()
-                            .find(|&(_, token)| *token == t)
-                            .unwrap()
-                            .0 as u32
-                    }
-                };
+        let mut diags = vec![];
+        let items = Items::parse(&mut Code::new(&text), &mut diags).unwrap();
 
-                let mut lines = text.split_inclusive('\n').enumerate();
-
-                tokenize(&mut tokens, &mut items.iter(), &mut lines, &token_type);
+        let token_type = {
+            let Some(legend) = self.legend.read().unwrap().clone() else {
+                return tokens;
+            };
+            move |t| {
+                legend
+                    .token_types
+                    .iter()
+                    .enumerate()
+                    .find(|&(_, token)| *token == t)
+                    .unwrap()
+                    .0 as u32
             }
-            None => {
-                let diagnostic = Diagnostic {
+        };
+
+        let mut lines = text.split_inclusive('\n').enumerate();
+
+        tokenize(&mut tokens, &mut items.iter(), &mut lines, &token_type);
+
+        let diagnostics = diags
+            .into_iter()
+            .map(|(i, diag)| {
+                dbg!(i, &diag);
+                Diagnostic {
                     range: Range {
-                        start: Position::new(0, 0),
-                        end: Position::new(0, 10),
+                        start: Position::new(0, i as u32),
+                        end: Position::new(0, i as u32 + 1),
                     },
                     severity: Some(DiagnosticSeverity::ERROR),
                     code: None,
                     source: Some("abstract".to_string()),
-                    message: format!("Ошибка парсера"),
+                    message: format!("Ошибка парсера {}", diag.display()),
                     ..Default::default()
-                };
+                }
+            })
+            .collect();
 
-                self.client
-                    .publish_diagnostics(uri, vec![diagnostic], None)
-                    .await;
-            }
-        }
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
 
         tokens
     }
@@ -335,7 +339,7 @@ fn tokenize_test() {
 
             tokenize(
                 &mut tokens,
-                &mut Items::parse(&Code::new(code)).unwrap().iter(),
+                &mut Items::parse(&Code::new(code), &mut vec![]).unwrap().iter(),
                 &mut lines,
                 &token_type,
             );

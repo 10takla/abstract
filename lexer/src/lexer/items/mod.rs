@@ -1,12 +1,12 @@
 pub mod item;
 pub mod shared;
 
-use super::{Code, Parse, Slicable};
+use super::{check_diag, Code, Diag, DiagParse, Diags, Slicable};
 use crate::lexer::check;
 use item::{
     assign_expr::{assign::Assign, literal::LiteralType, AssignExpr, AssignExprType},
     ident::Ident,
-    Item,
+    Item, ItemDiag,
 };
 use std::{fmt::Debug, ops::RangeInclusive};
 use std_reset::prelude::Deref;
@@ -14,20 +14,28 @@ use std_reset::prelude::Deref;
 #[derive(PartialEq, Debug, Deref, Hash, Eq, Clone)]
 pub struct Items<'s>(pub Vec<Item<'s>>);
 
-impl<'s> Parse<'s> for Items<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
+impl<'s> DiagParse<'s> for Items<'s> {
+    type Diag = ItemDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         let mut items = Vec::new();
 
         let code = &mut code.clone();
 
         loop {
-            if let Some(item) = Item::parse_and_consume(code) {
-                items.push(item);
-            } else {
-                if code.cursor >= code.len() - 1 {
-                    break;
+            match Item::diag_and_consume(code) {
+                Ok(item) => {
+                    items.push(item);
                 }
-                code.offset(1);
+                Err(d) => {
+                    if code.cursor >= code.len() - 1 {
+                        break;
+                    }
+                    code.offset(1);
+                    if !d.is_empty() {
+                        diags.extend(d);
+                    }
+                }
             }
             if code.cursor >= code.len() - 1 {
                 break;
@@ -61,7 +69,7 @@ impl std::fmt::Display for Items<'_> {
 }
 
 #[test]
-fn parse_items() {
+fn parse() {
     fn fast<'s>(source: &'s str, f: fn(&Code<'s>) -> Vec<Item<'s>>) {
         check(source, |code| Items(f(code)));
     }
@@ -99,7 +107,10 @@ fn parse_items() {
     });
 }
 
+
 #[test]
-fn dota2() {
-    dbg!(Items::parse(&Code::new("ddsdfd sdf sdf; sdf sdf s")));
+fn diag() {
+    let mut diags = vec![];
+    Items::parse(&Code::new("a b; c d"), &mut diags);
+    dbg!(diags);
 }

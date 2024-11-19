@@ -1,12 +1,19 @@
-use macros::Slicable;
-
 use super::{
-    assign::{left_right::LeftRight, Assign},
-    literal::LiteralType,
+    assign::{
+        left_right::{LeftRight, LeftRightDiag},
+        parse_equal, Assign, AssignDiag,
+    },
+    literal::{LiteralDiag, LiteralType},
 };
-use crate::lexer::{
-    check, check_none, items::{Code, Slicable}, Parse
+use crate::{
+    items::item::ident::IdentDiag,
+    lexer::{
+        check, check_diag, check_none,
+        items::{Code, Slicable},
+        DiagParse, Diags,
+    },
 };
+use macros::Slicable;
 use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Clone, Slicable)]
@@ -40,24 +47,38 @@ impl<'s> AssignAnd<'s> {
     }
 }
 
-impl<'s> Parse<'s> for AssignAnd<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
-        let mut assign_type = None;
+#[derive(PartialEq, Debug)]
+pub enum AssignAndDiag {
+    Assign(AssignDiag),
+    ExpectOperator,
+}
 
-        LeftRight::parse(code, |code| {
+impl<'s> DiagParse<'s> for AssignAnd<'s> {
+    type Diag = AssignAndDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+        let mut assign_type = None;
+        let mut d = vec![];
+        LeftRight::parse(code, &mut d, |code| {
             let mut iter = code.iter();
 
-            let (_, char) = iter.next()?;
+            let (i, char) = iter.next()?;
             match char {
                 '+' => assign_type = Some(AssignAndType::Add),
                 '-' => assign_type = Some(AssignAndType::Sub),
                 '*' => assign_type = Some(AssignAndType::Mul),
                 '/' => assign_type = Some(AssignAndType::Div),
-                _ => return None,
+                _ => {
+                    diags.push((i, AssignAndDiag::ExpectOperator));
+                    return None;
+                }
             }
 
-            let (i, char) = iter.next()?;
-            (char == '=').then_some(i)
+            let mut d = vec![];
+            parse_equal(iter, &mut d).or_else(|| {
+                diags.extend(d.into_iter().map(|(i, d)| (i, AssignAndDiag::Assign(d))));
+                None
+            })
         })
         .map(|lr| Self {
             type_: assign_type.unwrap(),
@@ -92,7 +113,7 @@ impl Display for AssignAndType {
 }
 
 #[test]
-fn parse_assign_and() {
+fn parse() {
     check(" abc += 6", |code| {
         AssignAnd::new(
             AssignAndType::Add,
@@ -135,4 +156,13 @@ fn parse_assign_and() {
     check_none::<AssignAnd>("");
     check_none::<AssignAnd>(" ");
     check_none::<AssignAnd>("   ");
+}
+
+#[test]
+fn diag() {
+    check_diag::<AssignAndDiag, AssignAnd>(
+        " a - 2",
+        vec![(4, AssignAndDiag::Assign(AssignDiag::ExpectEqual))],
+    );
+    check_diag::<AssignAndDiag, AssignAnd>(" a ( 2", vec![(3, AssignAndDiag::ExpectOperator)]);
 }

@@ -1,20 +1,23 @@
-use macros::Slicable;
-
 use crate::{
     lexer::{
-        check, check_none, items::shared::whitespaces::Whitespaces, Code, Parse, Slice, IGNORE,
+        check, check_diag, check_none, items::shared::whitespaces::Whitespaces, Code, DiagParse,
+        Diags, Slice, IGNORE,
     },
     Slicable,
 };
+use macros::{Diagn, Slicable};
+use std::fmt::Display;
 
 #[derive(PartialEq, Debug, Slicable)]
 pub struct Number<'s>(pub Slice<'s>);
 
-impl<'s> Parse<'s> for Number<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
+impl<'s> DiagParse<'s> for Number<'s> {
+    type Diag = NumberDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         let code = &mut code.clone();
 
-        Whitespaces::parse_and_consume(code);
+        Whitespaces::parse_and_consume(code, &mut vec![]);
         let mut iter = code.iter();
 
         let (i, char) = iter.next()?;
@@ -24,11 +27,12 @@ impl<'s> Parse<'s> for Number<'s> {
             }
             i
         } else {
+            diags.push((i, NumberDiag::StartsWithNumber));
             return None;
         };
 
-        let t = || {
-            for (i, char) in iter {
+        let end = (|| {
+            for (i, char) in iter.clone() {
                 if IGNORE.contains(&char) {
                     return Some(i - 1);
                 }
@@ -38,18 +42,18 @@ impl<'s> Parse<'s> for Number<'s> {
                     }
                     continue;
                 }
+                diags.push((i, NumberDiag::MustBeNumber));
                 return None;
             }
             None
-        };
-        let end = t()?;
+        })()?;
 
         Some(Self(Slice::new(start..=end, code)))
     }
 }
 
 #[test]
-fn parse_number() {
+fn parse() {
     let check = |source, v| {
         check(source, |code| Number(Slice::new(v, code)));
     };
@@ -68,4 +72,34 @@ fn parse_number() {
     check_none::<Number>("  2sdf ");
     check_none::<Number>("  abc  ");
     check_none::<Number>("abc123");
+}
+
+#[derive(PartialEq, Debug, Diagn)]
+#[name("Name")]
+pub enum NumberDiag {
+    #[diagn_expect("начинатся на [0-9]")]
+    StartsWithNumber,
+    #[diagn_expect("[0-9]")]
+    MustBeNumber,
+}
+
+impl Display for NumberDiag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use NumberDiag::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                StartsWithNumber => "Должно начинатся с числа",
+                MustBeNumber => "Должно быть число",
+            }
+        )
+    }
+}
+
+#[test]
+fn diag() {
+    check_diag::<NumberDiag, Number>("  43c", vec![(4, NumberDiag::MustBeNumber)]);
+    check_diag::<NumberDiag, Number>("  4c", vec![(3, NumberDiag::MustBeNumber)]);
+    check_diag::<NumberDiag, Number>("  c", vec![(2, NumberDiag::StartsWithNumber)]);
 }

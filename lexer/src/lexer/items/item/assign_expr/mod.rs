@@ -4,15 +4,17 @@ pub mod literal;
 
 use crate::{
     lexer::{
-        check, check_none, items::{Code, Slicable}, Parse
+        check, check_diag, check_none,
+        items::{Code, Slicable},
+        DiagParse, Diags,
     },
     parse_variants,
 };
-use assign::Assign;
-use assign_and::{AssignAnd, AssignAndType};
+use assign::{Assign, AssignDiag};
+use assign_and::{AssignAnd, AssignAndDiag, AssignAndType};
+use core::slice;
 use literal::LiteralType;
 use macros::Slicable;
-use core::slice;
 use std::{fmt::Display, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq, Slicable)]
@@ -28,17 +30,28 @@ pub enum AssignExprType {
     AssignAnd(AssignAndType),
 }
 
-impl<'s> Parse<'s> for AssignExpr<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
+#[derive(PartialEq, Debug)]
+pub enum AssignExprDiag {
+    Assign(AssignDiag),
+    AssignAnd(AssignAndDiag),
+}
+
+impl<'s> DiagParse<'s> for AssignExpr<'s> {
+    type Diag = AssignExprDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         parse_variants!(
-            Assign::parse(code).map(|val| Self {
+            diag diags
+            Assign::diag(code).map(|val| Self {
                 type_: AssignExprType::Assign,
                 val,
             }),
-            AssignAnd::parse(code).map(|v| Self {
+            diag: AssignExprDiag::Assign;
+            AssignAnd::diag(code).map(|v| Self {
                 type_: AssignExprType::AssignAnd(v.type_),
                 val: v.val,
-            })
+            }),
+            diag: AssignExprDiag::AssignAnd
         )
     }
 }
@@ -63,7 +76,7 @@ impl Display for AssignExpr<'_> {
 }
 
 #[test]
-fn parse_assign_expr() {
+fn parse() {
     let check = |source,
                  f: (
         AssignExprType,
@@ -107,4 +120,25 @@ fn parse_assign_expr() {
     // errors
     check_none::<AssignExpr>("");
     check_none::<AssignExpr>(" ");
+}
+
+#[test]
+fn diag() {
+    check_diag::<AssignExprDiag, AssignExpr>(
+        " a - 2",
+        vec![
+            (3, AssignExprDiag::Assign(AssignDiag::ExpectEqual)),
+            (
+                4,
+                AssignExprDiag::AssignAnd(AssignAndDiag::Assign(AssignDiag::ExpectEqual)),
+            ),
+        ],
+    );
+    check_diag::<AssignExprDiag, AssignExpr>(
+        " a ( 2",
+        vec![
+            (3, AssignExprDiag::Assign(AssignDiag::ExpectEqual)),
+            (3, AssignExprDiag::AssignAnd(AssignAndDiag::ExpectOperator)),
+        ],
+    );
 }

@@ -2,13 +2,13 @@ pub mod number;
 pub mod string;
 
 use crate::{
-    lexer::{check, check_none, Code, Parse, Slicable, Slice},
+    lexer::{check, check_diag, check_none, Code, DiagParse, Diags, Slicable, Slice},
     parse_variants,
 };
-use std::{fmt::Display, ops::RangeInclusive};
 use macros::Slicable;
-use number::Number;
-use string::String;
+use number::{Number, NumberDiag};
+use std::{fmt::Display, ops::RangeInclusive};
+use string::{String, StringDiag};
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq, Slicable)]
 pub struct Literal<'s> {
@@ -32,17 +32,30 @@ impl<'s> Literal<'s> {
     }
 }
 
-impl<'s> Parse<'s> for Literal<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
+#[derive(PartialEq, Debug)]
+pub enum LiteralDiag {
+    Number(NumberDiag),
+    String(StringDiag),
+}
+
+impl<'s> DiagParse<'s> for Literal<'s> {
+    type Diag = LiteralDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
         parse_variants!(
-            Number::parse(code).map(|v| Self {
-                type_: LiteralType::Number,
-                slice: v.0,
-            }),
-            String::parse(code).map(|v| Self {
-                type_: LiteralType::String,
-                slice: v.0,
-            })
+            diag diags
+            Number::diag(code)
+                .map(|v| Self {
+                    type_: LiteralType::Number,
+                    slice: v.0,
+                }),
+            diag: LiteralDiag::Number;
+            String::diag(code)
+                .map(|v| Self {
+                    type_: LiteralType::String,
+                    slice: v.0,
+                }),
+            diag: LiteralDiag::String
         )
     }
 }
@@ -54,7 +67,7 @@ impl Display for Literal<'_> {
 }
 
 #[test]
-fn parse_literal() {
+fn parse() {
     let check = |source, v: (LiteralType, RangeInclusive<usize>)| {
         check(source, |code| Literal {
             type_: v.0,
@@ -78,4 +91,22 @@ fn parse_literal() {
     // errors
     check_none::<Literal>(" 2sdf ");
     check_none::<Literal>(" \"2sdf ");
+}
+
+#[test]
+fn diag() {
+    check_diag::<LiteralDiag, Literal>(
+        "  43c",
+        vec![
+            (4, LiteralDiag::Number(NumberDiag::MustBeNumber)),
+            (2, LiteralDiag::String(StringDiag::StartsWithQuote)),
+        ],
+    );
+    check_diag::<LiteralDiag, Literal>(
+        " \"43c",
+        vec![
+            (1, LiteralDiag::Number(NumberDiag::StartsWithNumber)),
+            (4, LiteralDiag::String(StringDiag::EndsWithQuote)),
+        ],
+    );
 }

@@ -1,12 +1,12 @@
-use crate::lexer::{check, check_none, Code, Parse, Slicable, Slice, IGNORE};
+use crate::lexer::{check, check_none, Code, DiagParse, Diags, Slicable, Slice, IGNORE};
 use macros::Slicable;
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Clone, Debug, Deref, Slicable)]
 pub struct Whitespaces<'s>(Slice<'s>);
 
-impl<'s> Parse<'s> for Whitespaces<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
+impl<'s> DiagParse<'s> for Whitespaces<'s> {
+    fn parse(code: &Code<'s>, diags: &mut Diags) -> Option<Self> {
         let mut end = None;
         for (i, char) in code.iter() {
             if IGNORE.contains(&char) {
@@ -28,7 +28,7 @@ impl<'s> Parse<'s> for Whitespaces<'s> {
 }
 
 #[test]
-fn parse_whitespace() {
+fn parse() {
     check(" ", |code| Whitespaces(Slice::new(0..=0, code)));
     check("     ", |code| Whitespaces(Slice::new(0..=4, code)));
     check("     f", |code| Whitespaces(Slice::new(0..=4, code)));

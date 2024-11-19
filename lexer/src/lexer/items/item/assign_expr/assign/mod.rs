@@ -1,15 +1,16 @@
 pub mod left_right;
 
-use super::literal::{Literal, LiteralType};
+use super::literal::{Literal, LiteralDiag, LiteralType};
 use crate::{
+    items::item::ident::IdentDiag,
     lexer::{
-        check, check_none,
+        check, check_diag, check_none,
         items::{item::ident::Ident, Code},
-        Parse, Slicable,
+        DiagParse, Diags, Slicable,
     },
     Slice,
 };
-use left_right::LeftRight;
+use left_right::{LeftRight, LeftRightDiag};
 use macros::Slicable;
 use std::{fmt::Display, ops::RangeInclusive};
 use std_reset::prelude::Deref;
@@ -31,14 +32,35 @@ impl<'s> Assign<'s> {
     }
 }
 
-impl<'s> Parse<'s> for Assign<'s> {
-    fn parse(code: &Code<'s>) -> Option<Self> {
-        LeftRight::parse(code, |code| {
-            let (i, char) = code.iter().next()?;
-            (char == '=').then_some(i)
-        })
-        .map(Self)
+#[derive(PartialEq, Debug)]
+pub enum AssignDiag {
+    LeftRight(LeftRightDiag<IdentDiag, LiteralDiag>),
+    ExpectEqual,
+}
+
+impl<'s> DiagParse<'s> for Assign<'s> {
+    type Diag = AssignDiag;
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+        let mut d = vec![];
+        LeftRight::parse(code, &mut d, |code| parse_equal(code.iter(), diags))
+            .map(Self)
+            .or_else(|| {
+                diags.extend(d.into_iter().map(|(i, d)| (i, AssignDiag::LeftRight(d))));
+                None
+            })
     }
+}
+
+pub fn parse_equal(
+    mut iter: impl Iterator<Item = (usize, char)>,
+    diags: &mut Diags<AssignDiag>,
+) -> Option<usize> {
+    let (i, char) = iter.next()?;
+    (char == '=').then_some(i).or_else(|| {
+        diags.push((i, AssignDiag::ExpectEqual));
+        None
+    })
 }
 
 impl Display for Assign<'_> {
@@ -48,7 +70,7 @@ impl Display for Assign<'_> {
 }
 
 #[test]
-fn parse_assign() {
+fn parse() {
     let check = |source, v: (RangeInclusive<usize>, (LiteralType, RangeInclusive<usize>))| {
         check(source, |code| {
             Assign(LeftRight {
@@ -70,4 +92,9 @@ fn parse_assign() {
     check_none::<Assign>("abc =");
     check_none::<Assign>("abc = ");
     check_none::<Assign>("abc=");
+}
+
+#[test]
+fn diag() {
+    check_diag::<AssignDiag, Assign>(" a - 2", vec![(3, AssignDiag::ExpectEqual)]);
 }

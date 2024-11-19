@@ -4,15 +4,32 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenTree;
 use quote::quote;
 use syn::{
-    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, FieldsNamed,
-    FieldsUnnamed, Ident, ItemStruct, Meta, MetaList, Type, Variant,
+    parse_macro_input, Attribute, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, ItemEnum, ItemStruct, Meta, MetaList, MetaNameValue, Type, Variant
 };
 
-#[proc_macro_derive(Parse, attributes(grammar))]
+#[proc_macro_derive(Parse, attributes(grammar, diag))]
 pub fn derive_parse(input: TokenStream) -> TokenStream {
     let DeriveInput {
         ident, data, attrs, ..
     } = parse_macro_input!(input);
+
+    let get_attr_type = |attrs: &Vec<Attribute>| {
+        attrs
+        .iter()
+        .find_map(|attr| {
+            if let Meta::List(MetaList { path, tokens, .. }) = &attr.meta {
+                if path.is_ident("diag") {
+                    if let Some(TokenTree::Ident(v)) = tokens.clone().into_iter().next() {
+                        return Some(quote! {#v});
+                    }
+                }
+            }
+            None
+        })
+        .unwrap()
+    };
+
+    let diag_type = get_attr_type(&attrs);
 
     match data {
         Data::Struct(DataStruct {
@@ -22,7 +39,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
             let Meta::List(MetaList { tokens, .. }) = &attrs.first().expect("expect attribute #[grammar()]").meta else {
                 unreachable!()
             };
-
+            
             let mut conformity = tokens.clone().into_iter().map(|v| {
                 let TokenTree::Ident(ident) = v else {
                     unreachable!()
@@ -36,20 +53,29 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                         *ty == ident
                     }).unwrap()
             });
-
+           
             let body = conformity
                 .clone()
-                .map(|Field { ty, ident, .. }| {
-                    let Type::Path(ty) = &ty else {unreachable!()};
-                        let ty = &ty.path.segments.iter().next().unwrap().ident;
+                .map(|Field { ty, ident, attrs, .. }| {
+                    let ty = {
+                        let Type::Path(ty) = &ty else {unreachable!()};
+                        &ty.path.segments.iter().next().unwrap().ident
+                    };
+
+                    let variant =  get_attr_type(attrs);
+
                     quote! {
-                        let #ident = #ty ::parse_and_consume(code)?;
+                        let #ident = #ty ::diag_and_consume(code)
+                        .map_err(|d| {
+                            diags.extend(d.into_iter().map(|(i, d)| (i, Self::Diag:: #variant (d))));
+                        })
+                        .ok()?;
                     }
                 })
                 .fold(proc_macro2::TokenStream::new(), |mut acc, stmt| {
                     if !acc.is_empty() {
                         acc.extend_one(quote! {
-                            crate::lexer::items::shared::whitespaces::Whitespaces::parse_and_consume(code);
+                            crate::lexer::items::shared::whitespaces::Whitespaces::parse_and_consume(code, &mut vec![]);
                         });
                     }
                     acc.extend_one(stmt);
@@ -62,9 +88,12 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                 &conformity.next().unwrap().ident,
                 &conformity.last().unwrap().ident
             ];
+
             quote! {
-                impl<'s> crate::lexer::Parse<'s> for #ident<'s> {
-                    fn parse(code: &crate::lexer::Code<'s>) -> Option<Self> {
+                impl<'s> crate::lexer::DiagParse<'s> for #ident<'s> {
+                    type Diag = #diag_type;
+
+                    fn parse(code: &crate::lexer::Code<'s>, diags: &mut crate::lexer::Diags::<Self::Diag>) -> Option<Self> {
                         let code = &mut code.clone();
 
                         #body
@@ -87,10 +116,13 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
             let (confirms, variants): (Vec<_>, Vec<_>) = variants
                 .into_iter()
                 .map(|Variant { ident, fields, .. }| {
-                    let attr = &fields.iter().next().unwrap();
+                    let field = &fields.iter().next().unwrap();
+                    let Type::Path(p) = &field.ty else {unreachable!()};
+                    let field = &p.path.segments.iter().next().unwrap().ident;
                     (
                         quote! {
-                            #attr => Self:: #ident,
+                            #field ::diag(code).map(Self:: #ident),
+                            diag: #diag_type ::#ident
                         },
                         quote! {
                             #ident
@@ -98,13 +130,15 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                     )
                 })
                 .unzip();
-
+            // panic!("{}", confirms.into_iter().map(|v| v.to_string()).collect::<String>());
             quote! {
-                impl<'s> crate::lexer::Parse<'s> for #ident<'s> {
-                    fn parse(code: &crate::lexer::Code<'s>) -> Option<Self> {
+                impl<'s> crate::lexer::DiagParse<'s> for #ident<'s> {
+                    type Diag = #diag_type;
+
+                    fn parse(code: &crate::lexer::Code<'s>, diags: &mut crate::lexer::Diags<Self::Diag>) -> Option<Self> {
                         crate::parse_variants!(
-                            code
-                            #( #confirms )*
+                            diag diags
+                            #( #confirms );*
                         )
                     }
                 }
@@ -196,4 +230,53 @@ pub fn derive_slicable(input: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+fn get_attr_type(attrs: &Vec<Attribute>, attr_str: &'static str) -> Option<TokenTree> {
+    attrs
+    .iter()
+    .find_map(|attr| {
+        if let Meta::List(MetaList { path, tokens, .. }) = &attr.meta {
+            if path.is_ident(attr_str) {
+                return tokens.clone().into_iter().next()
+            }
+        }
+        None
+    })
+}
+
+#[proc_macro_derive(Diagn, attributes(name, diagn_expect))]
+pub fn derive_diagn(input: TokenStream) -> TokenStream {
+    let ItemEnum {
+        ident, attrs, variants, ..
+    } = parse_macro_input!(input);
+
+    let get_literal_attr = |attrs| {
+        get_attr_type(&attrs, "name").map(|a| {
+            let TokenTree::Literal(l) = a else {
+                unreachable!();
+            };
+            l
+        })
+    };
+
+    let l = get_literal_attr(attrs).unwrap();
+    let expects = variants.into_iter().map(|Variant {attrs, ident, ..} | {
+        let l = get_attr_type(&attrs, "diagn_expect").unwrap();
+        quote! {
+            Self:: #ident => #l,
+        }
+    });
+
+    quote!{
+        impl crate::lexer::Diagn for #ident {
+            const NAME: &'static str = #l;
+
+            fn expect(&self, code: &Code, pos: usize) -> &'static str {
+                match self {
+                    #( #expects ) *
+                }
+            }
+        }
+    }.into()
 }

@@ -1,6 +1,11 @@
-use super::unnamed::UnnamedBlock;
-use crate::lexer::{
-    check, items::item::{ident::Ident, Item}, Code, Parse, Slicable
+use super::unnamed::{UnnamedBlock, UnnamedBlockDiag};
+use crate::{
+    items::item::ident::IdentDiag,
+    lexer::{
+        check,
+        items::item::{ident::Ident, Item},
+        Code, DiagParse, Slicable,
+    },
 };
 use macros::Parse;
 use std::{
@@ -12,9 +17,18 @@ use std::{
 #[grammar(
     Ident UnnamedBlock
 )]
+#[diag(NamedBlockDiag)]
 pub struct NamedBlock<'s> {
+    #[diag(Name)]
     pub name: Ident<'s>,
+    #[diag(UnnamedBlock)]
     pub block: UnnamedBlock<'s>,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum NamedBlockDiag {
+    Name(IdentDiag),
+    UnnamedBlock(UnnamedBlockDiag),
 }
 
 impl<'s> NamedBlock<'s> {
@@ -37,7 +51,7 @@ impl Display for NamedBlock<'_> {
 }
 
 #[test]
-fn parse_named() {
+fn parse() {
     check("main {}", |code| NamedBlock {
         name: Ident::new(0..=3, code),
         block: UnnamedBlock::new(vec![], [5, 6]),

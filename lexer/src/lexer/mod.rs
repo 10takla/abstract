@@ -1,10 +1,10 @@
-pub mod diag;
 pub mod items;
 
 use colored::Colorize;
 use std::{
+    cell::LazyCell,
     fmt::{Debug, Display},
-    ops::RangeInclusive,
+    ops::{Index, RangeInclusive},
     rc::Rc,
 };
 
@@ -26,7 +26,14 @@ impl<'s> Code<'s> {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (usize, char)> + '_ + Clone{
+    pub fn get_char(&self, index: usize) -> char {
+        self.source[self.byte_indices[index]..]
+            .chars()
+            .next()
+            .unwrap()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, char)> + '_ + Clone + Debug {
         self.byte_indices[self.cursor..]
             .iter()
             .enumerate()
@@ -147,11 +154,26 @@ impl<'s> Slice<'s> {
     }
 }
 
-pub trait Parse<'s>: Slicable + Sized {
-    fn parse(code: &Code<'s>) -> Option<Self>;
+type Diags<T = String> = Vec<Diag<T>>;
+type Diag<T = String> = (usize, T);
 
-    fn parse_and_consume(code: &mut Code<'s>) -> Option<Self> {
-        Self::parse(code).map(|v| {
+pub trait DiagParse<'s>: Slicable + Sized {
+    type Diag = String;
+
+    fn diag(code: &Code<'s>) -> Result<Self, Diags<Self::Diag>> {
+        let mut diags = vec![];
+        Self::parse(code, &mut diags).ok_or(diags)
+    }
+
+    fn diag_and_consume(code: &mut Code<'s>) -> Result<Self, Diags<Self::Diag>> {
+        let mut diags = vec![];
+        Self::parse_and_consume(code, &mut diags).ok_or(diags)
+    }
+
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self>;
+
+    fn parse_and_consume(code: &mut Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+        Self::parse(code, diags).map(|v| {
             code.end(&v);
             v
         })
@@ -168,20 +190,69 @@ pub trait Slicable {
     }
 }
 
-fn check<'s, T: Parse<'s> + PartialEq + Debug>(
+pub trait Diagn {
+    const NAME: &'static str;
+    fn display(&self, code: &Code, pos: usize) -> String {
+        format!(
+            "\"{}\". {}",
+            code.get_char(pos).to_string().underline(),
+            self.for_construct(code, pos),
+        )
+    }
+    fn for_construct(&self, code: &Code, pos: usize) -> String {
+        format!(
+            "Должно {} для конструкции {}",
+            self.expect(code, pos),
+            Self::NAME
+        )
+    }
+    fn expect(&self, code: &Code, pos: usize) -> impl Display;
+}
+
+fn check<'s, T: DiagParse<'s> + PartialEq + Debug>(
     source: &'s str,
     get_item: impl FnOnce(&Code<'s>) -> T,
 ) {
     let code = &mut Code::new(source);
-    assert_eq!(T::parse(code), Some(get_item(code)));
+    assert_eq!(T::parse(code, &mut vec![]), Some(get_item(code)));
 }
 
-fn check_none<'s, T: Parse<'s> + PartialEq + Debug>(code: &'s str) {
-    assert_eq!(T::parse(&mut Code::new(code)), None);
+fn check_none<'s, T: DiagParse<'s> + PartialEq + Debug>(source: &'s str) {
+    let code = &mut Code::new(source);
+    assert_eq!(T::parse(code, &mut vec![]), None);
+}
+
+fn check_diag<'s, D, I: DiagParse<'s, Diag = D>>(source: &'s str, diags: Diags<D>)
+where
+    Result<I, Vec<(usize, D)>>: PartialEq + Debug,
+{
+    assert_eq!(I::diag(&Code::new(source)), Err(diags));
 }
 
 #[macro_export]
 macro_rules! parse_variants {
+    (diag $diags:ident $( $expr:expr, diag: $diag:expr ); + $(;)?) => {
+        [
+            $(
+                Box::new(||
+                    $expr
+                    .map_err(|v| {
+                        v.into_iter()
+                            .map(|(i, v)| (i, $diag(v)))
+                            .collect()
+                    })
+                ) as Box<dyn Fn() -> Result<Self, crate::lexer::Diags<Self::Diag>>>,
+            )+
+        ]
+        .iter()
+        .find_map(|f| match f() {
+            Ok(item) => Some(item),
+            Err(v) => {
+                $diags.extend(v);
+                None
+            }
+        })
+    };
     ($( $expr:expr ), + $(,)?) => {
         [
             $(
@@ -194,7 +265,7 @@ macro_rules! parse_variants {
     ($code:ident $( $from:ty => $to:path ), + $(,)?) => {
         crate::parse_variants!(
             $(
-                <$from>::parse($code).map($to),
+                <$from>::parse($code, &mut vec![]).map($to),
             )+
         )
     };

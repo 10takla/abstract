@@ -49,13 +49,13 @@ impl<'s> DiagParse<'s> for Literal<'s> {
                     type_: LiteralType::Number,
                     slice: v.0,
                 }),
-            diag: LiteralDiag::Number;
+            diag: Number;
             String::diag(code)
                 .map(|v| Self {
                     type_: LiteralType::String,
                     slice: v.0,
                 }),
-            diag: LiteralDiag::String
+            diag: String
         )
     }
 }

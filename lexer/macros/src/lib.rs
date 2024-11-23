@@ -26,7 +26,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
             }
             None
         })
-        .unwrap()
+        .expect("Expect #[diag(...)]")
     };
 
     let diag_type = get_attr_type(&attrs);
@@ -122,7 +122,7 @@ pub fn derive_parse(input: TokenStream) -> TokenStream {
                     (
                         quote! {
                             #field ::diag(code).map(Self:: #ident),
-                            diag: #diag_type ::#ident
+                            diag: #ident
                         },
                         quote! {
                             #ident
@@ -232,7 +232,7 @@ pub fn derive_slicable(input: TokenStream) -> TokenStream {
     .into()
 }
 
-fn get_attr_type(attrs: &Vec<Attribute>, attr_str: &'static str) -> Option<TokenTree> {
+fn get_attr_type(attrs: &Vec<Attribute>, attr_str: &'static str) -> Result<TokenTree, String> {
     attrs
     .iter()
     .find_map(|attr| {
@@ -242,7 +242,7 @@ fn get_attr_type(attrs: &Vec<Attribute>, attr_str: &'static str) -> Option<Token
             }
         }
         None
-    })
+    }).ok_or(format!("Expect attribute #[{attr_str}(...)]"))
 }
 
 #[proc_macro_derive(Diagn, attributes(name, diagn_expect))]

@@ -1,4 +1,5 @@
 pub mod items;
+pub mod recognize;
 
 use colored::Colorize;
 use std::{
@@ -231,42 +232,23 @@ where
 
 #[macro_export]
 macro_rules! parse_variants {
-    (diag $diags:ident $( $expr:expr, diag: $diag:expr ); + $(;)?) => {
-        [
-            $(
-                Box::new(||
-                    $expr
-                    .map_err(|v| {
-                        v.into_iter()
-                            .map(|(i, v)| (i, $diag(v)))
-                            .collect()
-                    })
-                ) as Box<dyn Fn() -> Result<Self, crate::lexer::Diags<Self::Diag>>>,
-            )+
-        ]
-        .iter()
-        .find_map(|f| match f() {
-            Ok(item) => Some(item),
-            Err(v) => {
-                $diags.extend(v);
-                None
-            }
-        })
-    };
-    ($( $expr:expr ), + $(,)?) => {
-        [
-            $(
-                Box::new(|| $expr) as Box<dyn Fn() -> Option<Self>>,
-            )+
-        ]
-        .iter()
-        .find_map(|parse_fn| parse_fn())
-    };
-    ($code:ident $( $from:ty => $to:path ), + $(,)?) => {
+    (diag $diags:ident  $expr1:expr, diag: $diag1:ident; $( $expr:expr, diag: $diag:ident ); + $(;)?) => {
         crate::parse_variants!(
-            $(
-                <$from>::parse($code, &mut vec![]).map($to),
-            )+
+            $diags  $expr1, diag: $diag1
         )
+            $(
+                .or_else(|_| {
+                    crate::parse_variants!(
+                        $diags  $expr, diag: $diag
+                    )
+                })
+            )+
+            .ok()
     };
+    ($diags:ident  $expr:expr, diag: $diag:ident) => {
+        $expr
+            .map_err(|v| {
+                $diags .extend(v.into_iter().map(|(i, v)| (i, Self::Diag:: $diag (v))));
+            })
+    }
 }

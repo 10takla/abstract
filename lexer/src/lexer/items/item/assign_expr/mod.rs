@@ -40,19 +40,74 @@ impl<'s> DiagParse<'s> for AssignExpr<'s> {
     type Diag = AssignExprDiag;
 
     fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
-        parse_variants!(
-            diag diags
-            Assign::diag(code).map(|val| Self {
+        // parse_variants!(
+        //     diag diags
+        //     Assign::diag(code).map(|val| Self {
+        //         type_: AssignExprType::Assign,
+        //         val,
+        //     }),
+        //     diag: Assign;
+        //     AssignAnd::diag(code).map(|v| Self {
+        //         type_: AssignExprType::AssignAnd(v.type_),
+        //         val: v.val,
+        //     }),
+        //     diag: AssignAnd
+        // )
+
+        Assign::diag(code)
+            .map(|val| Self {
                 type_: AssignExprType::Assign,
                 val,
-            }),
-            diag: AssignExprDiag::Assign;
-            AssignAnd::diag(code).map(|v| Self {
-                type_: AssignExprType::AssignAnd(v.type_),
-                val: v.val,
-            }),
-            diag: AssignExprDiag::AssignAnd
-        )
+            })
+            .map_err(|v| {
+                diags.extend(v.into_iter().map(|(i, v)| (i, Self::Diag::Assign(v))));
+            })
+            .or_else(|_| {
+                AssignAnd::diag(code)
+                    .map(|v| Self {
+                        type_: AssignExprType::AssignAnd(v.type_),
+                        val: v.val,
+                    })
+                    .map_err(|v| {
+                        diags.extend(v.into_iter().map(|(i, v)| (i, Self::Diag::AssignAnd(v))));
+                    })
+            })
+            .ok()
+
+        // [
+        //     Box::new(|| {
+        //         Assign::diag(code)
+        //             .map(|val| Self {
+        //                 type_: AssignExprType::Assign,
+        //                 val,
+        //             })
+        //             .map_err(|v| {
+        //                 v.into_iter()
+        //                     .map(|(i, v)| (i, Self::Diag::Assign(v)))
+        //                     .collect()
+        //             })
+        //     }) as Box<dyn Fn() -> Result<Self, crate::lexer::Diags<Self::Diag>>>,
+        //     Box::new(|| {
+        //         AssignAnd::diag(code)
+        //             .map(|v| Self {
+        //                 type_: AssignExprType::AssignAnd(v.type_),
+        //                 val: v.val,
+        //             })
+        //             .map_err(|v| {
+        //                 v.into_iter()
+        //                     .map(|(i, v)| (i, Self::Diag::AssignAnd(v)))
+        //                     .collect()
+        //             })
+        //     }),
+        // ]
+        // .iter()
+        // .find_map(|f| match f() {
+        //     Ok(item) => Some(item),
+        //     Err(v) => {
+        //         diags.extend(v);
+        //         None
+        //     }
+        // })
     }
 }
 

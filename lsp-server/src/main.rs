@@ -188,7 +188,7 @@ impl Backend {
                     severity: Some(DiagnosticSeverity::ERROR),
                     code: None,
                     source: Some("abstract".to_string()),
-                    message: format!("Ошибка парсера {}", diag.display()),
+                    // message: format!("Ошибка парсера {}", diag.display()),
                     ..Default::default()
                 }
             })

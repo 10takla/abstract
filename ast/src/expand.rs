@@ -2,8 +2,8 @@ use super::name_resolve::Refs;
 use lexer::items::{
     item::{
         block::{
-            distruct::{init::InitBlockDistruct, named::CallBlockDistruct, Distruct},
-            init::{named::NamedBlock, Init},
+            distruct::{init::InitBlockDistruct, call::CallBlockDistruct, BlockDistruct},
+            init::{named::NamedBlock, InitBlock},
             Block,
         },
         Item,
@@ -18,16 +18,16 @@ pub fn expand<'s, 'i>(items: &'i Items<'s>, refs: &Refs<'s, 'i>) -> Items<'s> {
         if let Item::Block(block) = item {
             match block {
                 Block::Init(tmp) => match tmp {
-                    Init::Unnamed(unnamed_block) => {
+                    InitBlock::Unnamed(unnamed_block) => {
                         new_items.extend(expand(&unnamed_block.items, refs).0);
                         continue;
                     }
-                    Init::Named(_) => {
+                    InitBlock::Named(_) => {
                         continue;
                     }
                 },
                 Block::Distruct(block) => match block {
-                    Distruct::Call(CallBlockDistruct { .. }) => {
+                    BlockDistruct::Call(CallBlockDistruct { .. }) => {
                         if let Some(on) = refs.get(item) {
                             if let Item::Block(block) = on {
                                 let mut fast = |NamedBlock { block, .. }: &NamedBlock<'s>| {
@@ -35,11 +35,11 @@ pub fn expand<'s, 'i>(items: &'i Items<'s>, refs: &Refs<'s, 'i>) -> Items<'s> {
                                     new_items.extend(n.0);
                                 };
                                 match block {
-                                    Block::Init(Init::Named(named_block)) => {
+                                    Block::Init(InitBlock::Named(named_block)) => {
                                         fast(named_block);
                                         continue;
                                     }
-                                    Block::Distruct(Distruct::Init(InitBlockDistruct {
+                                    Block::Distruct(BlockDistruct::Init(InitBlockDistruct {
                                         named_block,
                                         ..
                                     })) => {
@@ -51,7 +51,7 @@ pub fn expand<'s, 'i>(items: &'i Items<'s>, refs: &Refs<'s, 'i>) -> Items<'s> {
                         }
                         continue;
                     }
-                    Distruct::Init(InitBlockDistruct { named_block, .. }) => {
+                    BlockDistruct::Init(InitBlockDistruct { named_block, .. }) => {
                         let n = expand(&named_block.block.items, refs);
                         new_items.extend(n.0);
                         continue;

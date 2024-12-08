@@ -3,15 +3,15 @@ use lexer::{
         item::{
             assign_expr::{AssignExpr, AssignExprType},
             block::{
-                distruct::Distruct,
-                init::{self, unnamed::UnnamedBlock, Init},
+                distruct::BlockDistruct,
+                init::{self, unnamed::UnnamedBlock, InitBlock},
                 Block,
             },
             Item,
         },
         Items,
     },
-    Code, DiagParse, Slicable,
+    Code, DiagParse, Diagn, Parse, Slicable,
 };
 use std::{fmt::Debug, iter::Enumerate, str::Lines, sync::RwLock};
 use tower_lsp::{jsonrpc::Result, lsp_types::*, Client, LanguageServer, LspService, Server};
@@ -153,9 +153,7 @@ impl Backend {
         let Some(text) = self.text.read().unwrap().clone() else {
             return tokens;
         };
-
-        let mut diags = vec![];
-        let items = Items::parse(&mut Code::new(&text), &mut diags).unwrap();
+        let (items, diags) = Items::analyz(&text);
 
         let token_type = {
             let Some(legend) = self.legend.read().unwrap().clone() else {
@@ -177,22 +175,20 @@ impl Backend {
         tokenize(&mut tokens, &mut items.iter(), &mut lines, &token_type);
 
         let diagnostics = diags
-            .into_iter()
-            .map(|(i, diag)| {
-                dbg!(i, &diag);
-                Diagnostic {
-                    range: Range {
-                        start: Position::new(0, i as u32),
-                        end: Position::new(0, i as u32 + 1),
-                    },
-                    severity: Some(DiagnosticSeverity::ERROR),
-                    code: None,
-                    source: Some("abstract".to_string()),
-                    // message: format!("Ошибка парсера {}", diag.display()),
-                    ..Default::default()
-                }
+            .iter()
+            .cloned()
+            .map(|diag| Diagnostic {
+                range: Range {
+                    start: Position::new(0, diag.pos.unwrap() as u32),
+                    end: Position::new(0, diag.pos.unwrap() as u32 + 1),
+                },
+                severity: Some(DiagnosticSeverity::ERROR),
+                code: None,
+                source: Some("abstract".to_string()),
+                message: format!("Ошибка парсера: {}", diag.expect(&Code::new(&text), diags.pos.unwrap())),
+                ..Default::default()
             })
-            .collect();
+            .collect::<Vec<_>>();
 
         self.client
             .publish_diagnostics(uri, diagnostics, None)
@@ -218,7 +214,7 @@ fn tokenize<'a, T: Iterator<Item = &'a Item<'a>> + Debug>(
             Item::Ident(_) => token_type(SemanticTokenType::VARIABLE),
             Item::Block(block) => match block {
                 Block::Init(init) => match init {
-                    Init::Named(name_block) => {
+                    InitBlock::Named(name_block) => {
                         // tokenize(
                         //     tokens,
                         //     &mut name_block.block.items.iter(),
@@ -227,17 +223,17 @@ fn tokenize<'a, T: Iterator<Item = &'a Item<'a>> + Debug>(
                         // );
                         token_type(SemanticTokenType::FUNCTION)
                     }
-                    Init::Unnamed(unnamed_block) => {
+                    InitBlock::Unnamed(unnamed_block) => {
                         // tokenize(tokens, &unnamed_block.items, lines, token_type);
                         token_type(SemanticTokenType::FUNCTION)
                     }
                 },
                 Block::Distruct(distruct) => match distruct {
-                    Distruct::Init(init) => {
+                    BlockDistruct::Init(init) => {
                         // tokenize(tokens, &init.named_block.block.items, lines, token_type);
                         token_type(NAMED_BLOCK)
                     }
-                    Distruct::Call(_) => token_type(SemanticTokenType::FUNCTION),
+                    BlockDistruct::Call(_) => token_type(SemanticTokenType::FUNCTION),
                 },
             },
             Item::AssignExpr(assign_expr) => match assign_expr.type_ {
@@ -339,7 +335,7 @@ fn tokenize_test() {
 
             tokenize(
                 &mut tokens,
-                &mut Items::parse(&Code::new(code), &mut vec![]).unwrap().iter(),
+                &mut Items::analyz(code).0.iter(),
                 &mut lines,
                 &token_type,
             );

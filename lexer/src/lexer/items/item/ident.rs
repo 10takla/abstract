@@ -1,6 +1,9 @@
-use crate::lexer::{
-    check, check_diag, check_none, items::shared::whitespaces::Whitespaces, Code, Diag, DiagParse,
-    Diags, Slicable, Slice,
+use crate::{
+    lexer::{
+        check, check_diag, check_none, items::shared::whitespaces::Whitespaces, Code, Diag,
+        DiagParse, Diags, Slicable, Slice,
+    },
+    CacheItems, CacheKey, Parse, RecognizeParse, Recognized,
 };
 use colored::Colorize;
 use macros::{Diagn, Slicable};
@@ -10,12 +13,6 @@ use std_reset::prelude::Deref;
 #[derive(PartialEq, Debug, Clone, Deref, Eq, Hash, Slicable)]
 pub struct Ident<'s>(pub Slice<'s>);
 
-impl<'s> Ident<'s> {
-    pub fn new(range: RangeInclusive<usize>, code: &Code<'s>) -> Self {
-        Self(Slice::new(range, code))
-    }
-}
-
 #[derive(PartialEq, Debug, Clone, Eq, Hash, Diagn)]
 #[name("Ident")]
 pub enum IdentDiag {
@@ -23,20 +20,24 @@ pub enum IdentDiag {
     StartsWithNotNumber,
 }
 
-impl<'s> DiagParse<'s> for Ident<'s> {
+impl<'s> Parse<'s> for Ident<'s> {
     type Diag = IdentDiag;
 
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Diags<Self::Diag>,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
         let code = &mut code.clone();
 
         let start_rule = |char: char| char.is_alphabetic() || char == '_';
 
-        Whitespaces::parse_and_consume(code, &mut vec![]);
+        Whitespaces::diag_and_consume(code, recognized);
 
         let mut iter = code.iter();
         let (i, char) = iter.next()?;
         let start = start_rule(char).then_some(i).or_else(|| {
-            diags.push((i, IdentDiag::StartsWithNotNumber));
+            diags.extend_one((i, IdentDiag::StartsWithNotNumber));
             None
         })?;
 
@@ -54,6 +55,14 @@ impl<'s> DiagParse<'s> for Ident<'s> {
         };
 
         Some(Self::new(start..=end, code))
+    }
+}
+
+impl<'s> DiagParse<'s> for Ident<'s> {}
+
+impl<'s> Ident<'s> {
+    pub fn new(range: RangeInclusive<usize>, code: &Code<'s>) -> Self {
+        Self(Slice::new(range, code))
     }
 }
 

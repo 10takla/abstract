@@ -8,15 +8,54 @@ use crate::{
         items::{item::ident::Ident, Code},
         DiagParse, Diags, Slicable,
     },
-    Slice,
+    Parse, Recognized, Slice,
 };
 use left_right::{LeftRight, LeftRightDiag};
 use macros::Slicable;
-use std::{fmt::Display, ops::RangeInclusive};
+use std::{fmt::Display, hash::DefaultHasher, ops::RangeInclusive};
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Debug, Clone, Deref, Hash, Eq, Slicable)]
 pub struct Assign<'s>(pub LeftRight<'s, Ident<'s>, Literal<'s>>);
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum AssignDiag {
+    LeftRight(LeftRightDiag<IdentDiag, LiteralDiag>),
+    ExpectEqual,
+}
+
+impl<'s> Parse<'s> for Assign<'s> {
+    type Diag = AssignDiag;
+
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Diags<Self::Diag>,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
+        let mut d = Default::default();
+        LeftRight::parse(code, &mut d, recognized, |code| {
+            parse_equal(code.iter(), diags)
+        })
+        .map(Self)
+        .or_else(|| {
+            diags.extend(d.iter().cloned().map(AssignDiag::LeftRight));
+            None
+        })
+    }
+}
+
+pub fn parse_equal(
+    mut iter: impl Iterator<Item = (usize, char)>,
+    diags: &mut Diags<AssignDiag>,
+) -> Option<usize> {
+    let (i, char) = iter.next()?;
+    (char == '=').then_some(i).or_else(|| {
+        diags.extend_one((i, AssignDiag::ExpectEqual));
+        None
+    })
+}
+
+impl<'s> DiagParse<'s> for Assign<'s> {}
 
 impl<'s> Assign<'s> {
     pub fn new(
@@ -30,37 +69,6 @@ impl<'s> Assign<'s> {
             _marker: Default::default(),
         })
     }
-}
-
-#[derive(PartialEq, Debug)]
-pub enum AssignDiag {
-    LeftRight(LeftRightDiag<IdentDiag, LiteralDiag>),
-    ExpectEqual,
-}
-
-impl<'s> DiagParse<'s> for Assign<'s> {
-    type Diag = AssignDiag;
-
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
-        let mut d = vec![];
-        LeftRight::parse(code, &mut d, |code| parse_equal(code.iter(), diags))
-            .map(Self)
-            .or_else(|| {
-                diags.extend(d.into_iter().map(|(i, d)| (i, AssignDiag::LeftRight(d))));
-                None
-            })
-    }
-}
-
-pub fn parse_equal(
-    mut iter: impl Iterator<Item = (usize, char)>,
-    diags: &mut Diags<AssignDiag>,
-) -> Option<usize> {
-    let (i, char) = iter.next()?;
-    (char == '=').then_some(i).or_else(|| {
-        diags.push((i, AssignDiag::ExpectEqual));
-        None
-    })
 }
 
 impl Display for Assign<'_> {

@@ -25,7 +25,7 @@ pub struct NamedBlock<'s> {
     pub block: UnnamedBlock<'s>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum NamedBlockDiag {
     Name(IdentDiag),
     UnnamedBlock(UnnamedBlockDiag),

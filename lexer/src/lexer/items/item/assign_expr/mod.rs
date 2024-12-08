@@ -8,7 +8,7 @@ use crate::{
         items::{Code, Slicable},
         DiagParse, Diags,
     },
-    parse_variants,
+    parse_variants, Parse, RecognizeParse, Recognized, SelectionParse,
 };
 use assign::{Assign, AssignDiag};
 use assign_and::{AssignAnd, AssignAndDiag, AssignAndType};
@@ -30,16 +30,20 @@ pub enum AssignExprType {
     AssignAnd(AssignAndType),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum AssignExprDiag {
     Assign(AssignDiag),
     AssignAnd(AssignAndDiag),
 }
 
-impl<'s> DiagParse<'s> for AssignExpr<'s> {
+impl<'s> Parse<'s> for AssignExpr<'s> {
     type Diag = AssignExprDiag;
 
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Diags<Self::Diag>,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
         // parse_variants!(
         //     diag diags
         //     Assign::diag(code).map(|val| Self {
@@ -54,22 +58,22 @@ impl<'s> DiagParse<'s> for AssignExpr<'s> {
         //     diag: AssignAnd
         // )
 
-        Assign::diag(code)
+        Assign::rec(code, recognized)
             .map(|val| Self {
                 type_: AssignExprType::Assign,
                 val,
             })
-            .map_err(|v| {
-                diags.extend(v.into_iter().map(|(i, v)| (i, Self::Diag::Assign(v))));
+            .map_err(|d| {
+                diags.extend(d.iter().cloned().map(Self::Diag::Assign));
             })
             .or_else(|_| {
-                AssignAnd::diag(code)
+                AssignAnd::rec(code, recognized)
                     .map(|v| Self {
                         type_: AssignExprType::AssignAnd(v.type_),
                         val: v.val,
                     })
-                    .map_err(|v| {
-                        diags.extend(v.into_iter().map(|(i, v)| (i, Self::Diag::AssignAnd(v))));
+                    .map_err(|d| {
+                        diags.extend(d.iter().cloned().map(Self::Diag::AssignAnd));
                     })
             })
             .ok()
@@ -110,6 +114,9 @@ impl<'s> DiagParse<'s> for AssignExpr<'s> {
         // })
     }
 }
+
+impl<'s> DiagParse<'s> for AssignExpr<'s> {}
+impl<'s> SelectionParse<'s> for AssignExpr<'s> {}
 
 impl Display for AssignExpr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

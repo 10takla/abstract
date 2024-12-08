@@ -1,19 +1,20 @@
+pub mod call;
 pub mod init;
-pub mod named;
 
+use crate::SelectionParse;
+use call::{CallBlockDistruct, CallBlockDistructDiag};
 use init::{InitBlockDistruct, InitBlockDistructDiag};
 use macros::Parse;
-use named::{CallBlockDistruct, CallBlockDistructDiag};
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
-#[diag(DistructDiag)]
-pub enum Distruct<'s> {
+#[diag(BlockDistructDiag)]
+pub enum BlockDistruct<'s> {
     Init(InitBlockDistruct<'s>),
     Call(CallBlockDistruct<'s>),
 }
 
-#[derive(PartialEq, Debug)]
-pub enum DistructDiag {
+#[derive(PartialEq, Debug, Clone)]
+pub enum BlockDistructDiag {
     Init(InitBlockDistructDiag),
     Call(CallBlockDistructDiag),
 }

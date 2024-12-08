@@ -28,7 +28,7 @@ pub struct InitBlockDistruct<'s> {
     pub distr: Distribution<'s>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum InitBlockDistructDiag {
     NamedBlock(NamedBlockDiag),
     Distribution(DistributionDiag),

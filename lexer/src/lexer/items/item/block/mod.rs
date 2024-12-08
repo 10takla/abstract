@@ -2,19 +2,19 @@ pub mod distruct;
 pub mod init;
 
 use crate::lexer::{check_diag, DiagParse, Slicable};
-use distruct::{Distruct, DistructDiag};
-use init::{Init, InitDiag};
+use distruct::{BlockDistruct, BlockDistructDiag};
+use init::{InitBlock, InitBlockDiag};
 use macros::Parse;
 
 #[derive(PartialEq, Debug, Parse, Hash, Eq, Clone)]
 #[diag(BlockDiag)]
 pub enum Block<'s> {
-    Distruct(Distruct<'s>),
-    Init(Init<'s>),
+    Distruct(BlockDistruct<'s>),
+    Init(InitBlock<'s>),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum BlockDiag {
-    Distruct(DistructDiag),
-    Init(InitDiag),
+    Distruct(BlockDistructDiag),
+    Init(InitBlockDiag),
 }

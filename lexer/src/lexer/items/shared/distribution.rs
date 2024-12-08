@@ -1,16 +1,23 @@
 use super::whitespaces::Whitespaces;
-use crate::lexer::{check, check_none, Code, DiagParse, Diags, Slicable, Slice};
+use crate::{
+    lexer::{check, check_none, Code, DiagParse, Diags, Slicable, Slice},
+    Parse, Recognized,
+};
 use macros::Slicable;
 use std_reset::prelude::Deref;
 
 #[derive(PartialEq, Clone, Debug, Deref, Hash, Eq, Slicable)]
 pub struct Distribution<'s>(pub Slice<'s>);
 
-impl<'s> DiagParse<'s> for Distribution<'s> {
+impl<'s> Parse<'s> for Distribution<'s> {
     type Diag = DistributionDiag;
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Diags<Self::Diag>,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
         let code = &mut code.clone();
-        Whitespaces::parse_and_consume(code, &mut vec![]);
+        Whitespaces::diag_and_consume(code, recognized);
 
         let start = code.cursor;
         matches!(code.get_offset_slice(2), Some("..")).then(|| {
@@ -20,9 +27,10 @@ impl<'s> DiagParse<'s> for Distribution<'s> {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub enum DistributionDiag {
-}
+impl<'s> DiagParse<'s> for Distribution<'s> {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum DistributionDiag {}
 
 #[test]
 fn parse() {

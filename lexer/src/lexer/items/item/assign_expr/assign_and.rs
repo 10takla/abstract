@@ -12,9 +12,10 @@ use crate::{
         items::{Code, Slicable},
         DiagParse, Diags,
     },
+    Parse, Recognized,
 };
 use macros::Slicable;
-use std::{fmt::Display, ops::RangeInclusive};
+use std::{fmt::Display, hash::DefaultHasher, ops::RangeInclusive};
 
 #[derive(PartialEq, Debug, Clone, Slicable)]
 pub struct AssignAnd<'s> {
@@ -31,6 +32,52 @@ pub enum AssignAndType {
     Div,
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum AssignAndDiag {
+    Assign(AssignDiag),
+    ExpectOperator,
+}
+
+impl<'s> Parse<'s> for AssignAnd<'s> {
+    type Diag = AssignAndDiag;
+
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Diags<Self::Diag>,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
+        let mut assign_type = None;
+        let mut d = Default::default();
+        LeftRight::parse(code, &mut d, recognized, |code| {
+            let mut iter = code.iter();
+
+            let (i, char) = iter.next()?;
+            match char {
+                '+' => assign_type = Some(AssignAndType::Add),
+                '-' => assign_type = Some(AssignAndType::Sub),
+                '*' => assign_type = Some(AssignAndType::Mul),
+                '/' => assign_type = Some(AssignAndType::Div),
+                _ => {
+                    diags.extend_one((i, AssignAndDiag::ExpectOperator));
+                    return None;
+                }
+            }
+
+            let mut d = Default::default();
+            parse_equal(iter, &mut d).or_else(|| {
+                diags.extend(d.iter().cloned().map(AssignAndDiag::Assign));
+                None
+            })
+        })
+        .map(|lr| Self {
+            type_: assign_type.unwrap(),
+            val: Assign(lr),
+        })
+    }
+}
+
+impl<'s> DiagParse<'s> for AssignAnd<'s> {}
+
 impl<'s> AssignAnd<'s> {
     pub fn new(
         type_: AssignAndType,
@@ -44,46 +91,6 @@ impl<'s> AssignAnd<'s> {
             type_,
             val: Assign::new(slice, (literal_type, literal_slice), code),
         }
-    }
-}
-
-#[derive(PartialEq, Debug)]
-pub enum AssignAndDiag {
-    Assign(AssignDiag),
-    ExpectOperator,
-}
-
-impl<'s> DiagParse<'s> for AssignAnd<'s> {
-    type Diag = AssignAndDiag;
-
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
-        let mut assign_type = None;
-        let mut d = vec![];
-        LeftRight::parse(code, &mut d, |code| {
-            let mut iter = code.iter();
-
-            let (i, char) = iter.next()?;
-            match char {
-                '+' => assign_type = Some(AssignAndType::Add),
-                '-' => assign_type = Some(AssignAndType::Sub),
-                '*' => assign_type = Some(AssignAndType::Mul),
-                '/' => assign_type = Some(AssignAndType::Div),
-                _ => {
-                    diags.push((i, AssignAndDiag::ExpectOperator));
-                    return None;
-                }
-            }
-
-            let mut d = vec![];
-            parse_equal(iter, &mut d).or_else(|| {
-                diags.extend(d.into_iter().map(|(i, d)| (i, AssignAndDiag::Assign(d))));
-                None
-            })
-        })
-        .map(|lr| Self {
-            type_: assign_type.unwrap(),
-            val: Assign(lr),
-        })
     }
 }
 

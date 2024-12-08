@@ -25,7 +25,7 @@ pub struct CallBlockDistruct<'s> {
     pub dist: Distribution<'s>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum CallBlockDistructDiag {
     Name(IdentDiag),
     Distribution(DistributionDiag),

@@ -1,4 +1,4 @@
-use super::{named::NamedBlock, Init};
+use super::{named::NamedBlock, InitBlock};
 use crate::{
     items::item::{
         block::Block,
@@ -10,6 +10,7 @@ use crate::{
         items::{item::Item, shared::whitespaces::Whitespaces, Items},
         Code, DiagParse, Diags, Slicable,
     },
+    Parse, Recognized,
 };
 use std::{fmt::Display, ops::RangeInclusive};
 
@@ -20,45 +21,46 @@ pub struct UnnamedBlock<'s> {
     pub close_bracket_pos: usize,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum UnnamedBlockDiag {
     StartsOpenBracket,
     EndsOpenBracket,
-    Items(Box<ItemDiag>),
+    Items(Box<Vec<Diags<ItemDiag>>>),
 }
 
-impl<'s> DiagParse<'s> for UnnamedBlock<'s> {
+impl<'s> Parse<'s> for UnnamedBlock<'s> {
     type Diag = UnnamedBlockDiag;
 
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Diags<Self::Diag>,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
         let code = &mut code.clone();
 
-        Whitespaces::parse_and_consume(code, &mut vec![]);
+        Whitespaces::diag_and_consume(code, recognized);
         let (i, char) = code.iter().next()?;
         let open_bracket_pos = (char == '{').then_some(i).or_else(|| {
-            diags.push((i, UnnamedBlockDiag::StartsOpenBracket));
+            diags.extend_one((i, UnnamedBlockDiag::StartsOpenBracket));
             None
         })?;
         code.consume(open_bracket_pos);
 
-        let mut d = vec![];
-        let items = Items::parse(code, &mut d).unwrap();
+        let mut d: Vec<Diags<ItemDiag>> = Default::default();
+        let items = Items::parse(code, &mut d, recognized).unwrap();
         if !items.is_empty() {
             code.end(&items);
         }
+        let t = d.iter().cloned().map(Box::new).map(UnnamedBlockDiag::Items);
+        diags.extend();
 
-        diags.extend(
-            d.into_iter()
-                .map(|(i, dd)| (i, UnnamedBlockDiag::Items(dd.into()))),
-        );
-
-        Whitespaces::parse_and_consume(code, &mut vec![]);
+        Whitespaces::diag_and_consume(code, recognized);
         let (i, char) = code.iter().next().or_else(|| {
-            diags.push((code.len() - 1, UnnamedBlockDiag::EndsOpenBracket));
+            diags.extend_one((code.len() - 1, UnnamedBlockDiag::EndsOpenBracket));
             None
         })?;
         let close_bracket_pos = (char == '}').then_some(i).or_else(|| {
-            diags.push((i, UnnamedBlockDiag::EndsOpenBracket));
+            diags.extend_one((i, UnnamedBlockDiag::EndsOpenBracket));
             None
         })?;
 
@@ -69,6 +71,8 @@ impl<'s> DiagParse<'s> for UnnamedBlock<'s> {
         })
     }
 }
+
+impl<'s> DiagParse<'s> for UnnamedBlock<'s> {}
 
 impl Slicable for UnnamedBlock<'_> {
     fn get_slice(&self) -> std::ops::RangeInclusive<usize> {
@@ -110,11 +114,11 @@ pub fn parse() {
     });
 
     check("{asdasd asdasd asdasd { dsf } }", |code| {
-        Block::Init(Init::Unnamed(UnnamedBlock::new(
+        Block::Init(InitBlock::Unnamed(UnnamedBlock::new(
             vec![
                 Item::Ident(Ident::new(1..=6, code)),
                 Item::Ident(Ident::new(8..=13, code)),
-                Item::Block(Block::Init(Init::Named(NamedBlock {
+                Item::Block(Block::Init(InitBlock::Named(NamedBlock {
                     name: Ident::new(15..=20, code),
                     block: UnnamedBlock {
                         items: Items(vec![Item::Ident(Ident::new(24..=26, code))]),
@@ -154,7 +158,7 @@ fn diag() {
         vec![
             (
                 6,
-                UnnamedBlockDiag::Items(ItemDiag::Ident(IdentDiag::StartsWithNotNumber).into()),
+                UnnamedBlockDiag::Items(Box::new(ItemDiag::Ident(IdentDiag::StartsWithNotNumber))),
             ),
             (7, UnnamedBlockDiag::EndsOpenBracket),
         ],

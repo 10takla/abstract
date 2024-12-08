@@ -1,8 +1,8 @@
 pub mod item;
 pub mod shared;
 
-use super::{check_diag, Code, Diag, DiagParse, Diags, Slicable};
-use crate::lexer::check;
+use super::{check_diag, Code, Diag, DiagParse, Diags, Parse, Recognized, Slicable};
+use crate::{lexer::check, Diagn};
 use item::{
     assign_expr::{assign::Assign, literal::LiteralType, AssignExpr, AssignExprType},
     ident::Ident,
@@ -14,16 +14,30 @@ use std_reset::prelude::Deref;
 #[derive(PartialEq, Debug, Deref, Hash, Eq, Clone)]
 pub struct Items<'s>(pub Vec<Item<'s>>);
 
-impl<'s> DiagParse<'s> for Items<'s> {
-    type Diag = ItemDiag;
+impl<'s> Items<'s> {
+    pub fn analyz(source: &'s str) -> (Self, Vec<Diags<ItemDiag>>) {
+        let mut diags = Default::default();
+        (
+            Items::parse(&source.into(), &mut diags, &mut Default::default()).unwrap(),
+            diags,
+        )
+    }
+}
 
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+impl<'s> Parse<'s> for Items<'s> {
+    type Diag = ItemDiag;
+    type Diags = Vec<Diags<Self::Diag>>;
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Self::Diags,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
         let mut items = Vec::new();
 
         let code = &mut code.clone();
 
         loop {
-            match Item::diag_and_consume(code) {
+            match Item::diag_and_consume(code, recognized) {
                 Ok(item) => {
                     items.push(item);
                 }
@@ -33,7 +47,7 @@ impl<'s> DiagParse<'s> for Items<'s> {
                     }
                     code.offset(1);
                     if !d.is_empty() {
-                        diags.extend(d);
+                        diags.push(d);
                     }
                 }
             }
@@ -107,10 +121,14 @@ fn parse() {
     });
 }
 
-
 #[test]
 fn diag() {
-    let mut diags = vec![];
-    Items::parse(&Code::new("a b; c d"), &mut diags);
+    let mut diags = Default::default();
+    let code = &Code::new("m = i");
+    Item::parse(code, &mut diags, &mut Default::default());
+    for diag in &diags.errors {
+        // println!("{}", diag.expect(code, diag));
+    }
+    
     dbg!(diags);
 }

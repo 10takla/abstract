@@ -2,22 +2,21 @@ use crate::{
     lexer::{
         check, check_diag, check_none, items::shared::whitespaces::Whitespaces, Code, DiagParse,
         Diags, Slice, IGNORE,
-    },
-    Slicable,
+    }, Parse, Recognized, Slicable
 };
 use macros::{Diagn, Slicable};
 use std::fmt::Display;
 
-#[derive(PartialEq, Debug, Slicable)]
+#[derive(PartialEq, Debug, Slicable, Clone)]
 pub struct Number<'s>(pub Slice<'s>);
 
-impl<'s> DiagParse<'s> for Number<'s> {
+impl<'s> Parse<'s> for Number<'s> {
     type Diag = NumberDiag;
 
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>, recognized: &mut Recognized<'s>) -> Option<Self> {
         let code = &mut code.clone();
 
-        Whitespaces::parse_and_consume(code, &mut vec![]);
+        Whitespaces::diag_and_consume(code, recognized);
         let mut iter = code.iter();
 
         let (i, char) = iter.next()?;
@@ -27,7 +26,7 @@ impl<'s> DiagParse<'s> for Number<'s> {
             }
             i
         } else {
-            diags.push((i, NumberDiag::StartsWithNumber));
+            diags.extend_one((i, NumberDiag::StartsWithNumber));
             return None;
         };
 
@@ -42,7 +41,7 @@ impl<'s> DiagParse<'s> for Number<'s> {
                     }
                     continue;
                 }
-                diags.push((i, NumberDiag::MustBeNumber));
+                diags.extend_one((i, NumberDiag::MustBeNumber));
                 return None;
             }
             None
@@ -51,6 +50,8 @@ impl<'s> DiagParse<'s> for Number<'s> {
         Some(Self(Slice::new(start..=end, code)))
     }
 }
+
+impl<'s> DiagParse<'s> for Number<'s> {}
 
 #[test]
 fn parse() {
@@ -74,7 +75,7 @@ fn parse() {
     check_none::<Number>("abc123");
 }
 
-#[derive(PartialEq, Debug, Diagn)]
+#[derive(PartialEq, Debug, Diagn, Clone)]
 #[name("Name")]
 pub enum NumberDiag {
     #[diagn_expect("начинатся на [0-9]")]

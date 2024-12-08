@@ -7,11 +7,11 @@ use std::{
 use super::{DiagParse, Diags};
 
 #[derive(Default)]
-pub struct Recognized {
-    cache: HashMap<u64, Box<dyn AnyParse>>,
+pub struct Recognized<'s> {
+    cache: HashMap<u64, CacheItems<'s>>,
 }
 
-impl Recognized {
+impl Recognized<'s> {
     pub fn get<T: AnyParse + 'static + Clone>(&self) -> Option<T> {
         self.cache
             .get(&Self::make_key::<T>())

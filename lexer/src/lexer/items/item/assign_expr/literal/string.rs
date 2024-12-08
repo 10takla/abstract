@@ -2,16 +2,15 @@ use crate::{
     lexer::{
         check, check_diag, check_none, items::shared::whitespaces::Whitespaces, Code, DiagParse,
         Diags, Slice,
-    },
-    Slicable,
+    }, Parse, Recognized, Slicable
 };
 use macros::{Diagn, Slicable};
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq, Slicable)]
+#[derive(Debug, PartialEq, Slicable, Clone)]
 pub struct String<'s>(pub Slice<'s>);
 
-#[derive(PartialEq, Debug, Diagn)]
+#[derive(PartialEq, Debug, Diagn, Clone)]
 #[name("String")]
 pub enum StringDiag {
     #[diagn_expect("начинаться на [\"]")]
@@ -34,18 +33,18 @@ impl Display for StringDiag {
     }
 }
 
-impl<'s> DiagParse<'s> for String<'s> {
+impl<'s> Parse<'s> for String<'s> {
     type Diag = StringDiag;
 
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>, recognized: &mut Recognized<'s>) -> Option<Self> {
         let code = &mut code.clone();
 
-        Whitespaces::parse_and_consume(code, &mut vec![]);
+        Whitespaces::diag_and_consume(code, recognized);
         let mut iter = code.iter();
 
         let (i, char) = iter.next()?;
         let start = (char == '"').then_some(i).or_else(|| {
-            diags.push((i, StringDiag::StartsWithQuote));
+            diags.extend_one((i, StringDiag::StartsWithQuote));
             None
         })?;
 
@@ -54,10 +53,13 @@ impl<'s> DiagParse<'s> for String<'s> {
                 return Some(Self(Slice::new(start..=i, code)));
             }
         }
-        diags.push((iter.last().unwrap().0, StringDiag::EndsWithQuote));
+        diags.extend_one((iter.last().unwrap().0, StringDiag::EndsWithQuote));
         None
     }
 }
+
+
+impl<'s> DiagParse<'s> for String<'s> {}
 
 #[test]
 fn parse() {

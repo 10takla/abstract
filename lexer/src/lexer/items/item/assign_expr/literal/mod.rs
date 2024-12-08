@@ -3,9 +3,9 @@ pub mod string;
 
 use crate::{
     lexer::{check, check_diag, check_none, Code, DiagParse, Diags, Slicable, Slice},
-    parse_variants,
+    parse_variants, Parse, Recognized,
 };
-use macros::Slicable;
+use macros::{Slicable};
 use number::{Number, NumberDiag};
 use std::{fmt::Display, ops::RangeInclusive};
 use string::{String, StringDiag};
@@ -23,40 +23,46 @@ pub enum LiteralType {
     String,
 }
 
-impl<'s> Literal<'s> {
-    pub fn new(type_: LiteralType, slice: RangeInclusive<usize>, code: &Code<'s>) -> Self {
-        Self {
-            type_,
-            slice: Slice::new(slice, code),
-        }
-    }
-}
-
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum LiteralDiag {
     Number(NumberDiag),
     String(StringDiag),
 }
 
-impl<'s> DiagParse<'s> for Literal<'s> {
+impl<'s> Parse<'s> for Literal<'s> {
     type Diag = LiteralDiag;
 
-    fn parse(code: &Code<'s>, diags: &mut Diags<Self::Diag>) -> Option<Self> {
+    fn parse(
+        code: &Code<'s>,
+        diags: &mut Diags<Self::Diag>,
+        recognized: &mut Recognized<'s>,
+    ) -> Option<Self> {
         parse_variants!(
             diag diags
-            Number::diag(code)
+            Number::diag(code, recognized)
                 .map(|v| Self {
                     type_: LiteralType::Number,
                     slice: v.0,
                 }),
             diag: Number;
-            String::diag(code)
+            String::diag(code, recognized)
                 .map(|v| Self {
                     type_: LiteralType::String,
                     slice: v.0,
                 }),
             diag: String
         )
+    }
+}
+
+impl<'s> DiagParse<'s> for Literal<'s> {}
+
+impl<'s> Literal<'s> {
+    pub fn new(type_: LiteralType, slice: RangeInclusive<usize>, code: &Code<'s>) -> Self {
+        Self {
+            type_,
+            slice: Slice::new(slice, code),
+        }
     }
 }
 

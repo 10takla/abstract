@@ -4,8 +4,9 @@ pub mod ident;
 
 use super::shared::distribution::{self, DistributionDiag};
 use crate::{
-    lexer::{check, check_diag, check_none, DiagParse, Diags, Slicable},
-    Code, Diagn,
+    items::Items,
+    lexer::{check, check_diag, check_none, DiagParse, Diags, SelectionParse, Slicable},
+    Code, Diagn, Parse,
 };
 use assign_expr::{
     assign::{
@@ -18,21 +19,24 @@ use assign_expr::{
 };
 use block::{
     distruct::{
+        call::{self, CallBlockDistructDiag},
         init::InitBlockDistructDiag,
-        named::{self, CallBlockDistructDiag},
-        DistructDiag,
+        BlockDistructDiag,
     },
     init::{
         named::NamedBlockDiag,
         unnamed::{self, UnnamedBlockDiag},
-        InitDiag,
+        InitBlockDiag,
     },
     Block, BlockDiag,
 };
 use colored::Colorize;
 use ident::{Ident, IdentDiag};
 use macros::Parse;
-use std::fmt::{format, Debug, Display};
+use std::{
+    fmt::{format, Debug, Display},
+    hash::DefaultHasher,
+};
 use std_reset::prelude::Display;
 
 #[derive(Debug, PartialEq, Parse, Hash, Eq, Clone)]
@@ -42,6 +46,14 @@ pub enum Item<'s> {
     AssignExpr(AssignExpr<'s>),
     Ident(Ident<'s>),
     Literal(Literal<'s>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ItemDiag {
+    Block(BlockDiag),
+    AssignExpr(AssignExprDiag),
+    Ident(IdentDiag),
+    Literal(LiteralDiag),
 }
 
 #[test]
@@ -56,14 +68,6 @@ fn parse() {
 
     // errors
     check_none::<Item>("  ");
-}
-
-#[derive(PartialEq, Debug)]
-pub enum ItemDiag {
-    Block(BlockDiag),
-    AssignExpr(AssignExprDiag),
-    Ident(IdentDiag),
-    Literal(LiteralDiag),
 }
 
 impl Diagn for AssignAndDiag {
@@ -131,7 +135,7 @@ impl Diagn for ItemDiag {
         match self {
             Self::Block(block) => match block {
                 BlockDiag::Distruct(distruct) => match distruct {
-                    DistructDiag::Call(call) => match call {
+                    BlockDistructDiag::Call(call) => match call {
                         CallBlockDistructDiag::Name(name) => {
                             name.for_construct(code, pos).to_string()
                         }
@@ -139,7 +143,7 @@ impl Diagn for ItemDiag {
                             distribution.for_construct(code, pos).to_string()
                         }
                     },
-                    DistructDiag::Init(init) => match init {
+                    BlockDistructDiag::Init(init) => match init {
                         InitBlockDistructDiag::Distribution(distribution) => {
                             distribution.for_construct(code, pos).to_string()
                         }
@@ -149,8 +153,8 @@ impl Diagn for ItemDiag {
                     },
                 },
                 BlockDiag::Init(init) => match init {
-                    InitDiag::Unnamed(unnamed) => unnamed.for_construct(code, pos).to_string(),
-                    InitDiag::Named(named) => named.for_construct(code, pos).to_string(),
+                    InitBlockDiag::Unnamed(unnamed) => unnamed.for_construct(code, pos).to_string(),
+                    InitBlockDiag::Named(named) => named.for_construct(code, pos).to_string(),
                 },
             },
             Self::AssignExpr(assign_expr) => match assign_expr {
@@ -168,12 +172,10 @@ impl Diagn for ItemDiag {
 #[test]
 fn diag() {
     let code = &Code::new("  43c");
-    Item::diag(code)
-        .unwrap_err()
-        .into_iter()
-        .for_each(|(i, v)| {
-            println!("{:?} {}", &v, v.expect(code, i));
-        });
+    let diag = Item::diag(code, &mut Default::default()).unwrap_err();
+    diag.iter().for_each(|v| {
+        println!("{:?} {}", &v, v.expect(code, diag.pos.unwrap()));
+    });
 
     // check_diag::<ItemDiag, Item>(
     //     "  43c",
@@ -202,6 +204,14 @@ fn diag() {
     // );
 }
 
+#[test]
+#[ignore]
+fn recognize() {
+    let mut t = Default::default();
+    Item::parse(&"a {".into(), &mut t, &mut Default::default());
+    dbg!(t);
+}
+
 trait Tmp {
     fn tmp<'a>(&'a self, memo: &mut Vec<&'a dyn Terminal>) {}
 }
@@ -226,7 +236,7 @@ impl Tmp for BlockDiag {
     }
 }
 
-impl Tmp for DistructDiag {
+impl Tmp for BlockDistructDiag {
     fn tmp<'a>(&'a self, memo: &mut Vec<&'a dyn Terminal>) {
         match self {
             Self::Init(v) => v.tmp(memo),
@@ -251,7 +261,7 @@ impl Tmp for CallBlockDistructDiag {
     }
 }
 
-impl Tmp for InitDiag {
+impl Tmp for InitBlockDiag {
     fn tmp<'a>(&'a self, memo: &mut Vec<&'a dyn Terminal>) {
         match self {
             Self::Named(v) => v.tmp(memo),
@@ -385,12 +395,13 @@ impl Terminal for AssignDiag {
 
 #[test]
 fn dota() {
-    let diags = Item::diag(&Code::new(" 43c")).unwrap_err();
+    let diags = Item::diag(&Code::new(" 43c"), &mut Default::default()).unwrap_err();
     let mut memo = vec![];
-    for (i, diag) in diags.iter() {
+    for diag in diags.iter() {
         diag.tmp(&mut memo);
     }
-    dbg!(memo.into_iter().map(|v| {
-        format!("{} {:?}", v.get_info(), v)
-    }).collect::<Vec<_>>());
+    dbg!(memo
+        .into_iter()
+        .map(|v| { format!("{} {:?}", v.get_info(), v) })
+        .collect::<Vec<_>>());
 }

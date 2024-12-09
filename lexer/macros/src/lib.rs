@@ -345,3 +345,9 @@ pub fn derive_rec(input: TokenStream) -> TokenStream {
     }.into()
 }
 
+#[proc_macro_attribute]
+pub fn test_with_sub(input: TokenStream, annoted: TokenStream) -> TokenStream {
+    quote! {
+
+    }.into()
+}

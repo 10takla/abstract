@@ -1,19 +1,6 @@
-use lexer::{
-    items::{
-        item::{
-            assign_expr::{AssignExpr, AssignExprType},
-            block::{
-                distruct::BlockDistruct,
-                init::{self, unnamed::UnnamedBlock, InitBlock},
-                Block,
-            },
-            Item,
-        },
-        Items,
-    },
-    Code, DiagParse, Diagn, Parse, Slicable,
-};
+
 use std::{fmt::Debug, iter::Enumerate, str::Lines, sync::RwLock};
+use lexer::{lexer2::{Item, Slicable}, parse};
 use tower_lsp::{jsonrpc::Result, lsp_types::*, Client, LanguageServer, LspService, Server};
 
 #[tokio::main]
@@ -153,7 +140,7 @@ impl Backend {
         let Some(text) = self.text.read().unwrap().clone() else {
             return tokens;
         };
-        let (items, diags) = Items::analyz(&text);
+        let (items, diags) = parse(&text);
 
         let token_type = {
             let Some(legend) = self.legend.read().unwrap().clone() else {
@@ -179,13 +166,13 @@ impl Backend {
             .cloned()
             .map(|diag| Diagnostic {
                 range: Range {
-                    start: Position::new(0, diag.pos.unwrap() as u32),
-                    end: Position::new(0, diag.pos.unwrap() as u32 + 1),
+                    start: Position::new(0, *diag.slice.start() as u32),
+                    end: Position::new(0, *diag.slice.end() as u32),
                 },
                 severity: Some(DiagnosticSeverity::ERROR),
                 code: None,
                 source: Some("abstract".to_string()),
-                message: format!("Ошибка парсера: {}", diag.expect(&Code::new(&text), diags.pos.unwrap())),
+                message: format!("Ошибка парсера: {}", diag),
                 ..Default::default()
             })
             .collect::<Vec<_>>();
@@ -202,7 +189,7 @@ impl Backend {
     }
 }
 
-fn tokenize<'a, T: Iterator<Item = &'a Item<'a>> + Debug>(
+fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
     tokens: &mut Vec<SemanticToken>,
     items: &mut T,
     lines: &mut impl Iterator<Item = (usize, &'a str)>,
@@ -256,7 +243,7 @@ fn tokenize<'a, T: Iterator<Item = &'a Item<'a>> + Debug>(
     let (mut last_start, mut last_line, mut len) = (None, 0, 0);
     'l: while let Some(item) = items.next() {
         let [start, end] = (|| {
-            let v = item.get_slice();
+            let v = item.slice();
             [*v.start(), *v.end()]
         })();
         while let Some(&(i, line)) = lines.peek() {
@@ -335,7 +322,7 @@ fn tokenize_test() {
 
             tokenize(
                 &mut tokens,
-                &mut Items::analyz(code).0.iter(),
+                &mut parse(code).0.iter(),
                 &mut lines,
                 &token_type,
             );

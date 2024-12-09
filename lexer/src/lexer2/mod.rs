@@ -22,7 +22,10 @@
 //! Единая структура для всех типов кеширования, основана на максимально сложном кеше - на кеше `Construct`. То есть это список, который содержит последовательностей элементов
 //!
 
+mod test;
+
 use colored::Colorize;
+use paste::paste;
 use regex::Regex;
 use regex_automata::{
     dfa::{dense::DFA, Automaton},
@@ -44,7 +47,6 @@ use std::{
     vec::IntoIter,
 };
 use std_reset::prelude::Deref;
-
 #[derive(Clone, Debug)]
 pub struct ParseArgs {
     code: Code,
@@ -55,17 +57,21 @@ impl ParseArgs {
     fn new(source: &str) -> Self {
         Self {
             code: Code {
-                source: source.chars().enumerate().collect(),
+                source: S {
+                    real_source: source.into(),
+                    source: Rc::new(source.chars().enumerate().collect()),
+                },
                 cursor: Default::default(),
             },
             c_a_d: Default::default(),
         }
     }
 }
+type Source = Rc<Vec<(usize, char)>>;
 
 #[derive(Clone, Debug)]
 struct Code {
-    source: Vec<(usize, char)>,
+    source: S,
     cursor: Pos,
 }
 
@@ -75,9 +81,9 @@ impl Code {
     }
     fn t(&self) -> std::string::String {
         self.source
-            .clone()
+            .as_ref()
             .into_iter()
-            .skip_while(|&(i, _)| i < self.cursor)
+            .skip_while(|&&(i, _)| i < self.cursor)
             .map(|(_, v)| v)
             .collect()
     }
@@ -88,13 +94,30 @@ impl Code {
         self.source[self.cursor..].into_iter()
     }
 }
+
 type Pos = usize;
+
+#[derive(Clone, Debug, Deref)]
+pub struct S {
+    pub real_source: std::string::String,
+    #[deref]
+    source: Source,
+}
+
+// impl S {
+//     fn new(source: Source) -> Self {
+//         Self {
+//             real_source: source.clone().iter().map(|(_, v)| v).collect(),
+//             source,
+//         }
+//     }
+// }
 
 #[derive(Clone, Default, Debug)]
 pub struct CacheAndDiags {
     cursor: Option<Pos>,
     cache: Cache,
-    pub errors: Vec<Error_>,
+    pub errors: Vec<Diag>,
     warnings: PosS<Vec<Construct>>,
 }
 
@@ -102,7 +125,7 @@ pub struct CacheAndDiags {
 struct Cache {
     // записываем только в const_item
     pass: Vec<PassList>,
-    fails: HashMap<(Construct, Pos), Error_>,
+    fails: HashMap<(Construct, Pos), Diag>,
 }
 
 #[derive(Clone, Default, Debug, Deref)]
@@ -124,7 +147,83 @@ impl PassList {
     }
 }
 
-pub type Error_ = (Slice, Construct);
+#[derive(Clone, Debug, Deref)]
+pub struct Diag {
+    #[deref]
+    pub slice: Slice,
+    pub source: S,
+    pub error: ErrorType,
+}
+
+impl std::fmt::Display for Diag {
+    fn fmt(&self, f_: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Diag {
+            source: S {
+                real_source: source,
+                ..
+            },
+            slice,
+            error,
+        } = self;
+        let get_line = |pos| {
+            let mut acc = 0;
+            source
+                .split_inclusive('\n')
+                .enumerate()
+                .find_map(|(i, str)| {
+                    acc += str.chars().count();
+                    (pos < acc).then_some(i + 1)
+                })
+                .unwrap()
+        };
+        let f = |v: &[char]| v.iter().collect::<std::string::String>();
+
+        let source = source.chars().collect::<Vec<_>>();
+        let (l, b, [min, max]) = ("|".blue(), "...".blue(), [10, 4]);
+
+        let code = format!(
+            "{}{}{}",
+            f(&source[{
+                let i = *slice.start();
+                let r = if i < min { 0 } else { i - min };
+                r..i
+            }]),
+            f(&source[slice.clone()]).underline().red(),
+            f(&source[{
+                let i = slice.end();
+                i + 1..if source.len() - 1 - i < max {
+                    source.len()
+                } else {
+                    i + max
+                }
+            }])
+        );
+        let front_p = 3;
+        let f = " ".repeat(front_p);
+
+        writeln!(
+            f_,
+            "
+{f}{l}
+{}{l} {b}{code}{}
+{f}{l} {}{}
+",
+            format!("{:width$} ", get_line(*slice.end()), width = front_p - 1),
+            if source.len() - 1 - slice.end() < max {
+                Default::default()
+            } else {
+                format!("{b}")
+            },
+            " ".repeat(min + b.chars().count()),
+            format!(
+                "{}-Ожидается {error:?}",
+                "^".repeat(slice.end() - slice.start() + 1),
+            )
+            .red()
+        )
+    }
+}
+
 type Warnings = PosS<Vec<Construct>>;
 
 #[derive(Clone, Debug)]
@@ -142,14 +241,14 @@ impl<T> Default for PosS<Vec<T>> {
     }
 }
 
-type Slice = RangeInclusive<Pos>;
+pub type Slice = RangeInclusive<Pos>;
 
-trait Slicable {
-    fn get_slice(&self) -> Slice;
+pub trait Slicable {
+    fn slice(&self) -> Slice;
 }
 
 trait ParseItem: Sized {
-    type Output = Result<Self, Error_>;
+    type Output = Result<Self, Diag>;
     fn parse(arg: &mut ParseArgs) -> Self::Output;
 }
 
@@ -159,11 +258,11 @@ trait Parse: ParseItem {
 }
 
 macro_rules! tokens {
-    ($cons_item:ident $arg:ident -> $t:literal) => {
-        reg_observe($arg, $t).map(Self).map_err(|v| (v..=v, Construct::$cons_item))
+    ($arg:ident -> $t:literal) => {
+        reg_observe($arg, $t).map(Self).map_err(|v| (v..=v, ErrorType::Reg))
     };
-    ($cons_item:ident $arg:ident -> $($t:tt)*) => {
-        ($($t)*)($arg).map_err(|i| (i, Construct::$cons_item))
+    ($arg:ident -> $($t:tt)*) => {
+        ($($t)*)($arg)
     }
 }
 
@@ -237,13 +336,19 @@ macro_rules! k {
     };
 }
 
+trait CommonTypes: Sized {
+    const CONST: Construct;
+    type Output = Result<Self, Self::Error>;
+    type Error = Diag;
+}
+
 macro_rules! m {
     (
         items {$(
             $items:ident
         )*}
         tokens {$(
-            $init_item:ident $( { $($t:tt)* } )?
+            $init_item:ident $( { $($t:tt)* } )? $( { $($token_error:ident)* } )?
         )+}
         enums {$(
             $enum_name:ident -> $enum_item1:ident $(, $( $enum_item:ident ),+)?
@@ -254,11 +359,16 @@ macro_rules! m {
     ) => {
         $($(
             #[derive(Clone, Debug)]
-            struct $init_item(Slice);
+            pub struct $init_item(Slice);
+            impl CommonTypes for $init_item {
+                const CONST: Construct = Construct::$init_item;
+            }
             impl $init_item {
-                type Output = Result<Self, Error_>;
+                // const CONST: Construct = Construct::$init_item;
+                // type Output = Result<Self, Self::Error>;
+                // type Error = Diag;
 
-                fn recog(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                fn recog(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                     if let Some(e) = Self::check_fail(arg, l) {
                         Err(e)
                     } else {
@@ -270,49 +380,53 @@ macro_rules! m {
                     let when_not_fail = arg.code.cursor;
                     arg.c_a_d.borrow().cache.pass.iter().enumerate().find_map(|(i, k)| {
                         k.items.get(k.index).and_then(|v| {
-                            (v.0 == Construct::$init_item && v.1 == when_not_fail).then(|| {
+                            (v.0 == Self::CONST && v.1 == when_not_fail).then(|| {
                                 let ConstructItem::$init_item(ref v) = v.2 else {unreachable!()};
-                                arg.code.cursor = v.get_slice().end() + 1;
-                                from_cache::<true>("token", Construct::$init_item, l);
+                                arg.code.cursor = v.slice().end() + 1;
+                                from_cache::<true>("token", Self::CONST, l);
                                 (i, v.clone())
                             })
                         })
                     })
                 }
 
-                fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<Error_> {
-                    arg.c_a_d.borrow().cache.fails.get(&(Construct::$init_item, arg.code.cursor)).map(|e| {
-                        from_cache::<false>("token", Construct::$init_item, l);
+                fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<<Self as CommonTypes>::Error> {
+                    arg.c_a_d.borrow().cache.fails.get(&(Self::CONST, arg.code.cursor)).map(|e| {
+                        from_cache::<false>("token", Self::CONST, l);
                         e
                     }).cloned()
                 }
 
-                fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                     Self::consume_parse(arg)
                     .map(|v| {
-                        println!("{}{} {}", tab(l), colored(pass_or_fail::<true>(), l), colored(format!("token {:?} {:?} {}", Construct::$init_item, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        println!("{}{} {}", tab(l), colored(pass_or_fail::<true>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
                         v
                     }).map_err(|e| {
-                        println!("{}{} {}", tab(l), colored(pass_or_fail::<false>(), l), colored(format!("token {:?} {:?} {}", Construct::$init_item, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        println!("{}{} {}", tab(l), colored(pass_or_fail::<false>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
                         e
                     })
                 }
 
-                fn consume_parse(arg: &mut ParseArgs) -> Self::Output {
+                fn consume_parse(arg: &mut ParseArgs) -> <Self as CommonTypes>::Output {
                     Self::after_debug(arg)
                     .map(|v| {
-                        arg.code.cursor = v.get_slice().end() + 1;
+                        arg.code.cursor = v.slice().end() + 1;
                         v
                     })
                 }
 
-                fn after_debug(arg: &ParseArgs) -> Self::Output {
-                    tokens!($init_item arg -> $($t)*)
+                fn after_debug(arg: &ParseArgs) -> <Self as CommonTypes>::Output {
+                    tokens!(arg -> $($t)*).map_err(|(slice, error)| Diag {
+                        slice,
+                        source: arg.code.source.clone(),
+                        error
+                    })
                 }
             }
 
             impl Slicable for $init_item {
-                fn get_slice(&self) -> Slice {
+                fn slice(&self) -> Slice {
                     self.0.clone()
                 }
             }
@@ -320,14 +434,15 @@ macro_rules! m {
 
         $(
             #[derive(Clone, Debug)]
-            enum $enum_name {
+            pub enum $enum_name {
                 $enum_item1($enum_item1),
                 $(  $( $enum_item($enum_item) ),+ )?
             }
-
+            impl CommonTypes for $enum_name {
+                const CONST: Construct = Construct::$enum_name;
+            }
             impl $enum_name {
-                type Output = Result<Self, Error_>;
-                fn recog(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                fn recog(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                     if let Some(e) = Self::check_fail(arg, l) {
                         Err(e)
                     } else {
@@ -339,25 +454,25 @@ macro_rules! m {
                     let when_not_fail = arg.code.cursor;
                     arg.c_a_d.borrow().cache.pass.iter().enumerate().find_map(|(i, k)| {
                         k.items.get(k.index).and_then(|v| {
-                            (v.0 == Construct::$enum_name && v.1 == when_not_fail).then(|| {
+                            (v.0 == Self::CONST && v.1 == when_not_fail).then(|| {
                                 let ConstructItem::$enum_name(ref v) = v.2 else {unreachable!()};
-                                arg.code.cursor = v.get_slice().end() + 1;
-                                from_cache::<true>("enum", Construct::$enum_name, l);
+                                arg.code.cursor = v.slice().end() + 1;
+                                from_cache::<true>("enum", Self::CONST, l);
                                 (i, v.clone())
                             })
                         })
                     })
                 }
 
-                fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<Error_> {
-                    arg.c_a_d.borrow().cache.fails.get(&(Construct::$enum_name, arg.code.cursor)).map(|e| {
-                        from_cache::<false>("enum", Construct::$enum_name, l);
+                fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<<Self as CommonTypes>::Error> {
+                    arg.c_a_d.borrow().cache.fails.get(&(Self::CONST, arg.code.cursor)).map(|e| {
+                        from_cache::<false>("enum", Self::CONST, l);
                         e
                     }).cloned()
                 }
 
-                fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
-                    print_colored(format!("enum {:?} {:?} {}", Construct::$enum_name, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
+                fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                    print_colored(format!("enum {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
                     Self::consume_parse(arg, l).map(|v| {
                         print_colored(pass_or_fail::<true>(), l);
                         v
@@ -368,10 +483,10 @@ macro_rules! m {
                 }
 
                 // есть необходимость в `consume` ведь мы делаем `arg.clone`
-                fn consume_parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                fn consume_parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                     Self::after_debug(arg, l)
                     .map(|v| {
-                        arg.code.cursor = v.get_slice().end() + 1;
+                        arg.code.cursor = v.slice().end() + 1;
                         v
                     })
                 }
@@ -380,14 +495,14 @@ macro_rules! m {
                 // 1. состоит из токенов и конструкций, которые кешируются
                 // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
                 // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
-                fn after_debug(arg: &ParseArgs, l: usize) -> Self::Output {
-                    let mut error: Option<Error_> = None;
+                fn after_debug(arg: &ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                    let mut error: Option<Diag> = None;
 
                     match $enum_item1::recog(&mut arg.clone(), l + 1).map(Self::$enum_item1) {
                         Ok(v) => return Ok(v),
                         Err(e) =>  {
                             match error {
-                                Some(v) if e.0.end() > v.0.end() => error = Some(e.clone()),
+                                Some(v) if e.end() > v.end() => error = Some(e.clone()),
                                 None => error = Some(e.clone()),
                                 _ => {}
                             };
@@ -396,7 +511,7 @@ macro_rules! m {
                                     Ok(v) => return Ok(v),
                                     Err(e) =>  {
                                         match error {
-                                            Some(v) if e.0.end() > v.0.end() => error = Some(e.clone()),
+                                            Some(v) if e.end() > v.end() => error = Some(e.clone()),
                                             None => error = Some(e.clone()),
                                             _ => {}
                                         };
@@ -411,10 +526,10 @@ macro_rules! m {
             }
 
             impl Slicable for $enum_name {
-                fn get_slice(&self) -> Slice {
+                fn slice(&self) -> Slice {
                     match self {
-                        Self::$enum_item1(v) => v.get_slice(),
-                        $(  $( Self::$enum_item(v) => v.get_slice() ),+ )?
+                        Self::$enum_item1(v) => v.slice(),
+                        $(  $( Self::$enum_item(v) => v.slice() ),+ )?
                     }
                 }
             }
@@ -422,11 +537,12 @@ macro_rules! m {
 
         $(
             #[derive(Clone, Debug)]
-            struct $cons_name($( $cons_item ),+);
+            pub struct $cons_name($( $cons_item ),+);
+            impl CommonTypes for $cons_name {
+                const CONST: Construct = Construct::$cons_name;
+            }
             impl $cons_name {
-                type Output = Result<Self, Error_>;
-
-                fn recog(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                fn recog(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                     if let Some(e) = Self::check_fail(arg, l) {
                         Err(e)
                     } else {
@@ -438,26 +554,26 @@ macro_rules! m {
                     let when_not_fail = arg.code.cursor;
                     arg.c_a_d.borrow().cache.pass.iter().enumerate().find_map(|(i, k)| {
                         k.items.get(k.index).and_then(|v| {
-                            (v.0 == Construct::$cons_name && v.1 == when_not_fail).then(|| {
+                            (v.0 == Self::CONST && v.1 == when_not_fail).then(|| {
                                 let ConstructItem::$cons_name(ref v) = v.2 else {unreachable!()};
-                                arg.code.cursor = v.get_slice().end() + 1;
-                                from_cache::<true>("cons", Construct::$cons_name, l);
+                                arg.code.cursor = v.slice().end() + 1;
+                                from_cache::<true>("cons", Self::CONST, l);
                                 (i, v.clone())
                             })
                         })
                     })
                 }
 
-                fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<Error_> {
-                    arg.c_a_d.borrow().cache.fails.get(&(Construct::$cons_name, arg.code.cursor)).map(|e| {
-                        from_cache::<false>("cons", Construct::$cons_name, l);
+                fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<<Self as CommonTypes>::Error> {
+                    arg.c_a_d.borrow().cache.fails.get(&(Self::CONST, arg.code.cursor)).map(|e| {
+                        from_cache::<false>("cons", Self::CONST, l);
                         e
                     }).cloned()
                 }
 
                 // нет необходимости в consume ведь `items` сами это делаеют
-                fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
-                    print_colored(format!("cons {:?} {:?} {}", Construct::$cons_name, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
+                fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                    print_colored(format!("cons {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
                     Self::after_debug(arg, l).map(|v| {
                         print_colored(pass_or_fail::<true>(), l);
                         v
@@ -467,7 +583,7 @@ macro_rules! m {
                     })
                 }
 
-                fn after_debug(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                fn after_debug(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                     let mut cache_if_error: Vec<(Construct, Pos, ConstructItem)> = Default::default();
                     let mut ptr = Default::default();
                     Ok(
@@ -484,9 +600,9 @@ macro_rules! m {
             }
 
             impl Slicable for $cons_name {
-                fn get_slice(&self) -> Slice {
-                    let start = self.0.get_slice();
-                    let end = self.$n.get_slice();
+                fn slice(&self) -> Slice {
+                    let start = self.0.slice();
+                    let end = self.$n.slice();
                     *start.start()..=*end.end()
                 }
             }
@@ -509,10 +625,10 @@ macro_rules! m {
         }
 
         trait ConstructParse<const N: usize> {
-            fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Error_>;
+            fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag>;
         }
         impl<const N: usize> ConstructParse<N> for [Construct; N] {
-            fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Error_> {
+            fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag> {
                 self.iter().map(|item| {
                     match item {
                         $(Construct::$items => {
@@ -533,16 +649,51 @@ macro_rules! m {
         }
 
         impl Slicable for ConstructItem {
-            fn get_slice(&self) -> Slice {
+            fn slice(&self) -> Slice {
                 match self {
-                    $(Self::$items(v) => v.get_slice()),+,
-                    $(Self::$init_item(v) => v.get_slice()),+,
-                    $(Self::$enum_name(v) => v.get_slice()),+,
-                    $(Self::$cons_name(v) => v.get_slice()),*
+                    $(Self::$items(v) => v.slice()),+,
+                    $(Self::$init_item(v) => v.slice()),+,
+                    $(Self::$enum_name(v) => v.slice()),+,
+                    $(Self::$cons_name(v) => v.slice()),*
                 }
             }
         }
+        paste!(
+
+            #[derive(Clone, Debug)]
+            pub enum ErrorType {
+                Reg,
+                LineOver,
+                Any,
+                $($init_item([<$init_item Error>])),+,
+                // $($enum_name([<$enum_name Error>])),+,
+                // $($cons_name([<$cons_name Error>])),*
+
+
+                // Ident(IdentError),
+                // String(StringError),
+            }
+            $(
+                m!(@errors $init_item $($($token_error)*)?);
+            )+
+        );
     };
+    (@errors $init_item:ident $($token_error:ident)+) => {
+        paste!{
+            #[derive(Clone, Debug)]
+            pub enum [<$init_item Error>] {
+                $($token_error),*
+            }
+        }
+    };
+    (@errors $init_item:ident) => {
+        paste!{
+            #[derive(Clone, Debug)]
+            pub enum [<$init_item Error>] {
+                Some
+            }
+        }
+    }
 }
 
 fn from_cache<const PASS: bool>(pref: &str, c: Construct, l: usize) {
@@ -622,24 +773,37 @@ m!(
                 let start_rule = |char: char| char.is_alphabetic() || char == '_';
 
                 let mut iter = arg.code.iter();
-                let &(i, char) = iter.next().ok_or(arg.code.cursor..=arg.code.cursor)?;
-                let start = start_rule(char).then_some(i).ok_or(i..=i)?;
+                let &(i, char) = iter.next().ok_or((arg.code.cursor..=arg.code.cursor, ErrorType::LineOver))?;
+
+                let s = (!start_rule(char)).then_some(i);
+                let mut e = None;
+                let start = i;
 
                 let end = if start == arg.code.source.len() - 1 {
                     start
                 } else {
                     iter.find_map(|&(i, char)| {
                         if start_rule(char) || char.is_digit(10) {
+                            e = Some(i);
                             None
                         } else {
                             Some(i - 1)
                         }
                     })
-                    .unwrap_or(arg.code.source.len() - 1)
+                    .unwrap_or_else(|| {
+                        e = Some(arg.code.source.len() - 1);
+                        arg.code.source.len() - 1
+                    })
                 };
+                match (s, e) {
+                    (Some(s), Some(t)) => return Err((s..=t, ErrorType::Ident(IdentError::StartsWithNumber))),
+                    (Some(s), None) => return Err((s..=s, ErrorType::Ident(IdentError::StartsWithNumber))),
+                    _=>{}
+                }
+
                 Ok(Self(start..=end))
             }
-        }
+        } {StartsWithNumber}
         Number {r"\b\d+\b"}
         String {
             // r#""[^"\\]*(?:\\.[^"\\]*)*""#
@@ -648,8 +812,8 @@ m!(
 
                 let mut iter = arg.code.iter();
 
-                let &(i, char) = iter.next().ok_or(arg.code.cursor..=arg.code.cursor)?;
-                let start = (char == '"').then_some(i).ok_or(i..=i)?;
+                let &(i, char) = iter.next().ok_or((arg.code.cursor..=arg.code.cursor, ErrorType::LineOver))?;
+                let start = (char == '"').then_some(i).ok_or((i..=i, ErrorType::String(StringError::StartsWithQuote)))?;
 
                 for &(i, char) in iter.clone() {
                     if char == '"' {
@@ -657,9 +821,9 @@ m!(
                     }
                 }
                 let tmp = iter.last().unwrap().0;
-                Err(tmp..=tmp)
+                Err((tmp..=tmp, ErrorType::String(StringError::EndsWithQuote)))
             }
-        }
+        } {StartsWithNumber StartsWithQuote EndsWithQuote}
         Distribution {r#"\.\."#}
         OpenBracket {r#"\{"#}
         CloseBracket {r#"}"#}
@@ -718,11 +882,11 @@ impl<'a> From<&'a str> for ParseArgs {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deref)]
 pub struct Items(Vec<Item>);
 impl Slicable for Items {
-    fn get_slice(&self) -> Slice {
-        self.0.last().unwrap().get_slice()
+    fn slice(&self) -> Slice {
+        self.0.last().unwrap().slice()
     }
 }
 
@@ -733,17 +897,19 @@ impl Items {
             if arg.code.cursor == arg.code.source.len() {
                 break;
             }
+            let i = arg.code.cursor;
             match Item::recog(arg, l) {
                 Ok(v) => {
                     // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск, в списке
                     arg.c_a_d.borrow_mut().cache.pass.clear();
+                    arg.c_a_d.borrow_mut().cache.fails.clear();
                     vec.push(v);
                 }
                 Err(e) => {
                     if arg.code.get_current().1 == '}' {
                         break;
                     } else {
-                        arg.code.cursor += 1;
+                        arg.code.cursor += e.end() - i + 1;
                         println!("ERROR {e:?}");
                         arg.c_a_d.borrow_mut().errors.push(e);
                         continue;
@@ -753,111 +919,6 @@ impl Items {
         }
         Self(vec)
     }
-}
-
-mod cache {
-    use super::*;
-    mod pass {
-        use super::*;
-        mod construct {
-            use super::*;
-            /// кеширование головы конструкции. DistructBlock должен парсится 1 раз
-            #[test]
-            fn head() {
-                let mut t = "main..".into();
-                dbg!(CacheConstructHead::recog(&mut t, 0));
-            }
-
-            /// кеширование элементов конструкции. элемнты Var2 должны распознаться только 1 раз до Var2
-            #[test]
-            fn item() {
-                let mut t = "maijn\t=2323 main { }..sdf\nr+=2 t/=4\"sdfsf sdf\"-+=+".into();
-                // let mut t = "mai { }..".into();
-                dbg!(CacheConstructItem::recog(&mut t, 0));
-            }
-
-            /// После Var7 `goods` от Var6 должны расширятся, а не создаватбся новый список
-            #[test]
-            fn list_walkthrough() {
-                let mut t = "main}{ ".into();
-                dbg!(CacheConstructWalkthroug::recog(&mut t, 0));
-            }
-
-            mod with {
-                use super::*;
-                /// Ident должен распознатся 1 раз, как токен без конструкции но часть вариации
-                #[test]
-                fn token() {
-                    let mut t = r#"sdfsdf1."#.into();
-                    // 0 -> NamedBlock -> Ident Block -> Fail -> memeory (pos, item)
-                    // 0 -> Ident -> (x from memeory)
-                    dbg!(CacheToken::recog(&mut t, 0));
-                    dbg!(&t.c_a_d.borrow().cache);
-                }
-
-                #[test]
-                fn enum_() {
-                    let mut t = "+ ".into();
-                    dbg!(CacheEnum::recog(&mut t, 0));
-                }
-            }
-        }
-    }
-    mod fail {
-        use super::*;
-
-        #[test]
-        fn token() {
-            let mut t = "2sdfsfd".into();
-            dbg!(CacheToken::recog(&mut t, 0));
-        }
-
-        #[test]
-        fn enum_() {
-            let mut t = "22".into();
-            dbg!(CacheEnum::recog(&mut t, 0));
-        }
-    }
-}
-
-mod errors {
-    use super::*;
-
-    #[test]
-    fn items() {
-        let mut t = r#"  "sdfsf "#.into();
-        dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
-    }
-}
-
-#[test]
-fn code() {
-    dbg!(Items::recog(
-        &mut r#"
-            afsg__223
-            afsg___
-
-            main {
-                a = 2
-                a += 200
-                a -= 200
-                a *= 200
-                {
-                    {
-                        {
-                            t
-                        }
-                    }
-                }
-            }
-
-            main..
-
-            result = 502
-            "#
-        .into(),
-        0
-    ));
 }
 
 impl<'a> IntoIterator for &'a Code {

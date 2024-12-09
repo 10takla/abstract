@@ -12,9 +12,9 @@
 #![feature(inherent_associated_types)]
 #![feature(internal_output_capture)]
 pub mod lexer2;
-use lexer2::{Error_, Items, ParseArgs};
+use lexer2::{Diag, Items, ParseArgs};
 
-pub fn parse(source: &str) -> (Items, Vec<Error_>) {
+pub fn parse(source: &str) -> (Items, Vec<Diag>) {
     let mut t: ParseArgs = source.into();
     (
         Items::recog(&mut t, 0),

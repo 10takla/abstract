@@ -28,6 +28,7 @@ use regex_automata::{
     dfa::{dense::DFA, Automaton},
     nfa::thompson::NFA,
     util::start::Config,
+    Input,
 };
 use regex_syntax::{ast::parse::Parser as AstParser, Parser};
 use std::{
@@ -45,9 +46,9 @@ use std::{
 use std_reset::prelude::Deref;
 
 #[derive(Clone, Debug)]
-struct ParseArgs {
+pub struct ParseArgs {
     code: Code,
-    c_a_d: Rc<RefCell<CacheAndDiags>>,
+    pub c_a_d: Rc<RefCell<CacheAndDiags>>,
 }
 
 impl ParseArgs {
@@ -67,7 +68,11 @@ struct Code {
     source: Vec<(usize, char)>,
     cursor: Pos,
 }
+
 impl Code {
+    fn get_current(&self) -> (usize, char) {
+        self.source[self.cursor]
+    }
     fn t(&self) -> std::string::String {
         self.source
             .clone()
@@ -76,14 +81,20 @@ impl Code {
             .map(|(_, v)| v)
             .collect()
     }
+    fn len(&self) -> usize {
+        self.source.len()
+    }
+    fn iter(&self) -> std::slice::Iter<'_, (usize, char)> {
+        self.source[self.cursor..].into_iter()
+    }
 }
 type Pos = usize;
 
 #[derive(Clone, Default, Debug)]
-struct CacheAndDiags {
+pub struct CacheAndDiags {
     cursor: Option<Pos>,
     cache: Cache,
-    errors: Vec<Construct>,
+    pub errors: Vec<Error_>,
     warnings: PosS<Vec<Construct>>,
 }
 
@@ -113,7 +124,7 @@ impl PassList {
     }
 }
 
-type Error_ = (usize, Construct);
+pub type Error_ = (Slice, Construct);
 type Warnings = PosS<Vec<Construct>>;
 
 #[derive(Clone, Debug)]
@@ -147,48 +158,92 @@ trait Parse: ParseItem {
     fn check_good_cache(arg: &ParseArgs) -> Option<Self>;
 }
 
-fn reg_parse(pattern: &str, text: &str) -> Result<(), usize> {
-    let dfa = DFA::builder()
-        .build_from_nfa(&NFA::compiler().build(dbg!(pattern)).unwrap())
-        .unwrap();
-    let mut state = dfa.start_state(&Config::new()).unwrap();
-    for (i, b) in text.bytes().enumerate() {
-        let next = dfa.next_state(state, b);
-        if dfa.is_dead_state(next) {
-            return Err(i);
-        }
-        state = next;
+macro_rules! tokens {
+    ($cons_item:ident $arg:ident -> $t:literal) => {
+        reg_observe($arg, $t).map(Self).map_err(|v| (v..=v, Construct::$cons_item))
+    };
+    ($cons_item:ident $arg:ident -> $($t:tt)*) => {
+        ($($t)*)($arg).map_err(|i| (i, Construct::$cons_item))
     }
-
-    println!("Сопоставление прошло без ошибок");
-    Ok(())
 }
 
-macro_rules! tokens {
-    ( $cons_item:ident $arg:ident -> { $t:literal } ) => {
-        {
-            // reg_parse(&format!("^{}", $t), &$arg.code.t()).map_err(|i| {
-            //     (i, Construct::$cons_item)
-            // })?;
-            let re = Regex::new(&format!("^{}", $t)).unwrap();
-            let v = $arg.code.t();
-            let mat = re.find(&v).ok_or(()).map_err(|e| {
-                ($arg.code.cursor, Construct::$cons_item)
-            })?;
-            let start = $arg.code.cursor + mat.start();
-            let end = $arg.code.cursor + mat.end();
-            Ok(Self(start..=end-1))
+/// для диганостики обрабтывает единичные символы, а не связку
+fn reg_observe(arg: &ParseArgs, reg: &str) -> Result<Slice, usize> {
+    Regex::new(&format!("^{reg}"))
+        .unwrap()
+        .find(&arg.code.t())
+        .map(|mat| arg.code.cursor + mat.start()..=arg.code.cursor + mat.end() - 1)
+        .ok_or(arg.code.cursor)
+}
+
+macro_rules! k {
+    (Items $( $ignore:ident )?) => {
+        |arg, l, ptr, cache_if_error: &mut Vec<(Construct, Pos, ConstructItem)>, when_not_fail| {
+            let v =  Items::recog(arg, l + 1);
+            cache_if_error.push((
+                Construct::Items,
+                when_not_fail,
+                ConstructItem::Items(v.clone()),
+            ));
+            $( $ignore::recog(arg, l + 1); )?
+            Ok(v)
         }
     };
-    ($arg:ident -> { $($t:tt)* }) => {
-        $($t)*
-    }
+    ($cons_item:ident $( $ignore:ident )?) => {
+        |arg: &mut ParseArgs, l: usize, ptr: &mut Option<usize>, cache_if_error: &mut Vec<(Construct, Pos, ConstructItem)>, when_not_fail| {
+            let v = match $cons_item::check_pass(arg, l + 1) {
+                Some((i, v)) => {
+                    if let Some(v) = *ptr {
+                        if v != i {
+                            *ptr = None
+                        }
+                    } else {
+                        *ptr = Some(i);
+                    }
+
+                    arg.c_a_d.borrow_mut().cache.pass[i].index += 1;
+                    $( $ignore::recog(arg, l + 1); )?
+                    v
+                }
+                None => {
+                    match $cons_item::parse(arg, l + 1) {
+                        Ok(v) => {
+                            cache_if_error.push((
+                                Construct::$cons_item,
+                                when_not_fail,
+                                ConstructItem::$cons_item(v.clone()),
+                            ));
+                            $( $ignore::recog(arg, l + 1); )?
+                            v
+                        }
+                        Err(e) =>  {
+                            if !cache_if_error.is_empty() {
+                                if let Some(i) = *ptr {
+                                    let v = &mut arg.c_a_d.borrow_mut().cache.pass[i];
+                                    v.index = 0;
+                                    v.items.extend(cache_if_error.clone());
+                                } else {
+                                    arg.c_a_d.borrow_mut().cache.pass.push(PassList::new(cache_if_error.clone()));
+                                }
+                            }
+                            arg.c_a_d.borrow_mut().cache.fails.insert((Construct::$cons_item, when_not_fail), e.clone());
+                            return Err(e);
+                        }
+                    }
+                }
+            };
+            Ok(v)
+        }
+    };
 }
 
 macro_rules! m {
     (
+        items {$(
+            $items:ident
+        )*}
         tokens {$(
-            $init_item:ident $( { $arg:ident -> $($t:tt)* } )?
+            $init_item:ident $( { $($t:tt)* } )?
         )+}
         enums {$(
             $enum_name:ident -> $enum_item1:ident $(, $( $enum_item:ident ),+)?
@@ -218,7 +273,7 @@ macro_rules! m {
                             (v.0 == Construct::$init_item && v.1 == when_not_fail).then(|| {
                                 let ConstructItem::$init_item(ref v) = v.2 else {unreachable!()};
                                 arg.code.cursor = v.get_slice().end() + 1;
-                                print_tab(format!("{:?} token from Cache", Construct::$init_item), l);
+                                from_cache::<true>("token", Construct::$init_item, l);
                                 (i, v.clone())
                             })
                         })
@@ -227,7 +282,7 @@ macro_rules! m {
 
                 fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<Error_> {
                     arg.c_a_d.borrow().cache.fails.get(&(Construct::$init_item, arg.code.cursor)).map(|e| {
-                        print_tab(format!("❌ Fail token {:?} from Cache", Construct::$init_item), l);
+                        from_cache::<false>("token", Construct::$init_item, l);
                         e
                     }).cloned()
                 }
@@ -235,10 +290,10 @@ macro_rules! m {
                 fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
                     Self::consume_parse(arg)
                     .map(|v| {
-                        println!("{}{} {}", tab(l), colored("✅ Pass", l), colored(format!("token {:?} {:?} {}", Construct::$init_item, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        println!("{}{} {}", tab(l), colored(pass_or_fail::<true>(), l), colored(format!("token {:?} {:?} {}", Construct::$init_item, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
                         v
                     }).map_err(|e| {
-                        println!("{}{} {}", tab(l), colored("❌ Fail", l), colored(format!("token {:?} {:?} {}", Construct::$init_item, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        println!("{}{} {}", tab(l), colored(pass_or_fail::<false>(), l), colored(format!("token {:?} {:?} {}", Construct::$init_item, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
                         e
                     })
                 }
@@ -252,9 +307,7 @@ macro_rules! m {
                 }
 
                 fn after_debug(arg: &ParseArgs) -> Self::Output {
-                    {
-                        tokens!($init_item arg -> {$($t)*})
-                    }
+                    tokens!($init_item arg -> $($t)*)
                 }
             }
 
@@ -289,7 +342,7 @@ macro_rules! m {
                             (v.0 == Construct::$enum_name && v.1 == when_not_fail).then(|| {
                                 let ConstructItem::$enum_name(ref v) = v.2 else {unreachable!()};
                                 arg.code.cursor = v.get_slice().end() + 1;
-                                print_tab(format!("enum {:?} from Cache", Construct::$enum_name), l);
+                                from_cache::<true>("enum", Construct::$enum_name, l);
                                 (i, v.clone())
                             })
                         })
@@ -298,7 +351,7 @@ macro_rules! m {
 
                 fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<Error_> {
                     arg.c_a_d.borrow().cache.fails.get(&(Construct::$enum_name, arg.code.cursor)).map(|e| {
-                        print_tab(format!("❌ Fail enum {:?} from Cache", Construct::$enum_name), l);
+                        from_cache::<false>("enum", Construct::$enum_name, l);
                         e
                     }).cloned()
                 }
@@ -306,10 +359,10 @@ macro_rules! m {
                 fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
                     print_colored(format!("enum {:?} {:?} {}", Construct::$enum_name, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
                     Self::consume_parse(arg, l).map(|v| {
-                        print_colored("✅ Pass", l);
+                        print_colored(pass_or_fail::<true>(), l);
                         v
                     }).map_err(|e| {
-                        print_colored("❌ Fail", l);
+                        print_colored(pass_or_fail::<false>(), l);
                         e
                     })
                 }
@@ -328,20 +381,32 @@ macro_rules! m {
                 // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
                 // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
                 fn after_debug(arg: &ParseArgs, l: usize) -> Self::Output {
-                    {
-                        $enum_item1::recog(&mut arg.clone(), l + 1).map(|v| {
-                            // arg.c_a_d.borrow_mut().cache.goods.push(Goods::new(vec![(Construct::$enum_item1,  arg.code.cursor, ConstructItem::$enum_item1(v.clone()))]));
-                            Self::$enum_item1(v)
-                        })
-                        $( $(
-                            .or_else( |_|
-                                $enum_item::recog(&mut arg.clone(), l + 1).map(|v| {
-                                    // arg.c_a_d.borrow_mut().cache.goods.push(Goods::new(vec![(Construct::$enum_item,  arg.code.cursor, ConstructItem::$enum_item(v.clone()))]));
-                                    Self::$enum_item(v)
-                                })
-                            )
-                        )+ )?
+                    let mut error: Option<Error_> = None;
+
+                    match $enum_item1::recog(&mut arg.clone(), l + 1).map(Self::$enum_item1) {
+                        Ok(v) => return Ok(v),
+                        Err(e) =>  {
+                            match error {
+                                Some(v) if e.0.end() > v.0.end() => error = Some(e.clone()),
+                                None => error = Some(e.clone()),
+                                _ => {}
+                            };
+                            $($(
+                                match $enum_item::recog(&mut arg.clone(), l + 1).map(Self::$enum_item) {
+                                    Ok(v) => return Ok(v),
+                                    Err(e) =>  {
+                                        match error {
+                                            Some(v) if e.0.end() > v.0.end() => error = Some(e.clone()),
+                                            None => error = Some(e.clone()),
+                                            _ => {}
+                                        };
+                                    }
+                                }
+                            )+)?
+                        }
                     }
+
+                    Err(error.clone().unwrap())
                 }
             }
 
@@ -363,7 +428,6 @@ macro_rules! m {
 
                 fn recog(arg: &mut ParseArgs, l: usize) -> Self::Output {
                     if let Some(e) = Self::check_fail(arg, l) {
-                        print_tab(format!("❌ Fail cons {:?} from Cache", Construct::$cons_name), l);
                         Err(e)
                     } else {
                         Self::check_pass(arg, l).map(|(_, s)| Ok(s)).unwrap_or_else(|| Self::parse(arg, l))
@@ -377,7 +441,7 @@ macro_rules! m {
                             (v.0 == Construct::$cons_name && v.1 == when_not_fail).then(|| {
                                 let ConstructItem::$cons_name(ref v) = v.2 else {unreachable!()};
                                 arg.code.cursor = v.get_slice().end() + 1;
-                                print_tab(format!("✅ Pass cons {:?} from Cache", Construct::$cons_name), l);
+                                from_cache::<true>("cons", Construct::$cons_name, l);
                                 (i, v.clone())
                             })
                         })
@@ -386,7 +450,7 @@ macro_rules! m {
 
                 fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<Error_> {
                     arg.c_a_d.borrow().cache.fails.get(&(Construct::$cons_name, arg.code.cursor)).map(|e| {
-                        print_tab(format!("❌ Fail token {:?} from Cache", Construct::$cons_name), l);
+                        from_cache::<false>("cons", Construct::$cons_name, l);
                         e
                     }).cloned()
                 }
@@ -395,10 +459,10 @@ macro_rules! m {
                 fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
                     print_colored(format!("cons {:?} {:?} {}", Construct::$cons_name, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
                     Self::after_debug(arg, l).map(|v| {
-                        print_colored("✅ Pass", l);
+                        print_colored(pass_or_fail::<true>(), l);
                         v
                     }).map_err(|e| {
-                        print_colored("❌ Fail", l);
+                        print_colored(pass_or_fail::<false>(), l);
                         e
                     })
                 }
@@ -411,47 +475,7 @@ macro_rules! m {
                             $(
                                 {
                                     let when_not_fail = arg.code.cursor;
-                                    match $cons_item::check_pass(arg, l + 1) {
-                                        Some((i, v)) => {
-                                            if let Some(v) = ptr {
-                                                if v != i {
-                                                    ptr = None
-                                                }
-                                            } else {
-                                                ptr = Some(i);
-                                            }
-
-                                            arg.c_a_d.borrow_mut().cache.pass[i].index += 1;
-                                            $( $ignore::recog(arg, l); )?
-                                            v
-                                        }
-                                        None => {
-                                            match $cons_item::parse(arg, l + 1) {
-                                                Ok(v) => {
-                                                    cache_if_error.push((
-                                                        Construct::$cons_item,
-                                                        when_not_fail,
-                                                        ConstructItem::$cons_item(v.clone()),
-                                                    ));
-                                                    $( $ignore::recog(arg, l); )?
-                                                    v
-                                                }
-                                                Err(e) =>  {
-                                                    if !cache_if_error.is_empty() {
-                                                        if let Some(i) = ptr {
-                                                            let v = &mut arg.c_a_d.borrow_mut().cache.pass[i];
-                                                            v.index = 0;
-                                                            v.items.extend(cache_if_error);
-                                                        } else {
-                                                            arg.c_a_d.borrow_mut().cache.pass.push(PassList::new(cache_if_error));
-                                                        }
-                                                    }
-                                                    arg.c_a_d.borrow_mut().cache.fails.insert((Construct::$cons_item, when_not_fail), e.clone());
-                                                    return Err(e);
-                                                }
-                                            }
-                                        }
-                                    }
+                                    k!($cons_item $( $ignore )?)(arg, l, &mut ptr, &mut cache_if_error, when_not_fail)?
                                 }
                             ),+
                         )
@@ -469,7 +493,8 @@ macro_rules! m {
         )*
 
         #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-        enum Construct {
+        pub enum Construct {
+            $($items),+,
             $($init_item),+,
             $($enum_name),+,
             $($cons_name),*
@@ -477,6 +502,7 @@ macro_rules! m {
 
         #[derive(Clone, Debug)]
         enum ConstructItem {
+            $($items($items)),+,
             $($init_item($init_item)),+,
             $($enum_name($enum_name)),+,
             $($cons_name($cons_name)),*
@@ -489,6 +515,9 @@ macro_rules! m {
             fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Error_> {
                 self.iter().map(|item| {
                     match item {
+                        $(Construct::$items => {
+                            Ok(ConstructItem::$items($items::recog(arg, l)))
+                        }),+,
                         $(Construct::$init_item => {
                             $init_item::recog(arg, l).map(|v| ConstructItem::$init_item(v))
                         }),+,
@@ -506,6 +535,7 @@ macro_rules! m {
         impl Slicable for ConstructItem {
             fn get_slice(&self) -> Slice {
                 match self {
+                    $(Self::$items(v) => v.get_slice()),+,
                     $(Self::$init_item(v) => v.get_slice()),+,
                     $(Self::$enum_name(v) => v.get_slice()),+,
                     $(Self::$cons_name(v) => v.get_slice()),*
@@ -513,6 +543,21 @@ macro_rules! m {
             }
         }
     };
+}
+
+fn from_cache<const PASS: bool>(pref: &str, c: Construct, l: usize) {
+    print_tab(
+        format!("{} {pref} {:?} from Cache", pass_or_fail::<PASS>(), c),
+        l,
+    );
+}
+
+fn pass_or_fail<const PASS: bool>() -> impl Display {
+    if PASS {
+        "✅ Pass"
+    } else {
+        "❌ Fail"
+    }
 }
 
 fn print_colored(t: impl Display, l: usize) {
@@ -562,28 +607,73 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) {
 }
 
 m!(
-    tokens {
-        WhiteSpace {arg -> r" +"}
-        NextLine {arg -> r"\n"}
-        Tab {arg -> r"\t"}
-        Ident {arg -> r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"}
-        Number {arg -> r"\b\d+\b"}
-        String {arg -> r#""[^"\\]*(?:\\.[^"\\]*)*""#}
-        Distribution {arg -> r#"\.\."#}
-        OpenBracket {arg -> r#"\{"#}
-        CloseBracket {arg -> r#"}"#}
-        Eq {arg -> r#"="#}
-        Add {arg -> r#"\+"#}
-        Sub {arg -> r#"-"#}
-        Mul {arg -> r"\*"}
-        Div {arg -> r#"/"#}
+    items {
         Items
+    }
+    tokens {
+        WhiteSpace {r" +"}
+        NextLine {r"\n"}
+        Tab {r"\t"}
+        Ident {
+            // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
+            |arg: &ParseArgs| {
+                let code = &mut arg.code.source.clone();
+
+                let start_rule = |char: char| char.is_alphabetic() || char == '_';
+
+                let mut iter = arg.code.iter();
+                let &(i, char) = iter.next().ok_or(arg.code.cursor..=arg.code.cursor)?;
+                let start = start_rule(char).then_some(i).ok_or(i..=i)?;
+
+                let end = if start == arg.code.source.len() - 1 {
+                    start
+                } else {
+                    iter.find_map(|&(i, char)| {
+                        if start_rule(char) || char.is_digit(10) {
+                            None
+                        } else {
+                            Some(i - 1)
+                        }
+                    })
+                    .unwrap_or(arg.code.source.len() - 1)
+                };
+                Ok(Self(start..=end))
+            }
+        }
+        Number {r"\b\d+\b"}
+        String {
+            // r#""[^"\\]*(?:\\.[^"\\]*)*""#
+            |arg: &ParseArgs| {
+                let code = &mut arg.code.clone();
+
+                let mut iter = arg.code.iter();
+
+                let &(i, char) = iter.next().ok_or(arg.code.cursor..=arg.code.cursor)?;
+                let start = (char == '"').then_some(i).ok_or(i..=i)?;
+
+                for &(i, char) in iter.clone() {
+                    if char == '"' {
+                        return Ok(Self(start..=i));
+                    }
+                }
+                let tmp = iter.last().unwrap().0;
+                Err(tmp..=tmp)
+            }
+        }
+        Distribution {r#"\.\."#}
+        OpenBracket {r#"\{"#}
+        CloseBracket {r#"}"#}
+        Eq {r#"="#}
+        Add {r#"\+"#}
+        Sub {r#"-"#}
+        Mul {r"\*"}
+        Div {r#"/"#}
     }
     enums {
         Item -> AnyBlock, AssignExpr, Literal, Ident, Ignore
         AnyBlock -> NamedDistrBlock, DistrBlock, NamedBlock, Block
-        AssignExpr -> Assign, AssignAnd
-        Literal -> Number, String
+        AssignExpr -> AssignAnd, Assign
+        Literal -> String, Number
 
         Ignore -> WhiteSpace, NextLine, Tab
 
@@ -594,8 +684,6 @@ m!(
         CacheToken -> CommCons1, Ident
         CacheEnum -> Var5, Op
         CacheConstructWalkthroug -> Var6, Var7, Var8
-
-
     }
     constructs {
         NamedDistrBlock -> NamedBlock (Ignore), Distribution [1]
@@ -624,14 +712,14 @@ m!(
     }
 );
 
-impl From<&'static str> for ParseArgs {
-    fn from(value: &'static str) -> Self {
+impl<'a> From<&'a str> for ParseArgs {
+    fn from(value: &'a str) -> Self {
         Self::new(&value)
     }
 }
 
 #[derive(Debug, Clone)]
-struct Items(Vec<Item>);
+pub struct Items(Vec<Item>);
 impl Slicable for Items {
     fn get_slice(&self) -> Slice {
         self.0.last().unwrap().get_slice()
@@ -639,27 +727,31 @@ impl Slicable for Items {
 }
 
 impl Items {
-    type Output = Result<Items, Error_>;
-    pub fn recog(arg: &mut ParseArgs, l: usize) -> Self::Output {
-        Self::parse(arg, l)
-    }
-
-    pub fn check_pass(arg: &mut ParseArgs, l: usize) -> Option<(usize, Self)> {
-        None
-    }
-
-    pub fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
+    pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
         let mut vec = vec![];
         loop {
             if arg.code.cursor == arg.code.source.len() {
                 break;
             }
-            let Ok(v) = Item::recog(arg, l) else { break };
-            // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск, в списке
-            arg.c_a_d.borrow_mut().cache.pass.clear();
-            vec.push(v);
+            match Item::recog(arg, l) {
+                Ok(v) => {
+                    // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск, в списке
+                    arg.c_a_d.borrow_mut().cache.pass.clear();
+                    vec.push(v);
+                }
+                Err(e) => {
+                    if arg.code.get_current().1 == '}' {
+                        break;
+                    } else {
+                        arg.code.cursor += 1;
+                        println!("ERROR {e:?}");
+                        arg.c_a_d.borrow_mut().errors.push(e);
+                        continue;
+                    }
+                }
+            };
         }
-        Ok(Self(vec))
+        Self(vec)
     }
 }
 
@@ -680,6 +772,7 @@ mod cache {
             #[test]
             fn item() {
                 let mut t = "maijn\t=2323 main { }..sdf\nr+=2 t/=4\"sdfsf sdf\"-+=+".into();
+                // let mut t = "mai { }..".into();
                 dbg!(CacheConstructItem::recog(&mut t, 0));
             }
 
@@ -729,9 +822,10 @@ mod cache {
 
 mod errors {
     use super::*;
+
     #[test]
-    fn test() {
-        let mut t = r#"  "sdfs"#.into();
+    fn items() {
+        let mut t = r#"  "sdfsf "#.into();
         dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
     }
 }

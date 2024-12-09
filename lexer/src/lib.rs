@@ -11,10 +11,18 @@
 #![feature(macro_metavar_expr)]
 #![feature(inherent_associated_types)]
 #![feature(internal_output_capture)]
+pub mod lexer2;
+use lexer2::{Error_, Items, ParseArgs};
 
-mod lexer2;
+pub fn parse(source: &str) -> (Items, Vec<Error_>) {
+    let mut t: ParseArgs = source.into();
+    (
+        Items::recog(&mut t, 0),
+        t.c_a_d.clone().borrow().errors.clone(),
+    )
+}
+
 // mod lexer;
-// use items::Items;
 // pub use lexer::*;
 
 // pub fn parse(source: &str) -> Items<'_> {

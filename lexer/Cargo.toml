@@ -11,3 +11,5 @@ paste = "1.0.15"
 regex = "1.11.1"
 regex-syntax = "0.8.5"
 regex-automata ={version = "0.4.9", features = ["nfa-thompson"]}
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"

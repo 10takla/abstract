@@ -10,18 +10,19 @@ import {
 let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext) {
-	const serverPath = context.asAbsolutePath(
-		path.join('..', '..', 'target', 'debug', 'lsp-server')
-	);
-
+	const outputChannel = vscode.window.createOutputChannel('Abstract');
+	outputChannel.show(true);
+	outputChannel.appendLine('Started');
+	
+	const serverPath = process.env.LSP_SERVER_PATH || context.asAbsolutePath(
+        path.join('..', '..', 'target', 'debug', 'lsp-server')
+    );
+	outputChannel.appendLine(serverPath);
+	outputChannel.appendLine(process.cwd());
 	let serverOptions: ServerOptions = {
 		run: { command: serverPath, transport: TransportKind.stdio },
 		debug: { command: serverPath, transport: TransportKind.stdio }
 	};
-
-	const outputChannel = vscode.window.createOutputChannel('Abstract');
-	outputChannel.show(true);
-	outputChannel.appendLine('Started');
 	let clientOptions: LanguageClientOptions = {
 		documentSelector: [{ scheme: 'file', language: "abstract" }],
 		outputChannel: outputChannel,

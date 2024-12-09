@@ -1,4 +1,6 @@
 use super::*;
+use tracing::Level;
+use tracing_subscriber::fmt::format;
 
 mod cache {
     use super::*;
@@ -9,6 +11,7 @@ mod cache {
             /// кеширование головы конструкции. DistructBlock должен парсится 1 раз
             #[test]
             fn head() {
+                setup_tracing();
                 let mut t = "main..".into();
                 dbg!(CacheConstructHead::recog(&mut t, 0));
             }
@@ -16,6 +19,7 @@ mod cache {
             /// кеширование элементов конструкции. элемнты Var2 должны распознаться только 1 раз до Var2
             #[test]
             fn item() {
+                setup_tracing();
                 let mut t = "maijn\t=2323 main { }..sdf\nr+=2 t/=4\"sdfsf sdf\"-+=+".into();
                 // let mut t = "mai { }..".into();
                 dbg!(CacheConstructItem::recog(&mut t, 0));
@@ -24,6 +28,7 @@ mod cache {
             /// После Var7 `goods` от Var6 должны расширятся, а не создаватбся новый список
             #[test]
             fn list_walkthrough() {
+                setup_tracing();
                 let mut t = "main}{ ".into();
                 dbg!(CacheConstructWalkthroug::recog(&mut t, 0));
             }
@@ -33,6 +38,7 @@ mod cache {
                 /// Ident должен распознатся 1 раз, как токен без конструкции но часть вариации
                 #[test]
                 fn token() {
+                    setup_tracing();
                     let mut t = r#"sdfsdf1."#.into();
                     // 0 -> NamedBlock -> Ident Block -> Fail -> memeory (pos, item)
                     // 0 -> Ident -> (x from memeory)
@@ -41,6 +47,7 @@ mod cache {
 
                 #[test]
                 fn enum_() {
+                    setup_tracing();
                     let mut t = "+ ".into();
                     dbg!(CacheEnum::recog(&mut t, 0));
                 }
@@ -49,15 +56,19 @@ mod cache {
     }
     mod fail {
         use super::*;
+        use tracing::instrument;
 
         #[test]
+        #[instrument]
         fn token() {
+            setup_tracing();
             let mut t = "2sdfsfd".into();
             dbg!(CacheToken::recog(&mut t, 0));
         }
 
         #[test]
         fn enum_() {
+            setup_tracing();
             let mut t = "22".into();
             dbg!(CacheEnum::recog(&mut t, 0));
         }
@@ -69,6 +80,7 @@ mod errors {
 
     #[test]
     fn items() {
+        setup_tracing();
         let mut t = r#"  "sdfsf "#.into();
         dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
     }
@@ -76,6 +88,7 @@ mod errors {
 
 #[test]
 fn code() {
+    setup_tracing();
     dbg!(Items::recog(
         &mut r#"
             afsg__223
@@ -102,4 +115,12 @@ fn code() {
         .into(),
         0
     ));
+}
+
+fn setup_tracing() {
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stdout) // Указываем вывод в стандартный вывод
+        .fmt_fields(format::PrettyFields::new()) // Простой и понятный формат полей
+        .event_format(format::Format::default().compact()) // Компактный формат без времени и уровня логирования
+        .init();
 }

@@ -1,0 +1,1 @@
+source lsp-server/run.sh

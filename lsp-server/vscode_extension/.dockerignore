@@ -1,0 +1,7 @@
+**/.dockerignore
+**/.gitignore
+**/Dockerfile*
+**/node_modules
+/out
+/package-lock.json
+/vscode-server/build_and_run.sh

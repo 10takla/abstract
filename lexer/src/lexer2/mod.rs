@@ -50,7 +50,7 @@ use std_reset::prelude::Deref;
 #[derive(Clone, Debug)]
 pub struct ParseArgs {
     code: Code,
-    pub c_a_d: Rc<RefCell<CacheAndDiags>>,
+    pub c_a_d: Arc<RefCell<CacheAndDiags>>,
 }
 
 impl ParseArgs {
@@ -59,7 +59,7 @@ impl ParseArgs {
             code: Code {
                 source: S {
                     real_source: source.into(),
-                    source: Rc::new(source.chars().enumerate().collect()),
+                    source: Arc::new(source.chars().enumerate().collect()),
                 },
                 cursor: Default::default(),
             },
@@ -67,7 +67,7 @@ impl ParseArgs {
         }
     }
 }
-type Source = Rc<Vec<(usize, char)>>;
+type Source = Arc<Vec<(usize, char)>>;
 
 #[derive(Clone, Debug)]
 struct Code {
@@ -259,7 +259,7 @@ trait Parse: ParseItem {
 
 macro_rules! tokens {
     ($arg:ident -> $t:literal) => {
-        reg_observe($arg, $t).map(Self).map_err(|v| (v..=v, ErrorType::Reg))
+        reg_observe($arg, $t).map_err(|v| (v..=v, ErrorType::Reg))
     };
     ($arg:ident -> $($t:tt)*) => {
         ($($t)*)($arg)
@@ -342,6 +342,11 @@ trait CommonTypes: Sized {
     type Error = Diag;
 }
 
+pub struct Token<T> {
+    slice: Slice,
+    type_: T
+}
+
 macro_rules! m {
     (
         items {$(
@@ -400,10 +405,10 @@ macro_rules! m {
                 fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                     Self::consume_parse(arg)
                     .map(|v| {
-                        println!("{}{} {}", tab(l), colored(pass_or_fail::<true>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        // println!("{}{} {}", tab(l), colored(pass_or_fail::<true>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
                         v
                     }).map_err(|e| {
-                        println!("{}{} {}", tab(l), colored(pass_or_fail::<false>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        // println!("{}{} {}", tab(l), colored(pass_or_fail::<false>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
                         e
                     })
                 }
@@ -417,7 +422,7 @@ macro_rules! m {
                 }
 
                 fn after_debug(arg: &ParseArgs) -> <Self as CommonTypes>::Output {
-                    tokens!(arg -> $($t)*).map_err(|(slice, error)| Diag {
+                    tokens!(arg -> $($t)*).map(Self).map_err(|(slice, error)| Diag {
                         slice,
                         source: arg.code.source.clone(),
                         error
@@ -716,7 +721,7 @@ fn print_colored(t: impl Display, l: usize) {
     let s = 1.0; // Макс насыщенность
     let v = 1.0;
     let (r, g, b) = hsv_to_rgb(h, s, v);
-    println!("{}{}", tab(l), colored(t, l));
+    // println!("{}{}", tab(l), colored(t, l));
 }
 
 fn colored(t: impl Display, l: usize) -> std::string::String {
@@ -728,7 +733,7 @@ fn colored(t: impl Display, l: usize) -> std::string::String {
 }
 
 fn print_tab(t: impl Display, l: usize) {
-    println!("{}{t}", tab(l));
+    // println!("{}{t}", tab(l));
 }
 
 fn tab(l: usize) -> std::string::String {
@@ -801,7 +806,7 @@ m!(
                     _=>{}
                 }
 
-                Ok(Self(start..=end))
+                Ok(start..=end)
             }
         } {StartsWithNumber}
         Number {r"\b\d+\b"}
@@ -817,7 +822,7 @@ m!(
 
                 for &(i, char) in iter.clone() {
                     if char == '"' {
-                        return Ok(Self(start..=i));
+                        return Ok(start..=i);
                     }
                 }
                 let tmp = iter.last().unwrap().0;
@@ -910,7 +915,7 @@ impl Items {
                         break;
                     } else {
                         arg.code.cursor += e.end() - i + 1;
-                        println!("ERROR {e:?}");
+                        // println!("ERROR {e:?}");
                         arg.c_a_d.borrow_mut().errors.push(e);
                         continue;
                     }

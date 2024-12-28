@@ -34,12 +34,12 @@ struct Backend {
     version: AtomicUsize,
 }
 
-const NAMED_BLOCK: SemanticTokenType = SemanticTokenType::new("namedBlock");
+const BLOCK: SemanticTokenType = SemanticTokenType::new("namedBlock");
 const TOKENS: LazyLock<Vec<SemanticTokenType>> = LazyLock::new(|| {
     vec![
         SemanticTokenType::VARIABLE,
         SemanticTokenType::FUNCTION,
-        NAMED_BLOCK,
+        BLOCK,
     ]
 });
 
@@ -213,56 +213,57 @@ fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
     token_type: &impl Fn(SemanticTokenType) -> u32,
 ) {
     let glen = |line: &str| line.chars().count();
-    let get_token = |delta_line, delta_start, length, item: &Item| {
-        let token_type = match item {
-            Item::Ident(_) => token_type(SemanticTokenType::VARIABLE),
-            Item::AnyBlock(block) => match block {
-                AnyBlock::NamedBlock(name_block) => {
-                    // tokenize(
-                    //     tokens,
-                    //     &mut name_block.block.items.iter(),
-                    //     lines,
-                    //     token_type,
-                    // );
-                    token_type(SemanticTokenType::FUNCTION)
-                }
-                AnyBlock::Block(unnamed_block) => {
-                    // tokenize(tokens, &unnamed_block.items, lines, token_type);
-                    token_type(SemanticTokenType::FUNCTION)
-                }
-                AnyBlock::NamedDistrBlock(init) => {
-                    // tokenize(tokens, &init.named_block.block.items, lines, token_type);
-                    token_type(NAMED_BLOCK)
-                }
-                AnyBlock::DistrBlock(_) => token_type(SemanticTokenType::FUNCTION),
-            },
-            Item::AssignExpr(assign_expr) => match assign_expr {
-                AssignExpr::Assign(_) => token_type(SemanticTokenType::FUNCTION),
-                AssignExpr::AssignAnd(_) => token_type(SemanticTokenType::FUNCTION),
-            },
-            _ => 0,
-        };
-
-        SemanticToken {
-            delta_line: delta_line as u32,
-            delta_start: delta_start as u32,
-            length: length as u32,
-            token_type,
-            token_modifiers_bitset: 0,
-        }
-    };
 
     let mut lines = lines.peekable();
     let (mut last_start, mut last_line, mut len) = (None, 0, 0);
     'l: while let Some(item) = items.next() {
+        let mut get_token = |delta_line, delta_start, length| {
+            let token_type = match item {
+                Item::Ident(_) => token_type(SemanticTokenType::VARIABLE),
+                Item::AnyBlock(block) => match block {
+                    AnyBlock::NamedBlock(name_block) => {
+                        // tokenize(
+                        //     tokens,
+                        //     &mut name_block.block.items.iter(),
+                        //     lines,
+                        //     token_type,
+                        // );
+                        token_type(BLOCK)
+                    }
+                    AnyBlock::Block(unnamed_block) => {
+                        // tokenize(tokens, &unnamed_block.items, lines, token_type);
+                        token_type(BLOCK)
+                    }
+                    AnyBlock::NamedDistrBlock(init) => {
+                        // tokenize(tokens, &init.named_block.block.items, lines, token_type);
+                        token_type(BLOCK)
+                    }
+                    AnyBlock::DistrBlock(_) => token_type(BLOCK),
+                },
+                Item::AssignExpr(assign_expr) => match assign_expr {
+                    AssignExpr::Assign(_) => token_type(SemanticTokenType::FUNCTION),
+                    AssignExpr::AssignAnd(_) => token_type(SemanticTokenType::FUNCTION),
+                },
+                _ => 0,
+            };
+            tokens.push(SemanticToken {
+                delta_line: delta_line as u32,
+                delta_start: delta_start as u32,
+                length: length as u32,
+                token_type,
+                token_modifiers_bitset: 0,
+            });
+        };
+
         if let Item::Ignore(_) = item {
             continue;
         }
 
-        let [start, end] = (|| {
+        let [start, end] = {
             let v = item.slice();
             [*v.start(), *v.end()]
-        })();
+        };
+
         while let Some(&(i, line)) = lines.peek() {
             let tmp_len = len + glen(line);
             if start < tmp_len {
@@ -270,14 +271,12 @@ fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
                 let delta_start = start - last_start.unwrap_or(len);
 
                 if end < tmp_len {
-                    let length = end - start + 1;
-
-                    tokens.push(get_token(delta_line, delta_start, length, item));
+                    get_token(delta_line, delta_start, end - start + 1);
                     last_start = Some(start);
                     last_line = i;
                     continue 'l;
                 } else {
-                    tokens.push(get_token(delta_line, delta_start, tmp_len - start, item));
+                    get_token(delta_line, delta_start, tmp_len - start);
                     lines.next().unwrap();
                     last_start = Some(start);
                     last_line = i;
@@ -288,12 +287,12 @@ fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
                         let tmp_len = len + line_len;
                         let delta_line = i - last_line;
                         if end < tmp_len {
-                            tokens.push(get_token(delta_line, 0, end - len + 1, item));
+                            get_token(delta_line, 0, end - len + 1);
                             last_start = Some(len);
                             last_line = i;
                             continue 'l;
                         } else {
-                            tokens.push(get_token(delta_line, 0, line_len, item));
+                            get_token(delta_line, 0, line_len);
                             last_line = i;
                             lines.next().unwrap();
                             len = tmp_len;
@@ -310,7 +309,7 @@ fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
 }
 
 #[test]
-fn tokenize_test() {
+fn tokenize_() {
     let fast = |[delta_line, delta_start, length]: [u32; 3], token_type| SemanticToken {
         delta_line,
         delta_start,
@@ -375,24 +374,24 @@ fn tokenize_test() {
         ],
     );
 
-    all_types(SemanticTokenType::FUNCTION)("main {}", vec![[0, 0, 7]]);
-    all_types(SemanticTokenType::FUNCTION)("main {\n}", vec![[0, 0, 7], [1, 0, 1]]);
-    all_types(SemanticTokenType::FUNCTION)("main {\n\n}", vec![[0, 0, 7], [1, 0, 1], [1, 0, 1]]);
+    all_types(BLOCK)("main {}", vec![[0, 0, 7]]);
+    all_types(BLOCK)("main {\n}", vec![[0, 0, 7], [1, 0, 1]]);
+    all_types(BLOCK)("main {\n\n}", vec![[0, 0, 7], [1, 0, 1], [1, 0, 1]]);
 
     any_types(
         "main {\n} a",
         vec![
-            fast([0, 0, 7], SemanticTokenType::FUNCTION),
-            fast([1, 0, 1], SemanticTokenType::FUNCTION),
+            fast([0, 0, 7], BLOCK),
+            fast([1, 0, 1], BLOCK),
             fast([0, 2, 1], SemanticTokenType::VARIABLE),
         ],
     );
     any_types(
         "main {\n\n} a",
         vec![
-            fast([0, 0, 7], SemanticTokenType::FUNCTION),
-            fast([1, 0, 1], SemanticTokenType::FUNCTION),
-            fast([1, 0, 1], SemanticTokenType::FUNCTION),
+            fast([0, 0, 7], BLOCK),
+            fast([1, 0, 1], BLOCK),
+            fast([1, 0, 1], BLOCK),
             fast([0, 2, 1], SemanticTokenType::VARIABLE),
         ],
     );

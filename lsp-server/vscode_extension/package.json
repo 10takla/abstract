@@ -22,9 +22,7 @@
     "configurationDefaults": {
       "editor.semanticHighlighting.enabled": true,
       "editor.semanticTokenColorCustomizations": {
-        "rules": {
-          "function": "#00ff59"
-        }
+        "rules": {}
       }
     },
     "languages": [

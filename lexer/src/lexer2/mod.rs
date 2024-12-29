@@ -543,7 +543,7 @@ macro_rules! m {
 
         $(
             #[derive(Clone, Debug)]
-            pub struct $cons_name($( $cons_item ),+);
+            pub struct $cons_name($( pub $cons_item ),+);
             impl CommonTypes for $cons_name {
                 const CONST: Construct = Construct::$cons_name;
             }

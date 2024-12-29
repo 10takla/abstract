@@ -1,6 +1,8 @@
 {
     "semanticTokenColors": {
-        "variable": "#ff1493",
-        "namedBlock": "#ffff00"
+        "variable": "#9876aa",
+        "namedBlock": "#ffff00",
+        "string": "#6a8759",
+        "number": "#6897bb"
     }
 }

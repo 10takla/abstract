@@ -1,11 +1,12 @@
 use lexer::{
-    lexer2::{AnyBlock, AssignExpr, Block, Item, Slicable},
+    lexer2::{
+        AnyBlock, AssignExpr, Block, Item, Items, Literal, NamedBlock, NamedDistrBlock, Slicable,
+    },
     parse,
 };
 use std::{
-    fmt::{format, Debug},
-    iter::Enumerate,
-    str::Lines,
+    fmt::Debug,
+    iter::{empty, once},
     sync::{
         atomic::{AtomicUsize, Ordering},
         LazyLock, RwLock,
@@ -38,8 +39,9 @@ const BLOCK: SemanticTokenType = SemanticTokenType::new("namedBlock");
 const TOKENS: LazyLock<Vec<SemanticTokenType>> = LazyLock::new(|| {
     vec![
         SemanticTokenType::VARIABLE,
-        SemanticTokenType::FUNCTION,
         BLOCK,
+        SemanticTokenType::STRING,
+        SemanticTokenType::NUMBER,
     ]
 });
 
@@ -151,30 +153,11 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn analyze_syntax(&self, uri: Url) -> Vec<SemanticToken> {
-        let Some(text) = self.text.read().unwrap().clone() else {
+        let Some(code) = self.text.read().unwrap().clone() else {
             return Default::default();
         };
-        let (items, diags) = parse(&text);
-        let mut tokens = Default::default();
-        tokenize(
-            &mut tokens,
-            &mut items.iter(),
-            &mut text.split_inclusive('\n').enumerate(),
-            &{
-                let Some(legend) = self.legend.read().unwrap().clone() else {
-                    return tokens;
-                };
-                move |t| {
-                    legend
-                        .token_types
-                        .iter()
-                        .enumerate()
-                        .find(|&(_, token)| *token == t)
-                        .unwrap()
-                        .0 as u32
-                }
-            },
-        );
+        let (items, diags) = parse(&code);
+        let tokens = tokenize(&items, &code);
 
         self.client
             .publish_diagnostics(
@@ -206,93 +189,71 @@ impl Backend {
     }
 }
 
-fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
-    tokens: &mut Vec<SemanticToken>,
-    items: &mut T,
-    lines: &mut impl Iterator<Item = (usize, &'a str)>,
-    token_type: &impl Fn(SemanticTokenType) -> u32,
-) {
+fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
+    let items = &mut distruct_items(items);
+    let lines = &mut code.split_inclusive('\n').enumerate().peekable();
+
     let glen = |line: &str| line.chars().count();
 
-    let mut lines = lines.peekable();
-    let (mut last_start, mut last_line, mut len) = (None, 0, 0);
-    'l: while let Some(item) = items.next() {
-        let mut get_token = |delta_line, delta_start, length| {
-            let token_type = match item {
-                Item::Ident(_) => token_type(SemanticTokenType::VARIABLE),
-                Item::AnyBlock(block) => match block {
-                    AnyBlock::NamedBlock(name_block) => {
-                        // tokenize(
-                        //     tokens,
-                        //     &mut name_block.block.items.iter(),
-                        //     lines,
-                        //     token_type,
-                        // );
-                        token_type(BLOCK)
-                    }
-                    AnyBlock::Block(unnamed_block) => {
-                        // tokenize(tokens, &unnamed_block.items, lines, token_type);
-                        token_type(BLOCK)
-                    }
-                    AnyBlock::NamedDistrBlock(init) => {
-                        // tokenize(tokens, &init.named_block.block.items, lines, token_type);
-                        token_type(BLOCK)
-                    }
-                    AnyBlock::DistrBlock(_) => token_type(BLOCK),
-                },
-                Item::AssignExpr(assign_expr) => match assign_expr {
-                    AssignExpr::Assign(_) => token_type(SemanticTokenType::FUNCTION),
-                    AssignExpr::AssignAnd(_) => token_type(SemanticTokenType::FUNCTION),
-                },
-                _ => 0,
-            };
+    let (mut tokens, mut last_start, mut last_line, mut len) = (vec![], None, 0, 0);
+    'l: while let Some(([start, end], type_)) = items.next() {
+        let mut push_token = |delta_line, delta_start, length| {
             tokens.push(SemanticToken {
                 delta_line: delta_line as u32,
                 delta_start: delta_start as u32,
                 length: length as u32,
-                token_type,
+                token_type: token_type(type_.clone()),
                 token_modifiers_bitset: 0,
             });
         };
 
-        if let Item::Ignore(_) = item {
-            continue;
+        macro_rules! go_to_next_item {
+            ({$($arg:expr),+} $start:expr, $i:expr) => {
+                push_token($($arg),+);
+                last_start = Some($start);
+                last_line = $i;
+                continue 'l;
+            };
         }
 
-        let [start, end] = {
-            let v = item.slice();
-            [*v.start(), *v.end()]
-        };
-
         while let Some(&(i, line)) = lines.peek() {
-            let tmp_len = len + glen(line);
-            if start < tmp_len {
+            // len with increment line len
+            let end_len = len + glen(line);
+
+            // если начало элемента находится на линии
+            if start < end_len {
                 let delta_line = i - last_line;
                 let delta_start = start - last_start.unwrap_or(len);
 
-                if end < tmp_len {
-                    get_token(delta_line, delta_start, end - start + 1);
-                    last_start = Some(start);
-                    last_line = i;
-                    continue 'l;
+                // если конец элемента находится на линии
+                if end < end_len {
+                    go_to_next_item!(
+                        {delta_line, delta_start, end - start + 1}
+                        start, i
+                    );
                 } else {
-                    get_token(delta_line, delta_start, tmp_len - start);
+                    push_token(delta_line, delta_start, end_len - start);
                     lines.next().unwrap();
                     last_start = Some(start);
                     last_line = i;
-                    len = tmp_len;
+                    len = end_len;
 
+                    // иначе продолжить проход по линиям пока не будет найден конец элемента
                     while let Some(&(i, line)) = lines.peek() {
                         let line_len = glen(line);
                         let tmp_len = len + line_len;
                         let delta_line = i - last_line;
+
+                        // если конец элемента находится на линии
                         if end < tmp_len {
-                            get_token(delta_line, 0, end - len + 1);
-                            last_start = Some(len);
-                            last_line = i;
-                            continue 'l;
+                            // то перейти к следующему элементу
+                            go_to_next_item!(
+                                {delta_line, 0, end - len + 1}
+                                len, i
+                            );
                         } else {
-                            get_token(delta_line, 0, line_len);
+                            // иначе добавить диапазон до конца линии токен, как часть одного общего токена (необходимо, т.к. lsp поддерживает токены построчно)
+                            push_token(delta_line, 0, line_len);
                             last_line = i;
                             lines.next().unwrap();
                             len = tmp_len;
@@ -301,16 +262,100 @@ fn tokenize<'a, T: Iterator<Item = &'a Item> + Debug>(
                 }
             } else {
                 lines.next().unwrap();
-                len = tmp_len;
+                len = end_len;
                 last_start = None;
             }
         }
     }
+
+    tokens
 }
+
+fn token_type(t: SemanticTokenType) -> u32 {
+    TOKENS
+        .iter()
+        .enumerate()
+        .find(|&(_, token)| *token == t)
+        .unwrap()
+        .0 as u32
+}
+
+type DistrItem = ([usize; 2], SemanticTokenType);
+
+// итератор для ленивого прохода
+fn distruct_items<'a>(items: &'a Items) -> impl Iterator<Item = DistrItem> + 'a {
+    items.iter().flat_map(distruct_item)
+}
+
+// итератор для ленивого на всех вложенных уровнях
+type T<'a> = Box<dyn Iterator<Item = DistrItem> + 'a>;
+fn distruct_item<'a>(item: &'a Item) -> T<'a> {
+    fn fast_once<'a>(
+        v: &impl StartEnd,
+        t: SemanticTokenType,
+    ) -> impl Iterator<Item = DistrItem> + 'a {
+        once((v.start_end(), t))
+    }
+    fn fast_box<'a>(v: &impl StartEnd, t: SemanticTokenType) -> T<'a> {
+        Box::new(fast_once(v, t))
+    }
+
+    let block = |v: &'a Block| {
+        fast_once(&v.0, BLOCK)
+            .chain(distruct_items(&v.1))
+            .chain(fast_once(&v.2, BLOCK))
+    };
+    let named_block = |v: &'a NamedBlock| Box::new(fast_once(&v.0, BLOCK).chain(block(&v.1)));
+
+    let ident = |v| fast_box(v, SemanticTokenType::VARIABLE);
+
+    let literal = |v: &'a self::Literal| {
+        use self::Literal::*;
+        match v {
+            String(..) => fast_box(v, SemanticTokenType::STRING),
+            Number(..) => fast_box(v, SemanticTokenType::NUMBER),
+        }
+    };
+
+    use Item::*;
+    match item {
+        AnyBlock(v) => {
+            use self::AnyBlock::*;
+            match v {
+                Block(v) => Box::new(block(v)),
+                NamedBlock(v) => named_block(v),
+                NamedDistrBlock(v) => Box::new(named_block(&v.0).chain(fast_once(&v.1, BLOCK))),
+                DistrBlock(v) => fast_box(v, BLOCK),
+            }
+        }
+        Ignore(..) => Box::new(empty()),
+        AssignExpr(v) => {
+            use self::AssignExpr::*;
+            match v {
+                Assign(v) => Box::new(
+                    ident(&v.0).chain(literal(&v.2))
+                ),
+                AssignAnd(v) => Box::new(
+                    ident(&v.0).chain(literal(&v.2))
+                ),
+            }
+        }
+        Literal(v) => literal(v),
+        Ident(v) => ident(v),
+    }
+}
+
+trait StartEnd: Slicable {
+    fn start_end(&self) -> [usize; 2] {
+        let v = self.slice();
+        [*v.start(), *v.end()]
+    }
+}
+impl<T: Slicable> StartEnd for T {}
 
 #[test]
 fn tokenize_() {
-    let fast = |[delta_line, delta_start, length]: [u32; 3], token_type| SemanticToken {
+    let sem_token = |[delta_line, delta_start, length]: [u32; 3], token_type| SemanticToken {
         delta_line,
         delta_start,
         length,
@@ -319,27 +364,7 @@ fn tokenize_() {
     };
 
     let any_types = |code, vec| {
-        let get_tokens = |code: &'static str| {
-            let token_type = |t| {
-                TOKENS
-                    .iter()
-                    .enumerate()
-                    .find(|&(_, token)| *token == t)
-                    .unwrap()
-                    .0 as u32
-            };
-
-            let mut tokens = vec![];
-            tokenize(
-                &mut tokens,
-                &mut parse(code).0.iter(),
-                &mut code.split_inclusive('\n').enumerate(),
-                &token_type,
-            );
-            tokens
-        };
-
-        assert_eq!(get_tokens(code), vec);
+        assert_eq!(tokenize(&parse(code).0, code), vec);
     };
 
     let all_types = |token_type: SemanticTokenType| {
@@ -347,8 +372,8 @@ fn tokenize_() {
             any_types(
                 code,
                 b.into_iter()
-                    .map(|v| fast(v, token_type.clone()))
-                    .collect::<Vec<_>>(),
+                    .map(|v| sem_token(v, token_type.clone()))
+                    .collect(),
             );
         }
     };
@@ -374,25 +399,26 @@ fn tokenize_() {
         ],
     );
 
-    all_types(BLOCK)("main {}", vec![[0, 0, 7]]);
-    all_types(BLOCK)("main {\n}", vec![[0, 0, 7], [1, 0, 1]]);
-    all_types(BLOCK)("main {\n\n}", vec![[0, 0, 7], [1, 0, 1], [1, 0, 1]]);
+    all_types(BLOCK)("main {}", vec![[0, 0, 4], [0, 5, 1], [0, 1, 1]]);
+    all_types(BLOCK)("main {\n}", vec![[0, 0, 4], [0, 5, 1], [1, 0, 1]]);
+    all_types(BLOCK)("main {\n\n}", vec![[0, 0, 4], [0, 5, 1], [2, 0, 1]]);
 
     any_types(
         "main {\n} a",
         vec![
-            fast([0, 0, 7], BLOCK),
-            fast([1, 0, 1], BLOCK),
-            fast([0, 2, 1], SemanticTokenType::VARIABLE),
+            sem_token([0, 0, 4], BLOCK),
+            sem_token([0, 5, 1], BLOCK),
+            sem_token([1, 0, 1], BLOCK),
+            sem_token([0, 2, 1], SemanticTokenType::VARIABLE),
         ],
     );
     any_types(
         "main {\n\n} a",
         vec![
-            fast([0, 0, 7], BLOCK),
-            fast([1, 0, 1], BLOCK),
-            fast([1, 0, 1], BLOCK),
-            fast([0, 2, 1], SemanticTokenType::VARIABLE),
+            sem_token([0, 0, 4], BLOCK),
+            sem_token([0, 5, 1], BLOCK),
+            sem_token([2, 0, 1], BLOCK),
+            sem_token([0, 2, 1], SemanticTokenType::VARIABLE),
         ],
     );
 }

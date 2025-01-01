@@ -1,6 +1,7 @@
 use lexer::{
     lexer2::{
-        AnyBlock, AssignExpr, Block, Item, Items, Literal, NamedBlock, NamedDistrBlock, Slicable,
+        AnyBlock, AssignExpr, Block, BracketArgs, Idents, Item, Items, Keyword, Literal,
+        NamedBlock, NamedDistrBlock, Slicable,
     },
     parse,
 };
@@ -42,6 +43,8 @@ const TOKENS: LazyLock<Vec<SemanticTokenType>> = LazyLock::new(|| {
         BLOCK,
         SemanticTokenType::STRING,
         SemanticTokenType::NUMBER,
+        SemanticTokenType::KEYWORD,
+        SemanticTokenType::FUNCTION,
     ]
 });
 
@@ -316,9 +319,19 @@ fn distruct_item<'a>(item: &'a Item) -> T<'a> {
             Number(..) => fast_box(v, SemanticTokenType::NUMBER),
         }
     };
-
+    let bracket_args = |v: &BracketArgs| {
+        fast_box(&v.0, SemanticTokenType::FUNCTION)
+            // .chain(fast_box(&v.1, SemanticTokenType::FUNCTION))
+            .chain(fast_box(&v.2, SemanticTokenType::FUNCTION))
+    };
     use Item::*;
     match item {
+        FnHeader(v) => Box::new(
+            fast_box(&v.0, SemanticTokenType::KEYWORD)
+                .chain(fast_box(&v.1, SemanticTokenType::FUNCTION))
+                .chain(bracket_args(&v.2))
+                .chain(block(&v.3)),
+        ),
         AnyBlock(v) => {
             use self::AnyBlock::*;
             match v {
@@ -332,16 +345,18 @@ fn distruct_item<'a>(item: &'a Item) -> T<'a> {
         AssignExpr(v) => {
             use self::AssignExpr::*;
             match v {
-                Assign(v) => Box::new(
-                    ident(&v.0).chain(literal(&v.2))
-                ),
-                AssignAnd(v) => Box::new(
-                    ident(&v.0).chain(literal(&v.2))
-                ),
+                Assign(v) => Box::new(ident(&v.0).chain(literal(&v.2))),
+                AssignAnd(v) => Box::new(ident(&v.0).chain(literal(&v.2))),
             }
         }
         Literal(v) => literal(v),
-        Ident(v) => ident(v),
+        Idents(v) => {
+            use self::Idents::*;
+            match v {
+                Ident(v) => ident(v),
+                Keyword(v) => fast_box(v, SemanticTokenType::KEYWORD),
+            }
+        }
     }
 }
 

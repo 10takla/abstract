@@ -3,6 +3,8 @@
         "variable": "#9876aa",
         "namedBlock": "#ffff00",
         "string": "#6a8759",
-        "number": "#6897bb"
+        "number": "#6897bb",
+        "keyword": "#cc7832",
+        "function": "#ffc66d"
     }
 }

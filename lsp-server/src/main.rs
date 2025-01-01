@@ -326,7 +326,7 @@ fn distruct_item<'a>(item: &'a Item) -> T<'a> {
     };
     use Item::*;
     match item {
-        FnHeader(v) => Box::new(
+        FnHead(v) => Box::new(
             fast_box(&v.0, SemanticTokenType::KEYWORD)
                 .chain(fast_box(&v.1, SemanticTokenType::FUNCTION))
                 .chain(bracket_args(&v.2))

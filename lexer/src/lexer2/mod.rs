@@ -22,7 +22,7 @@
 //! Единая структура для всех типов кеширования, основана на максимально сложном кеше - на кеше `Construct`. То есть это список, который содержит последовательностей элементов
 //!
 
-mod test;
+mod tests;
 
 use colored::Colorize;
 use macros::constructor;
@@ -49,6 +49,8 @@ use std::{
 };
 use std_reset::prelude::Deref;
 use tracing::info;
+
+use crate::parse;
 #[derive(Clone, Debug)]
 pub struct ParseArgs {
     code: Code,
@@ -414,8 +416,8 @@ constructor!(
         }
         Distribution r#"\.\."#
         NameSpace "::"
-        OpenBracket r#"\{"#
-        CloseBracket r#"}"#
+        OpenFigureBracket r#"\{"#
+        CloseFigureBracket r#"}"#
         OpenRoundBracket r#"\("#
         CloseRoundBracket r#"\)"#
         Eq r#"="#
@@ -431,9 +433,10 @@ constructor!(
         Let "let"
 
         Comma ","
+        Colon ":"
     }
     enums {
-        Item -> FnHeader | AnyBlock | AssignExpr | Literal | Idents | Ignore
+        Item -> FnHead | AnyBlock | AssignExpr | Literal | Idents | Ignore
         AnyBlock -> NamedDistrBlock | DistrBlock | NamedBlock | Block
         AssignExpr -> AssignAnd | Assign
         Literal -> String | Number
@@ -445,6 +448,10 @@ constructor!(
         Idents -> Keyword | Ident
         Keyword -> Fn | Const | Struct | Trait | Let
 
+        FnArgs -> StructArgsC | TupleArgsC
+        StructArgsV -> StructArg | Ignore
+        TupleArgsV -> TupleArg | Ignore
+
         CacheConstructItem -> Var1 | Var2
         CacheConstructHead -> Var3 | CommCons1
         CacheToken -> CommCons1 | Ident
@@ -455,16 +462,17 @@ constructor!(
         NamedDistrBlock -> NamedBlock (Ignore) Distribution
         DistrBlock -> Ident (Ignore) Distribution
         NamedBlock -> Ident (Ignore) Block
-        Block -> OpenBracket Items CloseBracket
+        Block -> OpenFigureBracket Items CloseFigureBracket
 
         AssignAnd -> Ident (Ignore) OpEq (Ignore) Literal
         Assign -> Ident (Ignore) Eq (Ignore) Literal
         OpEq -> Op Eq
 
-        BracketArgs -> OpenRoundBracket Args CloseRoundBracket
-        Arg -> Ident Comma
-        FnHeader -> Fn (Ignore) Ident (Ignore) BracketArgs (Ignore) Block
-
+        FnHead -> Fn (Ignore) Ident (Ignore) FnArgs (Ignore) Block
+        StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
+        TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
+        StructArg -> Ident (Ignore) Colon (Ignore) Ident (Ignore) Comma
+        TupleArg -> Ident (Ignore) Comma
         Tmp -> Ident Eq
 
         CommCons1 -> Ident Distribution
@@ -476,12 +484,13 @@ constructor!(
 
         Var5 -> Op Ident
 
-        Var6 -> Ident CloseBracket Distribution
-        Var7 -> Ident CloseBracket OpenBracket CloseBracket
-        Var8 -> Ident CloseBracket OpenBracket WhiteSpace
+        Var6 -> Ident CloseFigureBracket Distribution
+        Var7 -> Ident CloseFigureBracket OpenFigureBracket CloseFigureBracket
+        Var8 -> Ident CloseFigureBracket OpenFigureBracket WhiteSpace
     }
     items {
-        Items(Item)
-        Args(Arg)
+        Items(Item) CloseFigureBracket
+        StructArgsI(StructArgsV) CloseFigureBracket
+        TupleArgsI(TupleArgsV) CloseRoundBracket
     }
 );

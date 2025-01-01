@@ -13,12 +13,14 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
         items_names.push(items.clone());
         
         let item = {
-            let Ok(v) = fast_group(&mut iter)else {
+            let Ok(v) = fast_group(&mut iter) else {
                 continue;
             };
 
             fast_ident(&v.stream().into_iter().next().unwrap()).unwrap()
         };
+
+        let break_ = fast_ident(&iter.next().unwrap()).unwrap();
         
         vec.push(
             quote! {
@@ -51,7 +53,7 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                                     vec.push(v);
                                 }
                                 Err(e) => {
-                                    if arg.code.get_current().1 == '}' {
+                                    if #break_::recog(&mut arg.clone(), l).is_ok() {
                                         break;
                                     } else {
                                         arg.code.cursor += e.end() - i + 1;

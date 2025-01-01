@@ -1,11 +1,16 @@
-use std::collections::HashMap;
 use crate::{check_pass_fail, fast_group, fast_ident, COMMON};
 use proc_macro2::{Group, Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
+use std::{collections::HashMap, fmt::Debug};
 use syn::{parse2, LitStr};
-use std::fmt::Debug;
 
-pub fn tokens(g: &Group) -> (TokenStream2, Vec<Ident>, HashMap<Ident, impl Iterator<Item = Ident> + Clone + Debug>) {
+pub fn tokens(
+    g: &Group,
+) -> (
+    TokenStream2,
+    Vec<Ident>,
+    HashMap<Ident, impl Iterator<Item = Ident> + Clone + Debug>,
+) {
     let mut iter = g.stream().into_iter().peekable();
     let mut vec = vec![];
     let mut token_names = vec![];
@@ -23,7 +28,10 @@ pub fn tokens(g: &Group) -> (TokenStream2, Vec<Ident>, HashMap<Ident, impl Itera
             }
             TokenTree::Group(body) => {
                 let e = fast_group(&mut iter).unwrap();
-                errors.insert(init_item.clone(), body.stream().into_iter().map(|v| fast_ident(&v).unwrap()));
+                errors.insert(
+                    init_item.clone(),
+                    body.stream().into_iter().map(|v| fast_ident(&v).unwrap()),
+                );
                 quote! {
                     (|arg: &ParseArgs| {#e})(arg)
                 }
@@ -45,12 +53,13 @@ pub fn tokens(g: &Group) -> (TokenStream2, Vec<Ident>, HashMap<Ident, impl Itera
                 #check_pass_fail
 
                 fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                    print_colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
                     Self::consume_parse(arg)
                     .map(|v| {
-                        // println!("{}{} {}", tab(l), colored(pass_or_fail::<true>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        print_colored(pass_or_fail::<true>(), l);
                         v
                     }).map_err(|e| {
-                        // println!("{}{} {}", tab(l), colored(pass_or_fail::<false>(), l), colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l));
+                        print_colored(pass_or_fail::<false>(), l);
                         e
                     })
                 }

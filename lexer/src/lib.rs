@@ -11,9 +11,10 @@
 #![feature(macro_metavar_expr)]
 #![feature(inherent_associated_types)]
 #![feature(internal_output_capture)]
+
 pub mod lexer2;
-use lexer2::diag::Diag;
-use lexer2::{Items, ParseArgs};
+
+use lexer2::{cache_and_diags::diag::Diag, Items, ParseArgs};
 
 pub fn parse(source: &str) -> (Items, Vec<Diag>) {
     let mut t: ParseArgs = source.into();

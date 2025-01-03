@@ -1,8 +1,5 @@
 use colored::Colorize;
-use lexer::{
-    lexer2::{ErrorType, Slice, S},
-    parse,
-};
+use lexer::parse;
 
 fn main() {
     let source = r#"abc 43 c2 78 dd 22s " 22s"#;

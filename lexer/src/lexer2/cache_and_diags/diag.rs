@@ -1,6 +1,5 @@
-use super::{tests::setup_tracing, ErrorType, Slice, S};
 use crate::{
-    lexer2::{Construct, ConstructParse, Items, ParseArgs},
+    lexer2::{code::Source, tests::setup_tracing, Construct, ConstructParse, ErrorType, Items, ParseArgs, Slice},
     parse,
 };
 use colored::Colorize;
@@ -33,14 +32,14 @@ use tracing::info;
 pub struct Diag {
     #[deref]
     pub slice: Slice,
-    pub source: S,
+    pub source: Source,
     pub error: ErrorType,
 }
 
 impl std::fmt::Display for Diag {
     fn fmt(&self, f_: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Diag {
-            source: S {
+            source: Source {
                 real_source: source,
                 ..
             },

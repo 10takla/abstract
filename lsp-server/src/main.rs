@@ -1,7 +1,7 @@
 use lexer::{
     lexer2::{
-        diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident, IdentError, Idents,
-        Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable, S,
+        code::Source, diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident,
+        IdentError, Idents, Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable,
     },
     parse,
 };
@@ -240,8 +240,11 @@ fn diag() {
     };
 
     check("22dd", [[0, 0], [3, 0]]);
-    check("
-22dd", [[4, 1], [7, 1]]);
+    check(
+        "
+22dd",
+        [[4, 1], [7, 1]],
+    );
 }
 
 fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {

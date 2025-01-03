@@ -22,14 +22,18 @@
 //! Единая структура для всех типов кеширования, основана на максимально сложном кеше - на кеше `Construct`. То есть это список, который содержит последовательностей элементов
 //!
 
+pub mod code;
+mod print;
 mod tests;
-pub mod diag;
+pub mod cache_and_diags;
 
 use crate::parse;
+use code::{Code, Source};
 use colored::Colorize;
-use diag::Diag;
+use cache_and_diags::diag::Diag;
 use macros::constructor;
 use paste::paste;
+use print::{from_cache, pass_or_fail, print_colored};
 use regex::Regex;
 use regex_automata::{
     dfa::{dense::DFA, Automaton},
@@ -52,6 +56,9 @@ use std::{
 };
 use std_reset::prelude::Deref;
 use tracing::info;
+use cache_and_diags::{
+    CacheAndDiags, PassList, Cache
+};
 
 #[derive(Clone, Debug)]
 pub struct ParseArgs {
@@ -69,118 +76,15 @@ impl ParseArgs {
     fn new(source: &str) -> Self {
         Self {
             code: Code {
-                source: S::new(source),
+                source: Source::new(source),
                 cursor: Default::default(),
             },
             c_a_d: Default::default(),
         }
     }
 }
-type Source = Arc<Vec<(usize, char)>>;
-
-#[derive(Clone, Debug)]
-struct Code {
-    source: S,
-    cursor: Pos,
-}
-
-impl<'a> IntoIterator for &'a Code {
-    type Item = &'a (usize, char);
-    type IntoIter = std::slice::Iter<'a, (usize, char)>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.source[self.cursor..].iter()
-    }
-}
-
-impl Code {
-    fn get_current(&self) -> (usize, char) {
-        self.source[self.cursor]
-    }
-    fn t(&self) -> std::string::String {
-        self.source
-            .as_ref()
-            .into_iter()
-            .skip_while(|&&(i, _)| i < self.cursor)
-            .map(|(_, v)| v)
-            .collect()
-    }
-    fn len(&self) -> usize {
-        self.source.len()
-    }
-    fn iter(&self) -> std::slice::Iter<'_, (usize, char)> {
-        self.source[self.cursor..].into_iter()
-    }
-}
 
 type Pos = usize;
-
-#[derive(Clone, Debug, Deref)]
-pub struct S {
-    pub real_source: std::string::String,
-    #[deref]
-    source: Source,
-}
-
-impl S {
-    pub fn new(source: &str) -> Self {
-        Self {
-            real_source: source.into(),
-            source: Arc::new(source.chars().enumerate().collect()),
-        }
-    }
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct CacheAndDiags {
-    cursor: Option<Pos>,
-    cache: Cache,
-    pub errors: Vec<Diag>,
-    warnings: PosS<Vec<Construct>>,
-}
-
-#[derive(Clone, Default, Debug)]
-struct Cache {
-    // записываем только в const_item
-    pass: Vec<PassList>,
-    fails: HashMap<(Construct, Pos), Diag>,
-}
-
-#[derive(Clone, Default, Debug, Deref)]
-struct PassList {
-    index: usize,
-    #[deref]
-    items: Vec<Pass>,
-}
-type Pass = (Construct, Pos, ConstructItem);
-impl PassList {
-    fn new(items: Vec<Pass>) -> Self {
-        Self {
-            index: Default::default(),
-            items,
-        }
-    }
-    fn get(&self) -> &(Construct, Pos, ConstructItem) {
-        &self.items[self.index]
-    }
-}
-
-type Warnings = PosS<Vec<Construct>>;
-
-#[derive(Clone, Debug)]
-struct PosS<T> {
-    cursor: Option<Pos>,
-    data: T,
-}
-
-impl<T> Default for PosS<Vec<T>> {
-    fn default() -> Self {
-        Self {
-            cursor: Default::default(),
-            data: Default::default(),
-        }
-    }
-}
 
 pub type Slice = RangeInclusive<Pos>;
 
@@ -204,77 +108,10 @@ trait CommonTypes: Sized {
     type Error = Diag;
 }
 
-/// для диганостики обрабтывает единичные символы, а не связку
-fn reg_observe(arg: &ParseArgs, reg: &str) -> Result<Slice, usize> {
-    Regex::new(&format!("^{reg}"))
-        .unwrap()
-        .find(&arg.code.t())
-        .map(|mat| arg.code.cursor + mat.start()..=arg.code.cursor + mat.end() - 1)
-        .ok_or(arg.code.cursor)
-}
-
-pub struct Token<T> {
-    slice: Slice,
-    type_: T,
-}
-
-fn from_cache<const PASS: bool>(pref: &str, c: Construct, l: usize) {
-    print_tab(
-        format!("{} {pref} {:?} from Cache", pass_or_fail::<PASS>(), c),
-        l,
-    );
-}
-
-fn pass_or_fail<const PASS: bool>() -> impl Display {
-    if PASS {
-        "✅ Pass"
-    } else {
-        "❌ Fail"
-    }
-}
-
-fn print_colored(t: impl Display, l: usize) {
-    print_tab(colored(t, l), l);
-}
-
-fn print_tab(t: impl Display, l: usize) {
-    info!("{}{t}", tab(l));
-    // println!("{}{t}", tab(l));
-}
-
-fn colored(t: impl Display, l: usize) -> std::string::String {
-    let h = ((l * 47) % 360) as f32; // Разнообразие угла оттенка
-    let s = 1.0; // Макс насыщенность
-    let v = 1.0;
-    let (r, g, b) = hsv_to_rgb(h, s, v);
-    format!("{}", t.to_string().truecolor(r, g, b))
-}
-
-fn tab(l: usize) -> std::string::String {
-    if l == 0 {
-        Default::default()
-    } else {
-        (0..l).map(|i| colored("|  ", l - i - 1)).rev().collect()
-    }
-}
-
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) {
-    let c = v * s;
-    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
-    let m = v - c;
-
-    let (r, g, b) = match h as u32 {
-        0..=59 => (c, x, 0.0),
-        60..=119 => (x, c, 0.0),
-        120..=179 => (0.0, c, x),
-        180..=239 => (0.0, x, c),
-        240..=299 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-
-    let (r, g, b) = ((r + m) * 255.0, (g + m) * 255.0, (b + m) * 255.0);
-    (r as u8, g as u8, b as u8)
-}
+// pub struct Token<T> {
+//     slice: Slice,
+//     type_: T,
+// }
 
 constructor!(
     tokens {
@@ -416,3 +253,12 @@ constructor!(
         TupleArgsI(TupleArgsV) CloseRoundBracket
     }
 );
+
+/// для диганостики обрабтывает единичные символы, а не связку
+fn reg_observe(arg: &ParseArgs, reg: &str) -> Result<Slice, usize> {
+    Regex::new(&format!("^{reg}"))
+        .unwrap()
+        .find(&arg.code.t())
+        .map(|mat| arg.code.cursor + mat.start()..=arg.code.cursor + mat.end() - 1)
+        .ok_or(arg.code.cursor)
+}

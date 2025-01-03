@@ -40,20 +40,20 @@ pub fn enums(g: &Group) -> (TokenStream2, Vec<Ident>) {
 
                     #check_pass_fail
 
-                    fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                        print_colored(format!("enum {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
-                        Self::consume_parse(arg, l).map(|v| {
-                            print_colored(pass_or_fail::<true>(), l);
+                    fn parse(arg: &mut ParseArgs) -> <Self as CommonTypes>::Output {
+                        arg.print.print_colored(format!("enum {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor));
+                        Self::consume_parse(arg).map(|v| {
+                            arg.print.pass_or_fail::<true>();
                             v
                         }).map_err(|e| {
-                            print_colored(pass_or_fail::<false>(), l);
+                            arg.print.pass_or_fail::<false>();
                             e
                         })
                     }
 
                     // есть необходимость в `consume` ведь мы делаем `arg.clone`
-                    fn consume_parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                        Self::after_debug(arg, l)
+                    fn consume_parse(arg: &mut ParseArgs) -> <Self as CommonTypes>::Output {
+                        Self::after_debug(arg)
                         .map(|v| {
                             arg.code.cursor = v.slice().end() + 1;
                             v
@@ -64,10 +64,10 @@ pub fn enums(g: &Group) -> (TokenStream2, Vec<Ident>) {
                     // 1. состоит из токенов и конструкций, которые кешируются
                     // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
                     // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
-                    fn after_debug(arg: &ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                    fn after_debug(arg: &ParseArgs) -> <Self as CommonTypes>::Output {
                         let mut error: Option<Diag> = None;
 
-                        match #first::recog(&mut arg.clone(), l + 1).map(Self::#first) {
+                        match #first::recog(arg.clone().add_level()).map(Self::#first) {
                             Ok(v) => return Ok(v),
                             Err(e) =>  {
                                 match error {
@@ -76,7 +76,7 @@ pub fn enums(g: &Group) -> (TokenStream2, Vec<Ident>) {
                                     _ => {}
                                 };
                                 #(
-                                    match #other::recog(&mut arg.clone(), l + 1).map(Self::#other) {
+                                    match #other::recog(arg.clone().add_level()).map(Self::#other) {
                                         Ok(v) => return Ok(v),
                                         Err(e) =>  {
                                             match error {

@@ -19,7 +19,7 @@ use lexer2::{cache_and_diags::diag::Diag, Items, ParseArgs};
 pub fn parse(source: &str) -> (Items, Vec<Diag>) {
     let mut t: ParseArgs = source.into();
     (
-        Items::recog(&mut t, 0),
+        Items::recog(&mut t),
         t.c_a_d.clone().borrow().errors.clone(),
     )
 }

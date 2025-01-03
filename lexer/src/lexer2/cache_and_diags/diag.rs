@@ -114,7 +114,7 @@ fn display() {
     setup_tracing();
     let mut t: ParseArgs = r#"2fdg  2fdg      
     2fdg"#.into();
-    Items::recog(&mut t, 0);
+    Items::recog(&mut t);
     for diag in t.c_a_d.clone().borrow().errors.clone() {
         println!("{diag}");
     }

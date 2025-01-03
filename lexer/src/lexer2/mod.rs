@@ -33,7 +33,7 @@ use colored::Colorize;
 use cache_and_diags::diag::Diag;
 use macros::constructor;
 use paste::paste;
-use print::{from_cache, pass_or_fail, print_colored};
+use print::{Print};
 use regex::Regex;
 use regex_automata::{
     dfa::{dense::DFA, Automaton},
@@ -41,7 +41,7 @@ use regex_automata::{
     util::start::Config,
     Input,
 };
-use regex_syntax::{ast::parse::Parser as AstParser, Parser};
+use regex_syntax::{ast::{parse::Parser as AstParser, print::Printer}, Parser};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -64,6 +64,7 @@ use cache_and_diags::{
 pub struct ParseArgs {
     code: Code,
     pub c_a_d: Arc<RefCell<CacheAndDiags>>,
+    print: Print,
 }
 
 impl<'a> From<&'a str> for ParseArgs {
@@ -80,7 +81,16 @@ impl ParseArgs {
                 cursor: Default::default(),
             },
             c_a_d: Default::default(),
+            print: Default::default()
         }
+    }
+
+    fn add_level(&mut self) -> &mut Self {
+        self.print = Print {
+            level: self.print.level + 1,
+            ..self.print
+        };
+        self
     }
 }
 
@@ -126,7 +136,7 @@ constructor!(
 
             let mut iter = arg.code.iter();
             let &(i, char) = iter.next().ok_or((arg.code.cursor..=arg.code.cursor, ErrorType::LineOver))?;
-
+ 
             let s = (!start_rule(char)).then_some(i);
             let mut e = None;
             let start = i;

@@ -20,14 +20,14 @@ pub fn common(
         .map(|tmp| {
             quote! {
                 Construct::#tmp => {
-                    #tmp::recog(arg, l).map(|v| ConstructItem::#tmp(v))
+                    #tmp::recog(arg).map(|v| ConstructItem::#tmp(v))
                 }
             }
         })
         .chain(items.into_iter().map(|items| {
             quote! {
                 Construct::#items => {
-                    Ok(ConstructItem::#items(#items::recog(arg, l)))
+                    Ok(ConstructItem::#items(#items::recog(arg)))
                 }
             }
         }));
@@ -62,10 +62,10 @@ pub fn common(
         }
 
         trait ConstructParse<const N: usize> {
-            fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag>;
+            fn recog(&self, arg: &mut ParseArgs) -> Result<[ConstructItem; N], Diag>;
         }
         impl<const N: usize> ConstructParse<N> for [Construct; N] {
-            fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag> {
+            fn recog(&self, arg: &mut ParseArgs) -> Result<[ConstructItem; N], Diag> {
                 self.iter().map(|item| {
                     match item {
                         #(#construct_parse),*

@@ -52,14 +52,14 @@ pub fn tokens(
 
                 #check_pass_fail
 
-                fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                    print_colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
+                fn parse(arg: &mut ParseArgs) -> <Self as CommonTypes>::Output {
+                    arg.print.print_colored(format!("token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor));
                     Self::consume_parse(arg)
                     .map(|v| {
-                        print_colored(pass_or_fail::<true>(), l);
+                        arg.print.pass_or_fail::<true>();
                         v
                     }).map_err(|e| {
-                        print_colored(pass_or_fail::<false>(), l);
+                        arg.print.pass_or_fail::<false>();
                         e
                     })
                 }

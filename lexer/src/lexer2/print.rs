@@ -3,23 +3,35 @@ use colored::Colorize;
 use std::fmt::Display;
 use tracing::info;
 
-pub fn from_cache<const PASS: bool>(pref: &str, c: Construct, l: usize) {
-    print_tab(
-        format!("{} {pref} {:?} from Cache", pass_or_fail::<PASS>(), c),
-        l,
-    );
+#[derive(Clone, Debug, Default)]
+pub(super) struct Print {
+    pub(super) level: usize,
+    pub(super) max_fail_level: usize,
 }
 
-pub fn pass_or_fail<const PASS: bool>() -> impl Display {
+impl Print {
+    pub(super) fn from_cache<const PASS: bool>(&self, pref: &str, c: Construct) {
+        print_tab(
+            format!("{} {pref} {:?} from Cache", tmp_pass_or_fail::<PASS>(), c),
+            self.level,
+        );
+    }
+
+    pub(super) fn pass_or_fail<const PASS: bool>(&self) {
+        self.print_colored(tmp_pass_or_fail::<PASS>());
+    }
+
+    pub(super) fn print_colored(&self, t: impl Display) {
+        print_tab(colored(t, self.level), self.level);
+    }
+}
+
+fn tmp_pass_or_fail<const PASS: bool>() -> impl Display {
     if PASS {
         "✅ Pass"
     } else {
         "❌ Fail"
     }
-}
-
-pub fn print_colored(t: impl Display, l: usize) {
-    print_tab(colored(t, l), l);
 }
 
 fn print_tab(t: impl Display, l: usize) {

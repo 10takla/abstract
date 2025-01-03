@@ -1,7 +1,7 @@
 use lexer::{
     lexer2::{
-        AnyBlock, AssignExpr, Block, BracketArgs, Idents, Item, Items, Keyword, Literal,
-        NamedBlock, NamedDistrBlock, Slicable,
+        diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident, IdentError, Idents,
+        Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable, S,
     },
     parse,
 };
@@ -168,16 +168,19 @@ impl Backend {
                 diags
                     .iter()
                     .cloned()
-                    .map(|diag| Diagnostic {
-                        range: Range {
-                            start: Position::new(0, *diag.slice.start() as u32),
-                            end: Position::new(0, *diag.slice.end() as u32),
-                        },
-                        severity: Some(DiagnosticSeverity::ERROR),
-                        code: None,
-                        source: Some("abstract".to_string()),
-                        message: format!("Ошибка парсера: {}", diag),
-                        ..Default::default()
+                    .map(|diag| {
+                        let [[start, start_line], [end, end_line]] = tmp(&diag, &code);
+                        Diagnostic {
+                            range: Range {
+                                start: Position::new(start_line as u32, start as u32),
+                                end: Position::new(end_line as u32, end as u32),
+                            },
+                            severity: Some(DiagnosticSeverity::ERROR),
+                            code: None,
+                            source: Some("abstract".to_string()),
+                            message: format!("Ошибка парсера: {diag}"),
+                            ..Default::default()
+                        }
                     })
                     .collect(),
                 None,
@@ -190,6 +193,55 @@ impl Backend {
         *self.text.write().unwrap() = Some(text.to_string());
         self.version.fetch_add(1, Ordering::SeqCst);
     }
+}
+
+fn tmp(diag: &Diag, code: &str) -> [[usize; 2]; 2] {
+    let lines = &mut code.split_inclusive('\n').enumerate().peekable();
+
+    let [item_start, item_end] = [*diag.slice.start(), *diag.slice.end()];
+    let mut acc = 0;
+    let mut iter = lines.map(|(i, line)| {
+        let start = acc;
+        let len = line.chars().count();
+        if len > 0 {
+            acc += len;
+        }
+        let end = acc;
+        (i, [start, end])
+    });
+
+    while let Some((i, [line_start, line_end])) = iter.next() {
+        // если начало находится на линии
+        if item_start <= line_end {
+            let [start_o, start_line_o] = [item_start - line_start, i];
+
+            // если конец находится на линии
+            if item_end <= line_end {
+                return [[start_o, start_line_o], [item_end - line_start, i]];
+            } else {
+                // иначе продолжить проход по линиям пока не будет найден конец
+                while let Some((i, [line_start, line_end])) = iter.next() {
+                    // если конец находится на линии
+                    if item_end <= line_end {
+                        // то перейти к следующему элементу
+                        return [[start_o, start_line_o], [item_end - line_start, i]];
+                    }
+                }
+            }
+        }
+    }
+    unreachable!()
+}
+
+#[test]
+fn diag() {
+    let check = |source, b| {
+        assert_eq!(tmp(&parse(source).1[0], source), b);
+    };
+
+    check("22dd", [[0, 0], [3, 0]]);
+    check("
+22dd", [[4, 1], [7, 1]]);
 }
 
 fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
@@ -319,17 +371,12 @@ fn distruct_item<'a>(item: &'a Item) -> T<'a> {
             Number(..) => fast_box(v, SemanticTokenType::NUMBER),
         }
     };
-    let bracket_args = |v: &BracketArgs| {
-        fast_box(&v.0, SemanticTokenType::FUNCTION)
-            // .chain(fast_box(&v.1, SemanticTokenType::FUNCTION))
-            .chain(fast_box(&v.2, SemanticTokenType::FUNCTION))
-    };
     use Item::*;
     match item {
         FnHead(v) => Box::new(
             fast_box(&v.0, SemanticTokenType::KEYWORD)
                 .chain(fast_box(&v.1, SemanticTokenType::FUNCTION))
-                .chain(bracket_args(&v.2))
+                .chain(v.2.color())
                 .chain(block(&v.3)),
         ),
         AnyBlock(v) => {
@@ -355,6 +402,33 @@ fn distruct_item<'a>(item: &'a Item) -> T<'a> {
             match v {
                 Ident(v) => ident(v),
                 Keyword(v) => fast_box(v, SemanticTokenType::KEYWORD),
+            }
+        }
+    }
+}
+
+trait Tr {
+    fn color(&self) -> impl Iterator<Item = DistrItem> {
+        self.cl().into_iter().map(|(a, b)| (a.start_end(), b))
+    }
+    fn cl(&self) -> Vec<(&dyn StartEnd, SemanticTokenType)>;
+}
+
+impl Tr for FnArgs {
+    fn cl(&self) -> Vec<(&dyn StartEnd, SemanticTokenType)> {
+        use FnArgs::*;
+        match self {
+            StructArgsC(v) => {
+                vec![
+                    (&v.0, SemanticTokenType::FUNCTION),
+                    (&v.2, SemanticTokenType::FUNCTION),
+                ]
+            }
+            TupleArgsC(v) => {
+                vec![
+                    (&v.0, SemanticTokenType::FUNCTION),
+                    (&v.2, SemanticTokenType::FUNCTION),
+                ]
             }
         }
     }

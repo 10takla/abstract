@@ -23,8 +23,11 @@
 //!
 
 mod tests;
+pub mod diag;
 
+use crate::parse;
 use colored::Colorize;
+use diag::Diag;
 use macros::constructor;
 use paste::paste;
 use regex::Regex;
@@ -50,7 +53,6 @@ use std::{
 use std_reset::prelude::Deref;
 use tracing::info;
 
-use crate::parse;
 #[derive(Clone, Debug)]
 pub struct ParseArgs {
     code: Code,
@@ -67,10 +69,7 @@ impl ParseArgs {
     fn new(source: &str) -> Self {
         Self {
             code: Code {
-                source: S {
-                    real_source: source.into(),
-                    source: Arc::new(source.chars().enumerate().collect()),
-                },
+                source: S::new(source),
                 cursor: Default::default(),
             },
             c_a_d: Default::default(),
@@ -123,14 +122,14 @@ pub struct S {
     source: Source,
 }
 
-// impl S {
-//     fn new(source: Source) -> Self {
-//         Self {
-//             real_source: source.clone().iter().map(|(_, v)| v).collect(),
-//             source,
-//         }
-//     }
-// }
+impl S {
+    pub fn new(source: &str) -> Self {
+        Self {
+            real_source: source.into(),
+            source: Arc::new(source.chars().enumerate().collect()),
+        }
+    }
+}
 
 #[derive(Clone, Default, Debug)]
 pub struct CacheAndDiags {
@@ -166,83 +165,6 @@ impl PassList {
     }
 }
 
-#[derive(Clone, Debug, Deref)]
-pub struct Diag {
-    #[deref]
-    pub slice: Slice,
-    pub source: S,
-    pub error: ErrorType,
-}
-
-impl std::fmt::Display for Diag {
-    fn fmt(&self, f_: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Diag {
-            source: S {
-                real_source: source,
-                ..
-            },
-            slice,
-            error,
-        } = self;
-        let get_line = |pos| {
-            let mut acc = 0;
-            source
-                .split_inclusive('\n')
-                .enumerate()
-                .find_map(|(i, str)| {
-                    acc += str.chars().count();
-                    (pos < acc).then_some(i + 1)
-                })
-                .unwrap()
-        };
-        let f = |v: &[char]| v.iter().collect::<std::string::String>();
-
-        let source = source.chars().collect::<Vec<_>>();
-        let (l, b, [min, max]) = ("|".blue(), "...".blue(), [10, 4]);
-
-        let code = format!(
-            "{}{}{}",
-            f(&source[{
-                let i = *slice.start();
-                let r = if i < min { 0 } else { i - min };
-                r..i
-            }]),
-            f(&source[slice.clone()]).underline().red(),
-            f(&source[{
-                let i = slice.end();
-                i + 1..if source.len() - 1 - i < max {
-                    source.len()
-                } else {
-                    i + max
-                }
-            }])
-        );
-        let front_p = 3;
-        let f = " ".repeat(front_p);
-
-        writeln!(
-            f_,
-            "
-{f}{l}
-{}{l} {b}{code}{}
-{f}{l} {}{}
-",
-            format!("{:width$} ", get_line(*slice.end()), width = front_p - 1),
-            if source.len() - 1 - slice.end() < max {
-                Default::default()
-            } else {
-                format!("{b}")
-            },
-            " ".repeat(min + b.chars().count()),
-            format!(
-                "{}-Ожидается {error:?}",
-                "^".repeat(slice.end() - slice.start() + 1),
-            )
-            .red()
-        )
-    }
-}
-
 type Warnings = PosS<Vec<Construct>>;
 
 #[derive(Clone, Debug)]
@@ -266,15 +188,15 @@ pub trait Slicable {
     fn slice(&self) -> Slice;
 }
 
-trait ParseItem: Sized {
-    type Output = Result<Self, Diag>;
-    fn parse(arg: &mut ParseArgs) -> Self::Output;
-}
+// trait ParseItem: Sized {
+//     type Output = Result<Self, Diag>;
+//     fn parse(arg: &mut ParseArgs) -> Self::Output;
+// }
 
-trait Parse: ParseItem {
-    fn parse_item(arg: &mut ParseArgs) -> Self::Output;
-    fn check_good_cache(arg: &ParseArgs) -> Option<Self>;
-}
+// trait Parse: ParseItem {
+//     fn parse_item(arg: &mut ParseArgs) -> Self::Output;
+//     fn check_good_cache(arg: &ParseArgs) -> Option<Self>;
+// }
 
 trait CommonTypes: Sized {
     const CONST: Construct;

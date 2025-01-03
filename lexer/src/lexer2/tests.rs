@@ -6,10 +6,12 @@ use tracing_subscriber::fmt::format;
 #[test]
 fn tmp() {
     setup_tracing();
-    let mut t = "fn ываыва( dsfs, dsfs, ){sdfsdf}".into();
-    dbg!(FnHead::recog(&mut t, 0));
+    // let mut t = "fn ываыва( dsfs, dsfs, ){sdfsdf}".into();
+    // dbg!(FnHead::recog(&mut t, 0));
 
-    let mut t = "fn ываыва{ dsfs: Ar, dsfs: Ty, }{sdfsdf}".into();
+    let mut t = "fn ываыва
+    
+    { dsfs: Ar, dsfs: Ty, }{sdfsdf}".into();
     dbg!(FnHead::recog(&mut t, 0));
 }
 
@@ -67,10 +69,8 @@ mod cache {
     }
     mod fail {
         use super::*;
-        use tracing::instrument;
 
         #[test]
-        #[instrument]
         fn token() {
             setup_tracing();
             let mut t = "2sdfsfd".into();
@@ -128,7 +128,7 @@ fn code() {
     ));
 }
 
-fn setup_tracing() {
+pub fn setup_tracing() {
     if env::var("LOG_LEVEL") == Ok("INFO".into()) {
         tracing_subscriber::fmt()
             .with_max_level(LevelFilter::INFO)

@@ -1,6 +1,6 @@
 use colored::Colorize;
 use lexer::{
-    lexer2::{ErrorType, Diag, Slice, S},
+    lexer2::{ErrorType, Slice, S},
     parse,
 };
 

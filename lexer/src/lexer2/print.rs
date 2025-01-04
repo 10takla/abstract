@@ -7,36 +7,36 @@ use tracing::info;
 #[derive(Clone, Debug, Default)]
 pub struct Print {
     pub(super) max_fail_level: usize,
-    pub(super) output: Output,
+    // pub(super) output: Output,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Output(Vec<(usize, bool, Box<Output>)>);
+// #[derive(Clone, Debug, Default)]
+// pub struct Output(Vec<(usize, bool, Box<Output>)>);
 
 impl Print {
-    pub(super) fn from_cache<const PASS: bool>(&mut self, pref: &str, c: Construct, l: usize) {
+    pub(super) fn from_cache<const PASS: bool>(&self, pref: &str, c: Construct, l: usize) {
         self.print_tab(
             format!("{} {pref} {:?} from Cache", tmp_pass_or_fail::<PASS>(), c),
             l,
         );
     }
 
-    pub(super) fn pass_or_fail<const PASS: bool>(&mut self, l: usize) {
+    pub(super) fn pass_or_fail<const PASS: bool>(&self, l: usize) {
         // if PASS || l < self.max_fail_level {
             self.print_colored(tmp_pass_or_fail::<PASS>(), l);
         // }
     }
 
-    pub(super) fn print_colored(&mut self, t: impl Display, l: usize) {
+    pub(super) fn print_colored(&self, t: impl Display, l: usize) {
         self.print_tab(colored(t, l), l);
     }
 
-    pub(super) fn print_tab(&mut self, t: impl Display, l: usize) {
+    pub(super) fn print_tab(&self, t: impl Display, l: usize) {
         info!("{}{t}", tab(l));
     }
 }
 
-fn tmp_pass_or_fail<const PASS: bool>() -> impl Display {
+pub(super) fn tmp_pass_or_fail<const PASS: bool>() -> &'static str {
     if PASS {
         "✅ Pass"
     } else {
@@ -45,7 +45,7 @@ fn tmp_pass_or_fail<const PASS: bool>() -> impl Display {
 }
 
 fn colored(t: impl Display, l: usize) -> std::string::String {
-    let (r, g, b) = hsv_to_rgb(((l * 47) % 360) as f32, 1.0, 1.0);
+    let (r, g, b) = hsv_to_rgb(((l * 80) % 360) as f32, 1.0, 1.0);
     format!("{}", t.to_string().truecolor(r, g, b))
 }
 

@@ -56,7 +56,7 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                                     if #break_::recog(&mut arg.clone(), l).is_ok() {
                                         break;
                                     } else {
-                                        arg.code.cursor += e.end() - i + 1;
+                                        arg.code.cursor = *e.end();
                                         // println!("ERROR {e:?}");
                                         arg.c_a_d.borrow_mut().errors.push(e);
                                         continue;

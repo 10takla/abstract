@@ -1,5 +1,8 @@
 use crate::{
-    lexer2::{code::Source, tests::set_print, Construct, ConstructParse, ErrorType, Items, ParseArgs, Slice},
+    lexer2::{
+        code::Source, tests::set_print, Construct, ConstructParse, ErrorType, Items, ParseArgs,
+        Slice,
+    },
     parse,
 };
 use colored::Colorize;
@@ -65,7 +68,11 @@ impl std::fmt::Display for Diag {
         let (l, b, [min, max]) = ("|".blue(), "...", [0, 4]);
         let [distr_after, distr_before] =
             [*slice.start() == 0, source.len() - 1 - slice.end() < max].map(|cond| {
-                if cond {Default::default()} else {b}
+                if cond {
+                    Default::default()
+                } else {
+                    b
+                }
             });
 
         let code = format!(
@@ -85,7 +92,7 @@ impl std::fmt::Display for Diag {
                 }
             }])
         );
-        
+
         let front_p = 3;
         let f = " ".repeat(front_p);
 
@@ -111,9 +118,12 @@ impl std::fmt::Display for Diag {
 
 #[test]
 fn display() {
-    set_print();
-    let mut t: ParseArgs = r#"2fdg  2fdg      
-    2fdg"#.into();
+    let mut t: ParseArgs = (
+        r#"2fdg  2fdg      
+    2fdg"#,
+        set_print(),
+    )
+        .into();
     Items::recog(&mut t, 0);
     for diag in t.c_a_d.clone().borrow().errors.clone() {
         println!("{diag}");

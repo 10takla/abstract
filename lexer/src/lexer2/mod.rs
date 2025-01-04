@@ -33,7 +33,7 @@ use code::{Code, Source};
 use colored::Colorize;
 use macros::constructor;
 use paste::paste;
-use print::Print;
+use print::{Print, tmp_pass_or_fail};
 use regex::Regex;
 use regex_automata::{
     dfa::{dense::DFA, Automaton},
@@ -123,14 +123,12 @@ trait CommonTypes: Sized {
 // }
 
 constructor!(
-    tokens {
+    tokens { 
         WhiteSpace r" +"
         NextLine r"\n"
         Tab r"\t"
         Ident [StartsWithNumber] {
             // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
-            let code = &mut arg.code.source.clone();
-
             let start_rule = |char: char| char.is_alphabetic() || char == '_';
 
             let mut iter = arg.code.iter();
@@ -159,7 +157,7 @@ constructor!(
             match (s, e) {
                 (Some(s), Some(t)) => return Err((s..=t, ErrorType::Ident(IdentError::StartsWithNumber))),
                 (Some(s), None) => return Err((s..=s, ErrorType::Ident(IdentError::StartsWithNumber))),
-                _=>{}
+                _ => {}
             }
 
             Ok(start..=end)
@@ -167,8 +165,6 @@ constructor!(
         Number r"\b\d+\b"
         String [StartsWithNumber StartsWithQuote EndsWithQuote] {
             // r#""[^"\\]*(?:\\.[^"\\]*)*""#
-            let code = &mut arg.code.clone();
-
             let mut iter = arg.code.iter();
 
             let &(i, char) = iter.next().ok_or((arg.code.cursor..=arg.code.cursor, ErrorType::LineOver))?;
@@ -179,7 +175,9 @@ constructor!(
                     return Ok(start..=i);
                 }
             }
+            
             let tmp = iter.last().unwrap().0;
+            
             Err((tmp..=tmp, ErrorType::String(StringError::EndsWithQuote)))
         }
         Distribution r#"\.\."#

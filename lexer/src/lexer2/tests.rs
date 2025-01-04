@@ -135,9 +135,14 @@ mod issues {
     use crate::lexer2::{tests::set_print, Items};
     use clap::Parser;
 
+    /// Когда происходит ошибка String::EndsWithQuote она происходит до конца кода, при этом items продолжают дальше распозноваться
+    /// Ошибка происходила из-за то что мы инкрементируем к cursor длинну ошибки, которая всегда получалась минимум 1, так как было:
+    /// ```arg.code.cursor += e.end() - i + 1;```
+    /// Исправление: Замена на ```arg.code.cursor = e.end();```
+    /// Примечание: Также исправление является лучшим вариантом для смещения cursor, так как требует меньше опреаций
     #[test]
-    fn code() {
-        Items::recog(&mut (r#""sdfsdf""#, set_print()).into(), 0);
+    fn items_with_string_error() {
+        Items::recog(&mut (r#"{"22sd}"#, set_print()).into(), 0);
     }
 }
 
@@ -175,6 +180,7 @@ pub fn set_print() -> Print {
             .fmt_fields(format::PrettyFields::new()) // Простой и понятный формат полей
             .event_format(format::Format::default().compact())
             .with_target(false)
+            .with_level(false)
             .without_time() // Компактный формат без времени и уровня логирования
             .try_init()
             .ok();

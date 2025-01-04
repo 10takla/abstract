@@ -38,14 +38,14 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                 }
 
                 impl #items {
-                    pub fn recog(arg: &mut ParseArgs) -> Self {
+                    pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
                         let mut vec = vec![];
                         loop {
                             if arg.code.cursor == arg.code.source.len() {
                                 break;
                             }
                             let i = arg.code.cursor;
-                            match #item::recog(arg) {
+                            match #item::recog(arg, l) {
                                 Ok(v) => {
                                     // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск, в списке
                                     arg.c_a_d.borrow_mut().cache.pass.clear();
@@ -53,7 +53,7 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                                     vec.push(v);
                                 }
                                 Err(e) => {
-                                    if #break_::recog(&mut arg.clone()).is_ok() {
+                                    if #break_::recog(&mut arg.clone(), l).is_ok() {
                                         break;
                                     } else {
                                         arg.code.cursor += e.end() - i + 1;

@@ -1,18 +1,22 @@
 use super::*;
-use std::env;
+use clap::Parser;
+use std::env::{self, args};
 use tracing::{dispatcher::with_default, level_filters::LevelFilter, Level};
 use tracing_subscriber::fmt::format;
 
 #[test]
 fn tmp() {
-    setup_tracing();
     // let mut t = "fn ываыва( dsfs, dsfs, ){sdfsdf}".into();
     // dbg!(FnHead::recog(&mut t));
 
-    let mut t = "fn ываыва
+    let mut t = (
+        "fn ываыва
     
-    { dsfs: Ar, dsfs: Ty, }{sdfsdf}".into();
-    dbg!(FnHead::recog(&mut t));
+    { dsfs: Ar, dsfs: Ty, }{sdfsdf}",
+        set_print(),
+    )
+        .into();
+    dbg!(FnHead::recog(&mut t, 0));
 }
 
 mod cache {
@@ -24,26 +28,27 @@ mod cache {
             /// кеширование головы конструкции. DistructBlock должен парсится 1 раз
             #[test]
             fn head() {
-                setup_tracing();
-                let mut t = "main..".into();
-                dbg!(CacheConstructHead::recog(&mut t));
+                let mut t = ("main..", set_print()).into();
+                dbg!(CacheConstructHead::recog(&mut t, 0));
             }
 
             /// кеширование элементов конструкции. элемнты Var2 должны распознаться только 1 раз до Var2
             #[test]
             fn item() {
-                setup_tracing();
-                let mut t = "maijn\t=2323 main { }..sdf\nr+=2 t/=4\"sdfsf sdf\"-+=+".into();
+                let mut t = (
+                    "maijn\t=2323 main { }..sdf\nr+=2 t/=4\"sdfsf sdf\"-+=+",
+                    set_print(),
+                )
+                    .into();
                 // let mut t = "mai { }..".into();
-                dbg!(CacheConstructItem::recog(&mut t));
+                dbg!(CacheConstructItem::recog(&mut t, 0));
             }
 
             /// После Var7 `goods` от Var6 должны расширятся, а не создаватбся новый список
             #[test]
             fn list_walkthrough() {
-                setup_tracing();
-                let mut t = "main}{ ".into();
-                dbg!(CacheConstructWalkthroug::recog(&mut t));
+                let mut t = ("main}{ ", set_print()).into();
+                dbg!(CacheConstructWalkthroug::recog(&mut t, 0));
             }
 
             mod with {
@@ -51,18 +56,16 @@ mod cache {
                 /// Ident должен распознатся 1 раз, как токен без конструкции но часть вариации
                 #[test]
                 fn token() {
-                    setup_tracing();
-                    let mut t = r#"sdfsdf1."#.into();
+                    let mut t = (r#"sdfsdf1."#, set_print()).into();
                     // 0 -> NamedBlock -> Ident Block -> Fail -> memeory (pos, item)
                     // 0 -> Ident -> (x from memeory)
-                    dbg!(CacheToken::recog(&mut t));
+                    dbg!(CacheToken::recog(&mut t, 0));
                 }
 
                 #[test]
                 fn enum_() {
-                    setup_tracing();
-                    let mut t = "+ ".into();
-                    dbg!(CacheEnum::recog(&mut t));
+                    let mut t = ("+ ", set_print()).into();
+                    dbg!(CacheEnum::recog(&mut t, 0));
                 }
             }
         }
@@ -72,16 +75,14 @@ mod cache {
 
         #[test]
         fn token() {
-            setup_tracing();
-            let mut t = "2sdfsfd".into();
-            dbg!(CacheToken::recog(&mut t));
+            let mut t = ("2sdfsfd", set_print()).into();
+            dbg!(CacheToken::recog(&mut t, 0));
         }
 
         #[test]
         fn enum_() {
-            setup_tracing();
-            let mut t = "22".into();
-            dbg!(CacheEnum::recog(&mut t));
+            let mut t = ("22", set_print()).into();
+            dbg!(CacheEnum::recog(&mut t, 0));
         }
     }
 }
@@ -91,17 +92,16 @@ mod errors {
 
     #[test]
     fn items() {
-        setup_tracing();
-        let mut t = r#"  "sdfsf "#.into();
-        dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t));
+        let mut t = (r#"  "sdfsf "#, set_print()).into();
+        dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
     }
 }
 
 #[test]
 fn code() {
-    setup_tracing();
     dbg!(Items::recog(
-        &mut r#"
+        &mut (
+            r#"
             afsg__223
             afsg___
 
@@ -122,13 +122,53 @@ fn code() {
             main..
 
             result = 502
-            "#
-        .into()
+            "#,
+            set_print()
+        )
+            .into(),
+        0
     ));
 }
 
-pub fn setup_tracing() {
-    if env::var("LOG_LEVEL") == Ok("INFO".into()) {
+mod issues {
+    use super::{Code, Literal, ParseArgs, Print, Source};
+    use crate::lexer2::{tests::set_print, Items};
+    use clap::Parser;
+
+    #[test]
+    fn code() {
+        Items::recog(&mut (r#""sdfsdf""#, set_print()).into(), 0);
+    }
+}
+
+pub fn set_print() -> Print {
+    use std::string::String;
+
+    #[derive(Clone, Debug, Default, Parser)]
+    #[command(about, rename_all = "kebab-case")]
+    pub struct Args {
+        #[arg(long, action, default_value_t = false)]
+        pub(super) logs: bool,
+        #[arg(long, default_value_t = 0)]
+        pub(super) fail_level: usize,
+    }
+
+    let args = Args::parse_from({
+        let mut find = false;
+        args()
+            .into_iter()
+            .enumerate()
+            .skip_while(move |(i, v)| {
+                if v == "--" {
+                    find = true
+                }
+                !find
+            })
+            .map(|(_, v)| v)
+            .collect::<Vec<_>>()
+    });
+
+    if args.logs {
         tracing_subscriber::fmt()
             .with_max_level(LevelFilter::INFO)
             .with_writer(std::io::stdout) // Указываем вывод в стандартный вывод
@@ -138,5 +178,10 @@ pub fn setup_tracing() {
             .without_time() // Компактный формат без времени и уровня логирования
             .try_init()
             .ok();
+    }
+
+    Print {
+        max_fail_level: args.fail_level,
+        ..Default::default()
     }
 }

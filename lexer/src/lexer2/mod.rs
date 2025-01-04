@@ -22,18 +22,18 @@
 //! Единая структура для всех типов кеширования, основана на максимально сложном кеше - на кеше `Construct`. То есть это список, который содержит последовательностей элементов
 //!
 
+pub mod cache_and_diags;
 pub mod code;
 mod print;
 mod tests;
-pub mod cache_and_diags;
 
 use crate::parse;
+use cache_and_diags::{diag::Diag, Cache, CacheAndDiags, PassList};
 use code::{Code, Source};
 use colored::Colorize;
-use cache_and_diags::diag::Diag;
 use macros::constructor;
 use paste::paste;
-use print::{Print};
+use print::Print;
 use regex::Regex;
 use regex_automata::{
     dfa::{dense::DFA, Automaton},
@@ -41,7 +41,10 @@ use regex_automata::{
     util::start::Config,
     Input,
 };
-use regex_syntax::{ast::{parse::Parser as AstParser, print::Printer}, Parser};
+use regex_syntax::{
+    ast::{parse::Parser as AstParser, print::Printer},
+    Parser,
+};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -56,9 +59,6 @@ use std::{
 };
 use std_reset::prelude::Deref;
 use tracing::info;
-use cache_and_diags::{
-    CacheAndDiags, PassList, Cache
-};
 
 #[derive(Clone, Debug)]
 pub struct ParseArgs {
@@ -73,24 +73,23 @@ impl<'a> From<&'a str> for ParseArgs {
     }
 }
 
+impl From<(&str, Print)> for ParseArgs {
+    fn from((source, print): (&str, Print)) -> Self {
+        Self {
+            code: source.into(),
+            c_a_d: Default::default(),
+            print,
+        }
+    }
+}
+
 impl ParseArgs {
     fn new(source: &str) -> Self {
         Self {
-            code: Code {
-                source: Source::new(source),
-                cursor: Default::default(),
-            },
+            code: source.into(),
             c_a_d: Default::default(),
-            print: Default::default()
+            print: Default::default(),
         }
-    }
-
-    fn add_level(&mut self) -> &mut Self {
-        self.print = Print {
-            level: self.print.level + 1,
-            ..self.print
-        };
-        self
     }
 }
 
@@ -136,7 +135,7 @@ constructor!(
 
             let mut iter = arg.code.iter();
             let &(i, char) = iter.next().ok_or((arg.code.cursor..=arg.code.cursor, ErrorType::LineOver))?;
- 
+
             let s = (!start_rule(char)).then_some(i);
             let mut e = None;
             let start = i;

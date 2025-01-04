@@ -28,7 +28,7 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                 .and_then(|v| {
                     let maybe = fast_group(&mut iter).ok().map(|v| {
                         let ignore = fast_ident(&v.stream().into_iter().next().unwrap()).unwrap();
-                        quote!{#ignore::recog(arg.add_level());}
+                        quote!{#ignore::recog(arg, l + 1);}
                     });
                     if let Some(vv) = iter.next() {
                         fast_ident(&vv).ok().map(|_| (v.clone(), maybe.clone()))
@@ -49,7 +49,7 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
             tmp.push(
                 if items.contains(&v) {
                     quote! {
-                        let v = #v::recog(arg.add_level());
+                        let v = #v::recog(arg, l + 1);
                         cache_if_error.push((
                             Construct::#v,
                             when_not_fail,
@@ -60,7 +60,7 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                     }
                 } else {
                     quote! {
-                        match #v::check_pass(arg.add_level()) {
+                        match #v::check_pass(arg, l + 1) {
                             Some((i, v)) => {
                                 if let Some(v) = ptr {
                                     if v != i {
@@ -77,7 +77,7 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                                 v
                             }
                             None => {
-                                match #v::parse(arg.add_level()) {
+                                match #v::parse(arg, l + 1) {
                                     Ok(v) => {
                                         cache_if_error.push((
                                             Construct::#v,
@@ -126,18 +126,18 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                     #check_pass_fail
 
                     // нет необходимости в consume ведь `items` сами это делаеют
-                    fn parse(arg: &mut ParseArgs) -> <Self as CommonTypes>::Output {
-                        arg.print.print_colored(format!("cons {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor));
-                        Self::after_debug(arg).map(|v| {
-                            arg.print.pass_or_fail::<true>();
+                    fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                        arg.print.print_colored(format!("cons {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
+                        Self::after_debug(arg, l).map(|v| {
+                            arg.print.pass_or_fail::<true>(l);
                             v
                         }).map_err(|e| {
-                            arg.print.pass_or_fail::<false>();
+                            arg.print.pass_or_fail::<false>(l);
                             e
                         })
                     }
 
-                    fn after_debug(arg: &mut ParseArgs) -> <Self as CommonTypes>::Output {
+                    fn after_debug(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                         let mut cache_if_error: Vec<(Construct, Pos, ConstructItem)> = Default::default();
                         let mut ptr = Default::default();
                         Ok(

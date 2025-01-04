@@ -1,7 +1,6 @@
 use lexer::{
     lexer2::{
-        code::Source, diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident,
-        IdentError, Idents, Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable,
+        cache_and_diags::diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident, IdentError, Idents, Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable
     },
     parse,
 };

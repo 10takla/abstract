@@ -40,6 +40,15 @@ impl Code {
     }
 }
 
+impl From<&str> for Code {
+    fn from(source: &str) -> Self {
+        Self {
+            source: Source::from(source),
+            cursor: Default::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deref)]
 pub struct Source {
     pub real_source: std::string::String,
@@ -47,8 +56,8 @@ pub struct Source {
     source: Arc<Vec<(usize, char)>>,
 }
 
-impl Source {
-    pub fn new(source: &str) -> Self {
+impl From<&str> for Source {
+    fn from(source: &str) -> Self {
         Self {
             real_source: source.into(),
             source: Arc::new(source.chars().enumerate().collect()),

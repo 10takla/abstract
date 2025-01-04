@@ -1,5 +1,5 @@
 use crate::{
-    lexer2::{code::Source, tests::setup_tracing, Construct, ConstructParse, ErrorType, Items, ParseArgs, Slice},
+    lexer2::{code::Source, tests::set_print, Construct, ConstructParse, ErrorType, Items, ParseArgs, Slice},
     parse,
 };
 use colored::Colorize;
@@ -111,10 +111,10 @@ impl std::fmt::Display for Diag {
 
 #[test]
 fn display() {
-    setup_tracing();
+    set_print();
     let mut t: ParseArgs = r#"2fdg  2fdg      
     2fdg"#.into();
-    Items::recog(&mut t);
+    Items::recog(&mut t, 0);
     for diag in t.c_a_d.clone().borrow().errors.clone() {
         println!("{diag}");
     }

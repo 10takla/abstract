@@ -4,9 +4,9 @@
 
 mod constructor;
 
-use proc_macro::{TokenStream};
-use syn::{parse_macro_input, Ident, ItemFn, LitStr};
-use quote::{quote, ToTokens};
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, Ident, ItemFn};
 
 #[proc_macro]
 pub fn constructor(input: TokenStream) -> TokenStream {
@@ -27,5 +27,6 @@ pub fn parse_test(_: TokenStream, annoted: TokenStream) -> TokenStream {
             use super::*;
             pub #fn_
         }
-    }.into()
+    }
+    .into()
 }

@@ -25,9 +25,8 @@ mod cache {
     mod pass {
         use super::*;
         mod construct {
-            use macros::parse_test;
-
             use super::*;
+            use macros::parse_test;
             // кеширование головы конструкции. DistructBlock должен парсится 1 раз
             #[parse_test]
             fn head(print: Print) {
@@ -55,8 +54,8 @@ mod cache {
             }
 
             mod with {
-                use macros::parse_test;
                 use super::*;
+                use macros::parse_test;
 
                 // Ident должен распознатся 1 раз, как токен без конструкции но часть вариации
                 #[parse_test]
@@ -76,9 +75,8 @@ mod cache {
         }
     }
     mod fail {
-        use macros::parse_test;
-
         use super::*;
+        use macros::parse_test;
 
         #[parse_test]
         fn token(print: Print) {
@@ -104,9 +102,22 @@ mod errors {
         dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
     }
 
-    #[parse_test]
-    fn error_passing(print: Print) {
-        dbg!(Items::recog(&mut (r#"sdfsfd = 22"#, print).into(), 0));
+    mod error_passing {
+        use super::*;
+
+        #[parse_test]
+        fn assign_expr(print: Print) {
+            let mut args: ParseArgs = (r#"sdfsfd = "#, print).into();
+            dbg!(Items::recog(&mut args, 0));
+            dbg!(&args.c_a_d.borrow().errors);
+        }
+
+        #[parse_test]
+        fn plus(print: Print) {
+            let mut args: ParseArgs = (r#"+"#, print).into();
+            dbg!(Items::recog(&mut args, 0));
+            dbg!(&args.c_a_d.borrow().errors);
+        }
     }
 }
 

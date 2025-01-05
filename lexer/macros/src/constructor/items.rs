@@ -41,7 +41,7 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                     pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
                         let mut vec = vec![];
                         loop {
-                            if arg.code.cursor == arg.code.source.len() {
+                            if arg.code.cursor >= arg.code.source.len() {
                                 break;
                             }
                             match #item::recog(arg, l) {
@@ -54,7 +54,7 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                                     if #break_::recog(&mut arg.clone(), l).is_ok() {
                                         break;
                                     } else {
-                                        arg.code.cursor = *e.end();
+                                        arg.code.cursor = *e.end() + 1;
                                         arg.c_a_d.borrow_mut().errors.push(e);
                                         continue;
                                     }

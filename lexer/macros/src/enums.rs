@@ -65,32 +65,15 @@ pub fn enums(g: &Group) -> (TokenStream2, Vec<Ident>) {
                     // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
                     // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
                     fn after_debug(arg: &ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                        let mut error: Option<Diag> = None;
-
-                        match #first::recog(&mut arg.clone(), l + 1).map(Self::#first) {
-                            Ok(v) => return Ok(v),
-                            Err(e) =>  {
-                                match error {
-                                    Some(v) if e.end() > v.end() => error = Some(e.clone()),
-                                    None => error = Some(e.clone()),
-                                    _ => {}
-                                };
-                                #(
-                                    match #other::recog(&mut arg.clone(), l + 1).map(Self::#other) {
-                                        Ok(v) => return Ok(v),
-                                        Err(e) =>  {
-                                            match error {
-                                                Some(v) if e.end() > v.end() => error = Some(e.clone()),
-                                                None => error = Some(e.clone()),
-                                                _ => {}
-                                            };
-                                        }
-                                    }
-                                )*
-                            }
-                        }
-
-                        Err(error.clone().unwrap())
+                        #first::recog(&mut arg.clone(), l + 1).map(Self::#first)
+                        #(
+                            .or_else(|error| {
+                                #other::recog(&mut arg.clone(), l + 1).map(Self::#other)
+                                .map_err(|e| {
+                                    (e.end() > error.end()).then_some(e).unwrap_or(error)
+                                })
+                            })
+                        )*
                     }
                 }
 

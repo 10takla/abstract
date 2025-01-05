@@ -44,12 +44,10 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                             if arg.code.cursor == arg.code.source.len() {
                                 break;
                             }
-                            let i = arg.code.cursor;
                             match #item::recog(arg, l) {
                                 Ok(v) => {
-                                    // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск, в списке
-                                    arg.c_a_d.borrow_mut().cache.pass.clear();
-                                    arg.c_a_d.borrow_mut().cache.fails.clear();
+                                    // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
+                                    arg.c_a_d.borrow_mut().cache.clear();
                                     vec.push(v);
                                 }
                                 Err(e) => {
@@ -57,7 +55,6 @@ pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
                                         break;
                                     } else {
                                         arg.code.cursor = *e.end();
-                                        // println!("ERROR {e:?}");
                                         arg.c_a_d.borrow_mut().errors.push(e);
                                         continue;
                                     }

@@ -1,7 +1,7 @@
 pub mod diag;
 
-use diag::Diag;
 use super::{Construct, ConstructItem, Pos};
+use diag::Diag;
 use std::collections::HashMap;
 use std_reset::prelude::Deref;
 
@@ -18,6 +18,13 @@ pub(super) struct Cache {
     // записываем только в const_item
     pub(super) pass: Vec<PassList>,
     pub(super) fails: HashMap<(Construct, Pos), Diag>,
+}
+
+impl Cache {
+    pub fn clear(&mut self) {
+        self.pass.clear();
+        self.fails.clear();
+    }
 }
 
 #[derive(Clone, Default, Debug, Deref)]

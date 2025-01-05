@@ -33,7 +33,7 @@ use code::{Code, Source};
 use colored::Colorize;
 use macros::constructor;
 use paste::paste;
-use print::{Print, tmp_pass_or_fail};
+use print::{tmp_pass_or_fail, Print};
 use regex::Regex;
 use regex_automata::{
     dfa::{dense::DFA, Automaton},
@@ -58,7 +58,6 @@ use std::{
     vec::IntoIter,
 };
 use std_reset::prelude::Deref;
-use tracing::info;
 
 #[derive(Clone, Debug)]
 pub struct ParseArgs {
@@ -123,7 +122,7 @@ trait CommonTypes: Sized {
 // }
 
 constructor!(
-    tokens { 
+    tokens {
         WhiteSpace r" +"
         NextLine r"\n"
         Tab r"\t"
@@ -175,9 +174,9 @@ constructor!(
                     return Ok(start..=i);
                 }
             }
-            
+
             let tmp = iter.last().unwrap().0;
-            
+
             Err((tmp..=tmp, ErrorType::String(StringError::EndsWithQuote)))
         }
         Distribution r#"\.\."#
@@ -265,7 +264,7 @@ constructor!(
 fn reg_observe(arg: &ParseArgs, reg: &str) -> Result<Slice, usize> {
     Regex::new(&format!("^{reg}"))
         .unwrap()
-        .find(&arg.code.t())
+        .find(&arg.code.get_residue())
         .map(|mat| arg.code.cursor + mat.start()..=arg.code.cursor + mat.end() - 1)
         .ok_or(arg.code.cursor)
 }

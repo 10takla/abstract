@@ -1,6 +1,6 @@
 use crate::{check_pass_fail, fast_group, fast_ident, fast_puncts, COMMON};
 use proc_macro::{Diagnostic, Level};
-use proc_macro2::{Group, Ident, TokenStream as TokenStream2, TokenTree};
+use proc_macro2::{Group, Ident, TokenStream as TokenStream2};
 use quote::quote;
 use syn::Index;
 
@@ -8,15 +8,13 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
     let mut iter = g.stream().into_iter().peekable();
     let mut vec = vec![];
     let mut construct_names = vec![];
-    Diagnostic::new(Level::Warning, "fsdfsdf").emit();
 
-    // panic!("dsfsf");
     while let Some(item) = iter.next() {
         let Ok(cons_name) = fast_ident(&item) else {
-            break
+            break;
         };
         let Ok(_) = fast_puncts("->", &mut iter) else {
-            break
+            break;
         };
 
         let mut cons_item = vec![];
@@ -24,11 +22,10 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
         while let Some((v, maybe)) = {
             {
                 let mut iter = iter.clone();
-                iter.next().and_then(|v| fast_ident(&v).ok())
-                .and_then(|v| {
+                iter.next().and_then(|v| fast_ident(&v).ok()).and_then(|v| {
                     let maybe = fast_group(&mut iter).ok().map(|v| {
                         let ignore = fast_ident(&v.stream().into_iter().next().unwrap()).unwrap();
-                        quote!{#ignore::recog(arg, l + 1);}
+                        quote! {#ignore::recog(arg, l + 1);}
                     });
                     if let Some(vv) = iter.next() {
                         fast_ident(&vv).ok().map(|_| (v.clone(), maybe.clone()))
@@ -36,15 +33,13 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                         Some((v, maybe))
                     }
                 })
-            }.map(|v| {
+            }
+            .map(|v| {
                 iter.next().unwrap();
-                v.1.as_ref().map(|_| {
-                    iter.next().unwrap();
-                });
+                v.1.as_ref().map(|_| iter.next().unwrap());
                 v
             })
-        }
-        {
+        } {
             cons_item.push(v.clone());
             tmp.push(
                 if items.contains(&v) {
@@ -60,8 +55,8 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                     }
                 } else {
                     quote! {
-                        match #v::check_pass(arg, l + 1) {
-                            Some((i, v)) => {
+                        #v::check_pass(arg, l + 1)
+                            .map(|(i, v)| {
                                 if let Some(v) = ptr {
                                     if v != i {
                                         ptr = None
@@ -69,25 +64,20 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                                 } else {
                                     ptr = Some(i);
                                 }
-            
                                 arg.c_a_d.borrow_mut().cache.pass[i].index += 1;
-        
-                                #maybe
-        
                                 v
-                            }
-                            None => {
-                                match #v::parse(arg, l + 1) {
-                                    Ok(v) => {
+                            }).ok_or(())
+                            .or_else(|_| {
+                                #v::parse(arg, l + 1)
+                                    .map(|v| {
                                         cache_if_error.push((
                                             Construct::#v,
                                             when_not_fail,
                                             ConstructItem::#v(v.clone()),
                                         ));
-                                        #maybe
                                         v
-                                    }
-                                    Err(e) =>  {
+                                    })
+                                    .map_err(|e| {
                                         if !cache_if_error.is_empty() {
                                             if let Some(i) = ptr {
                                                 let v = &mut arg.c_a_d.borrow_mut().cache.pass[i];
@@ -98,19 +88,21 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
                                             }
                                         }
                                         arg.c_a_d.borrow_mut().cache.fails.insert((Construct::#v, when_not_fail), e.clone());
-                                        return Err(e);
-                                    }
-                                }
-                            }
-                        }
+                                        e
+                                    })
+                            })
+                            .map(|v| {
+                                #maybe
+                                v
+                            })?
                     }
                 }
             );
         }
         if cons_item.len() == 0 {
-            panic!("expect elements")
+            panic!("construct expect elements")
         }
-        let n = Index::from(cons_item.len()-1);
+        let n = Index::from(cons_item.len() - 1);
         let common = &*COMMON;
         let check_pass_fail = check_pass_fail("cons", &cons_name);
         vec.push(

@@ -1,6 +1,7 @@
 use lexer::{
     lexer2::{
-        cache_and_diags::diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident, IdentError, Idents, Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable
+        cache_and_diags::diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident,
+        IdentError, Idents, Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable,
     },
     parse,
 };
@@ -168,11 +169,13 @@ impl Backend {
                     .iter()
                     .cloned()
                     .map(|diag| {
-                        let [[start, start_line], [end, end_line]] = tmp(&diag, &code);
+                        let [[start, start_line], [end, end_line]] =
+                            split_into_start_end(&diag, &code);
                         Diagnostic {
                             range: Range {
                                 start: Position::new(start_line as u32, start as u32),
-                                end: Position::new(end_line as u32, end as u32),
+                                // +1, так как в vscode decrement
+                                end: Position::new(end_line as u32, end as u32 + 1),
                             },
                             severity: Some(DiagnosticSeverity::ERROR),
                             code: None,
@@ -194,20 +197,22 @@ impl Backend {
     }
 }
 
-fn tmp(diag: &Diag, code: &str) -> [[usize; 2]; 2] {
-    let lines = &mut code.split_inclusive('\n').enumerate().peekable();
-
+fn split_into_start_end(diag: &Diag, code: &str) -> [[usize; 2]; 2] {
     let [item_start, item_end] = [*diag.slice.start(), *diag.slice.end()];
     let mut acc = 0;
-    let mut iter = lines.map(|(i, line)| {
-        let start = acc;
-        let len = line.chars().count();
-        if len > 0 {
-            acc += len;
-        }
-        let end = acc;
-        (i, [start, end])
-    });
+    let mut iter = code
+        .split_inclusive('\n')
+        .enumerate()
+        .peekable()
+        .map(|(i, line)| {
+            let start = acc;
+            let len: usize = line.chars().count();
+            if len > 0 {
+                acc += len;
+            }
+            let end = if acc != 0 { acc - 1 } else { 0 };
+            (i, [start, end])
+        });
 
     while let Some((i, [line_start, line_end])) = iter.next() {
         // если начало находится на линии
@@ -235,15 +240,24 @@ fn tmp(diag: &Diag, code: &str) -> [[usize; 2]; 2] {
 #[test]
 fn diag() {
     let check = |source, b| {
-        assert_eq!(tmp(&parse(source).1[0], source), b);
+        assert_eq!(split_into_start_end(dbg!(&parse(source).1[0]), source), b);
     };
 
     check("22dd", [[0, 0], [3, 0]]);
     check(
         "
-22dd",
-        [[4, 1], [7, 1]],
+22dd
+    ",
+        [[0, 1], [3, 1]],
     );
+
+//     dbg!(
+//         &parse(
+//             r#"
+// "sdfsdfsf"#
+//         )
+//         .1[0]
+//     );
 }
 
 fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {

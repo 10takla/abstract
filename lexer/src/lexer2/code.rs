@@ -22,7 +22,7 @@ impl Code {
         self.source[self.cursor]
     }
 
-    pub(super) fn t(&self) -> std::string::String {
+    pub(super) fn get_residue(&self) -> std::string::String {
         self.source
             .as_ref()
             .into_iter()

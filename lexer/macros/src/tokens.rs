@@ -21,7 +21,6 @@ pub fn tokens(
         let v = match iter.next().unwrap() {
             TokenTree::Literal(v) => {
                 parse2::<LitStr>(TokenTree::from(v.clone()).into()).unwrap();
-
                 quote! {
                     reg_observe(arg, #v).map_err(|v| (v..=v, ErrorType::Reg))
                 }
@@ -33,7 +32,7 @@ pub fn tokens(
                     body.stream().into_iter().map(|v| fast_ident(&v).unwrap()),
                 );
                 quote! {
-                    (|arg: &ParseArgs| {#e})(arg)
+                    (|arg: &ParseArgs| #e)(arg)
                 }
             }
             _ => unreachable!(),
@@ -53,15 +52,16 @@ pub fn tokens(
                 #check_pass_fail
 
                 fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                    let v2 = arg.code.cursor;
                     let mut tmp = |arg: &mut ParseArgs, v| {
-                        arg.print.print_colored(format!("{v} token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
+                        arg.print.print_colored(format!("{v} token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, v2), l);
                     };
                     Self::consume_parse(arg)
                     .map(|v| {
-                        tmp(arg, tmp_pass_or_fail::<true>());
+                        tmp(arg, format!("{}", tmp_pass_or_fail::<true>()));
                         v
                     }).map_err(|e| {
-                        tmp(arg, tmp_pass_or_fail::<false>());
+                        tmp(arg, format!("{}({})", tmp_pass_or_fail::<false>(), e.end()));
                         e
                     })
                 }

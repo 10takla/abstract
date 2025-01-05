@@ -13,7 +13,7 @@ fn tmp() {
         "fn ываыва
     
     { dsfs: Ar, dsfs: Ty, }{sdfsdf}",
-        set_print(),
+        cli_args(),
     )
         .into();
     dbg!(FnHead::recog(&mut t, 0));
@@ -28,7 +28,7 @@ mod cache {
             /// кеширование головы конструкции. DistructBlock должен парсится 1 раз
             #[test]
             fn head() {
-                let mut t = ("main..", set_print()).into();
+                let mut t = ("main..", cli_args()).into();
                 dbg!(CacheConstructHead::recog(&mut t, 0));
             }
 
@@ -37,7 +37,7 @@ mod cache {
             fn item() {
                 let mut t = (
                     "maijn\t=2323 main { }..sdf\nr+=2 t/=4\"sdfsf sdf\"-+=+",
-                    set_print(),
+                    cli_args(),
                 )
                     .into();
                 // let mut t = "mai { }..".into();
@@ -47,7 +47,7 @@ mod cache {
             /// После Var7 `goods` от Var6 должны расширятся, а не создаватбся новый список
             #[test]
             fn list_walkthrough() {
-                let mut t = ("main}{ ", set_print()).into();
+                let mut t = ("main}{ ", cli_args()).into();
                 dbg!(CacheConstructWalkthroug::recog(&mut t, 0));
             }
 
@@ -56,7 +56,7 @@ mod cache {
                 /// Ident должен распознатся 1 раз, как токен без конструкции но часть вариации
                 #[test]
                 fn token() {
-                    let mut t = (r#"sdfsdf1."#, set_print()).into();
+                    let mut t = (r#"sdfsdf1."#, cli_args()).into();
                     // 0 -> NamedBlock -> Ident Block -> Fail -> memeory (pos, item)
                     // 0 -> Ident -> (x from memeory)
                     dbg!(CacheToken::recog(&mut t, 0));
@@ -64,7 +64,7 @@ mod cache {
 
                 #[test]
                 fn enum_() {
-                    let mut t = ("+ ", set_print()).into();
+                    let mut t = ("+ ", cli_args()).into();
                     dbg!(CacheEnum::recog(&mut t, 0));
                 }
             }
@@ -75,13 +75,13 @@ mod cache {
 
         #[test]
         fn token() {
-            let mut t = ("2sdfsfd", set_print()).into();
+            let mut t = ("2sdfsfd", cli_args()).into();
             dbg!(CacheToken::recog(&mut t, 0));
         }
 
         #[test]
         fn enum_() {
-            let mut t = ("22", set_print()).into();
+            let mut t = ("22", cli_args()).into();
             dbg!(CacheEnum::recog(&mut t, 0));
         }
     }
@@ -91,10 +91,16 @@ mod errors {
     use super::*;
 
     #[test]
-    fn items() {
-        let mut t = (r#"  "sdfsf "#, set_print()).into();
+    fn any() {
+        let mut t = (r#"  "sdfsf "#, cli_args()).into();
         dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
     }
+
+    // #[test]
+    // fn literal() {
+    //     cli_args();
+    //     dbg!(parse(r#"sdfsfd +"#));
+    // }
 }
 
 #[test]
@@ -123,7 +129,7 @@ fn code() {
 
             result = 502
             "#,
-            set_print()
+            cli_args()
         )
             .into(),
         0
@@ -132,7 +138,7 @@ fn code() {
 
 mod issues {
     use super::{Code, Literal, ParseArgs, Print, Source};
-    use crate::lexer2::{tests::set_print, Items};
+    use crate::lexer2::{tests::cli_args, Items};
     use clap::Parser;
 
     /// Когда происходит ошибка String::EndsWithQuote она происходит до конца кода, при этом items продолжают дальше распозноваться
@@ -142,11 +148,11 @@ mod issues {
     /// Примечание: Также исправление является лучшим вариантом для смещения cursor, так как требует меньше опреаций
     #[test]
     fn items_with_string_error() {
-        Items::recog(&mut (r#"{"22sd}"#, set_print()).into(), 0);
+        Items::recog(&mut (r#"{"22sd}"#, cli_args()).into(), 0);
     }
 }
 
-pub fn set_print() -> Print {
+pub fn cli_args() -> Print {
     use std::string::String;
 
     #[derive(Clone, Debug, Default, Parser)]

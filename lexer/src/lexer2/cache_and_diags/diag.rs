@@ -6,7 +6,7 @@ use crate::{
     parse,
 };
 use colored::Colorize;
-use macros::constructor;
+use macros::{constructor, parse_test};
 use paste::paste;
 use regex::Regex;
 use regex_automata::{
@@ -121,12 +121,12 @@ impl std::fmt::Display for Diag {
     }
 }
 
-#[test]
-fn display() {
+#[parse_test]
+fn display(print: crate::lexer2::print::Print) {
     let mut code = (
         r#"2fdg  2fdg      
     2fdg"#,
-        cli_args(),
+        print,
     )
         .into();
     Items::recog(&mut code, 0);
@@ -136,16 +136,17 @@ fn display() {
 }
 
 mod issues {
-    use crate::lexer2::{tests::cli_args, Items};
+    use crate::lexer2::{print::Print, tests::cli_args, Items};
+    use macros::parse_test;
 
     // Ошибка происходит из-за необработки в `Diag::display` диапазона ошибки, выходящей за границу кода
     // Подробно: Когда код заканчивается, но при этом требуется завершение обработки элементов конструкции.
     // Например, как в данном случае обработка Block: удачно обрабатывается `{`, далее код заканчивается, поэтому ошибка заверщающей коснтрукцию элемента `}` должна находится после `{`, то есть за гранцией строки кода.
     // Примечание: Поэтому чисто семантически было бы правильно указывать диапазон ошибки за кодом
     // Исправление: Из примечания следует, что нужно обрабатывать случаи выхода ошибки за границу кода на уровне `Diag::display`
-    #[test]
-    fn outside_boundary_code() {
-        let mut code = (r#"{"#, cli_args()).into();
+    #[parse_test]
+    fn outside_boundary_code(print: Print) {
+        let mut code = (r#"{"#, print).into();
         Items::recog(&mut code, 0);
         for diag in code.c_a_d.clone().borrow().errors.clone() {
             // dbg!(&diag);
@@ -153,12 +154,11 @@ mod issues {
         }
     }
 
-    #[test]
-    fn invalid_error_range() {
+    #[parse_test]
+    fn invalid_error_range(print: Print) {
         let mut code = (
             r#"
-22dd"#,
-            cli_args(),
+22dd"#, print,
         )
             .into();
         Items::recog(&mut code, 0);

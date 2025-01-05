@@ -1,4 +1,4 @@
-use crate::{check_pass_fail, fast_ident, fast_puncts, COMMON};
+use super::{check_pass_fail, fast_ident, fast_puncts, COMMON};
 use proc_macro2::{Group, Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{parse2, LitStr};
@@ -41,7 +41,7 @@ pub fn enums(g: &Group) -> (TokenStream2, Vec<Ident>) {
                     #check_pass_fail
 
                     fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                        arg.print.print_colored(format!("enum {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
+                        arg.print.print_colored(arg.get_head("enum", Self::CONST, arg.code.cursor), l);
                         Self::consume_parse(arg, l).map(|v| {
                             arg.print.pass_or_fail::<true>(l);
                             v

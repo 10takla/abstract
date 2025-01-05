@@ -1,4 +1,4 @@
-use crate::{check_pass_fail, fast_group, fast_ident, COMMON};
+use super::{check_pass_fail, fast_group, fast_ident, COMMON};
 use proc_macro2::{Group, Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use std::{collections::HashMap, fmt::Debug};
@@ -52,10 +52,11 @@ pub fn tokens(
                 #check_pass_fail
 
                 fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                    let v2 = arg.code.cursor;
+                    let pos = arg.code.cursor;
                     let mut tmp = |arg: &mut ParseArgs, v| {
-                        arg.print.print_colored(format!("{v} token {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, v2), l);
+                        arg.print.print_colored(format!("{v} {}", arg.get_head("token", Self::CONST, pos)), l);
                     };
+
                     Self::consume_parse(arg)
                     .map(|v| {
                         tmp(arg, format!("{}", tmp_pass_or_fail::<true>()));

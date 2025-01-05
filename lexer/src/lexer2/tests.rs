@@ -1,11 +1,12 @@
 use super::*;
 use clap::Parser;
+use macros::parse_test;
 use std::env::{self, args};
 use tracing::{dispatcher::with_default, level_filters::LevelFilter, Level};
 use tracing_subscriber::fmt::format;
 
-#[test]
-fn tmp() {
+#[parse_test]
+fn tmp(print: Print) {
     // let mut t = "fn ываыва( dsfs, dsfs, ){sdfsdf}".into();
     // dbg!(FnHead::recog(&mut t));
 
@@ -13,7 +14,7 @@ fn tmp() {
         "fn ываыва
     
     { dsfs: Ar, dsfs: Ty, }{sdfsdf}",
-        cli_args(),
+        print,
     )
         .into();
     dbg!(FnHead::recog(&mut t, 0));
@@ -24,64 +25,70 @@ mod cache {
     mod pass {
         use super::*;
         mod construct {
+            use macros::parse_test;
+
             use super::*;
-            /// кеширование головы конструкции. DistructBlock должен парсится 1 раз
-            #[test]
-            fn head() {
-                let mut t = ("main..", cli_args()).into();
+            // кеширование головы конструкции. DistructBlock должен парсится 1 раз
+            #[parse_test]
+            fn head(print: Print) {
+                let mut t = ("main..", print).into();
                 dbg!(CacheConstructHead::recog(&mut t, 0));
             }
 
-            /// кеширование элементов конструкции. элемнты Var2 должны распознаться только 1 раз до Var2
-            #[test]
-            fn item() {
+            // кеширование элементов конструкции. элемнты Var2 должны распознаться только 1 раз до Var2
+            #[parse_test]
+            fn item(print: Print) {
                 let mut t = (
                     "maijn\t=2323 main { }..sdf\nr+=2 t/=4\"sdfsf sdf\"-+=+",
-                    cli_args(),
+                    print,
                 )
                     .into();
                 // let mut t = "mai { }..".into();
                 dbg!(CacheConstructItem::recog(&mut t, 0));
             }
 
-            /// После Var7 `goods` от Var6 должны расширятся, а не создаватбся новый список
-            #[test]
-            fn list_walkthrough() {
-                let mut t = ("main}{ ", cli_args()).into();
+            // После Var7 `goods` от Var6 должны расширятся, а не создаватбся новый список
+            #[parse_test]
+            fn list_walkthrough(print: Print) {
+                let mut t = ("main}{ ", print).into();
                 dbg!(CacheConstructWalkthroug::recog(&mut t, 0));
             }
 
             mod with {
+                use macros::parse_test;
                 use super::*;
-                /// Ident должен распознатся 1 раз, как токен без конструкции но часть вариации
-                #[test]
-                fn token() {
-                    let mut t = (r#"sdfsdf1."#, cli_args()).into();
+
+                // Ident должен распознатся 1 раз, как токен без конструкции но часть вариации
+                #[parse_test]
+                fn token(print: Print) {
+                    let mut t = (r#"sdfsdf1."#, print).into();
                     // 0 -> NamedBlock -> Ident Block -> Fail -> memeory (pos, item)
                     // 0 -> Ident -> (x from memeory)
                     dbg!(CacheToken::recog(&mut t, 0));
                 }
 
-                #[test]
-                fn enum_() {
-                    let mut t = ("+ ", cli_args()).into();
+                #[parse_test]
+                fn enum_(print: Print) {
+                    let mut t = ("+ ", print).into();
                     dbg!(CacheEnum::recog(&mut t, 0));
                 }
             }
         }
     }
     mod fail {
+        use macros::parse_test;
+
         use super::*;
 
-        #[test]
-        fn token() {
-            let mut t = ("2sdfsfd", cli_args()).into();
+        #[parse_test]
+        fn token(print: Print) {
+            let mut t = ("2sdfsfd", print).into();
             dbg!(CacheToken::recog(&mut t, 0));
         }
 
-        #[test]
-        fn enum_() {
-            let mut t = ("22", cli_args()).into();
+        #[parse_test]
+        fn enum_(print: Print) {
+            let mut t = ("22", print).into();
             dbg!(CacheEnum::recog(&mut t, 0));
         }
     }
@@ -89,18 +96,18 @@ mod cache {
 
 mod errors {
     use super::*;
+    use macros::parse_test;
 
-    #[test]
-    fn any() {
-        let mut t = (r#"  "sdfsf "#, cli_args()).into();
+    #[parse_test]
+    fn any(print: Print) {
+        let mut t = (r#"  "sdfsf "#, print).into();
         dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
     }
 
-    // #[test]
-    // fn literal() {
-    //     cli_args();
-    //     dbg!(parse(r#"sdfsfd +"#));
-    // }
+    #[parse_test]
+    fn error_passing(print: Print) {
+        dbg!(Items::recog(&mut (r#"sdfsfd = 22"#, print).into(), 0));
+    }
 }
 
 #[test]
@@ -140,15 +147,16 @@ mod issues {
     use super::{Code, Literal, ParseArgs, Print, Source};
     use crate::lexer2::{tests::cli_args, Items};
     use clap::Parser;
+    use macros::parse_test;
 
-    /// Когда происходит ошибка String::EndsWithQuote она происходит до конца кода, при этом items продолжают дальше распозноваться
-    /// Ошибка происходила из-за то что мы инкрементируем к cursor длинну ошибки, которая всегда получалась минимум 1, так как было:
-    /// ```arg.code.cursor += e.end() - i + 1;```
-    /// Исправление: Замена на ```arg.code.cursor = e.end();```
-    /// Примечание: Также исправление является лучшим вариантом для смещения cursor, так как требует меньше опреаций
-    #[test]
-    fn items_with_string_error() {
-        Items::recog(&mut (r#"{"22sd}"#, cli_args()).into(), 0);
+    // Когда происходит ошибка String::EndsWithQuote она происходит до конца кода, при этом items продолжают дальше распозноваться
+    // Ошибка происходила из-за то что мы инкрементируем к cursor длинну ошибки, которая всегда получалась минимум 1, так как было:
+    // ```arg.code.cursor += e.end() - i + 1;```
+    // Исправление: Замена на ```arg.code.cursor = e.end();```
+    // Примечание: Также исправление является лучшим вариантом для смещения cursor, так как требует меньше опреаций
+    #[parse_test]
+    fn items_with_string_error(print: Print) {
+        Items::recog(&mut (r#"{"22sd}"#, print).into(), 0);
     }
 }
 
@@ -162,6 +170,8 @@ pub fn cli_args() -> Print {
         pub(super) logs: bool,
         #[arg(long, default_value_t = 0)]
         pub(super) fail_level: usize,
+        #[arg(long, default_value_t = false)]
+        pub(super) cache: bool,
     }
 
     let args = Args::parse_from({
@@ -194,6 +204,7 @@ pub fn cli_args() -> Print {
 
     Print {
         max_fail_level: args.fail_level,
+        cache: args.cache,
         ..Default::default()
     }
 }

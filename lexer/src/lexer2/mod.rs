@@ -48,7 +48,7 @@ use regex_syntax::{
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::{Debug, Display},
     hash::DefaultHasher,
     io::{self, stdout, Cursor, Read, Write},
     ops::RangeInclusive,
@@ -66,8 +66,8 @@ pub struct ParseArgs {
     print: Print,
 }
 
-impl<'a> From<&'a str> for ParseArgs {
-    fn from(value: &'a str) -> Self {
+impl From<&str> for ParseArgs {
+    fn from(value: & str) -> Self {
         Self::new(&value)
     }
 }
@@ -89,6 +89,17 @@ impl ParseArgs {
             c_a_d: Default::default(),
             print: Default::default(),
         }
+    }
+
+    fn get_head(&self, name: &str, const_: impl Debug, pos: usize) -> std::string::String {
+        format!(
+            "{name} {const_:?}({pos}) {}",
+            if self.print.cache {
+                format!("{:?}", self.c_a_d.borrow().cache.pass)
+            } else {
+                Default::default()
+            }
+        )
     }
 }
 

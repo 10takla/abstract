@@ -1,4 +1,4 @@
-use crate::{check_pass_fail, fast_group, fast_ident, fast_puncts, COMMON};
+use super::{check_pass_fail, fast_group, fast_ident, fast_puncts, COMMON};
 use proc_macro::{Diagnostic, Level};
 use proc_macro2::{Group, Ident, TokenStream as TokenStream2};
 use quote::quote;
@@ -119,7 +119,7 @@ pub fn constructs(g: &Group, items: &Vec<Ident>) -> (TokenStream2, Vec<Ident>) {
 
                     // нет необходимости в consume ведь `items` сами это делаеют
                     fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                        arg.print.print_colored(format!("cons {:?} {:?} {}", Self::CONST, arg.c_a_d.borrow().cache.pass, arg.code.cursor), l);
+                        arg.print.print_colored(arg.get_head("cons", Self::CONST, arg.code.cursor), l);
                         Self::after_debug(arg, l).map(|v| {
                             arg.print.pass_or_fail::<true>(l);
                             v

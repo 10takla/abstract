@@ -7,6 +7,7 @@ use tracing::info;
 #[derive(Clone, Debug, Default)]
 pub struct Print {
     pub(super) max_fail_level: usize,
+    pub(super) cache: bool,
     // pub(super) output: Output,
 }
 

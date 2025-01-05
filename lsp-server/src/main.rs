@@ -250,14 +250,6 @@ fn diag() {
     ",
         [[0, 1], [3, 1]],
     );
-
-//     dbg!(
-//         &parse(
-//             r#"
-// "sdfsdfsf"#
-//         )
-//         .1[0]
-//     );
 }
 
 fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {

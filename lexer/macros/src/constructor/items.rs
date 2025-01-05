@@ -1,4 +1,4 @@
-use crate::{check_pass_fail, fast_group, fast_ident, fast_puncts, COMMON};
+use super::{check_pass_fail, fast_group, fast_ident, fast_puncts, COMMON};
 use proc_macro2::{Group, Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{parse2, LitStr};

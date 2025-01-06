@@ -67,7 +67,7 @@ pub struct ParseArgs {
 }
 
 impl From<&str> for ParseArgs {
-    fn from(value: & str) -> Self {
+    fn from(value: &str) -> Self {
         Self::new(&value)
     }
 }
@@ -134,9 +134,6 @@ trait CommonTypes: Sized {
 
 constructor!(
     tokens {
-        WhiteSpace r" +"
-        NextLine r"\n"
-        Tab r"\t"
         Ident [StartsWithNumber] {
             // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
             let start_rule = |char: char| char.is_alphabetic() || char == '_';
@@ -172,7 +169,6 @@ constructor!(
 
             Ok(start..=end)
         }
-        Number r"\b\d+\b"
         String [StartsWithNumber StartsWithQuote EndsWithQuote] {
             // r#""[^"\\]*(?:\\.[^"\\]*)*""#
             let mut iter = arg.code.iter();
@@ -190,6 +186,9 @@ constructor!(
 
             Err((tmp..=tmp, ErrorType::String(StringError::EndsWithQuote)))
         }
+
+        Number r"\b\d+\b"
+
         Distribution r#"\.\."#
         NameSpace "::"
         OpenFigureBracket r#"\{"#
@@ -197,77 +196,79 @@ constructor!(
         OpenRoundBracket r#"\("#
         CloseRoundBracket r#"\)"#
         Eq r#"="#
-        Add r#"\+"#
-        Sub r#"-"#
-        Mul r"\*"
-        Div r#"/"#
-
-        Fn "fn"
-        Const "const"
-        Struct "struct"
-        Trait "trait"
-        Let "let"
 
         Comma ","
         Colon ":"
     }
-    enums {
-        Item -> FnHead | AnyBlock | AssignExpr | Literal | Idents | Ignore
-        AnyBlock -> NamedDistrBlock | DistrBlock | NamedBlock | Block
-        AssignExpr -> AssignAnd | Assign
-        Literal -> String | Number
-
-        Ignore -> WhiteSpace | NextLine | Tab
-
-        Op -> Add | Sub | Mul | Div
-
-        Idents -> Keyword | Ident
-        Keyword -> Fn | Const | Struct | Trait | Let
-
-        FnArgs -> StructArgsC | TupleArgsC
-        StructArgsV -> StructArg | Ignore
-        TupleArgsV -> TupleArg | Ignore
-
-        CacheConstructItem -> Var1 | Var2
-        CacheConstructHead -> Var3 | CommCons1
-        CacheToken -> CommCons1 | Ident
-        CacheEnum -> Var5 | Op
-        CacheConstructWalkthroug -> Var6 | Var7 | Var8
-    }
-    constructs {
-        NamedDistrBlock -> NamedBlock (Ignore) Distribution
-        DistrBlock -> Ident (Ignore) Distribution
-        NamedBlock -> Ident (Ignore) Block
-        Block -> OpenFigureBracket Items CloseFigureBracket
-
-        AssignAnd -> Ident (Ignore) OpEq (Ignore) Literal
-        Assign -> Ident (Ignore) Eq (Ignore) Literal
-        OpEq -> Op Eq
-
-        FnHead -> Fn (Ignore) Ident (Ignore) FnArgs (Ignore) Block
-        StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
-        TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
-        StructArg -> Ident (Ignore) Colon (Ignore) Ident (Ignore) Comma
-        TupleArg -> Ident (Ignore) Comma
-        Tmp -> Ident Eq
-
-        CommCons1 -> Ident Distribution
-
-        Var1 -> Ident Ignore Eq Number WhiteSpace NamedDistrBlock Item Ignore AssignAnd WhiteSpace AssignExpr Literal Sub OpEq Op Number
-        Var2 -> Ident Ignore Eq Number WhiteSpace NamedDistrBlock Item Ignore AssignAnd WhiteSpace AssignExpr Literal Sub OpEq Op
-
-        Var3 -> CommCons1 Ident
-
-        Var5 -> Op Ident
-
-        Var6 -> Ident CloseFigureBracket Distribution
-        Var7 -> Ident CloseFigureBracket OpenFigureBracket CloseFigureBracket
-        Var8 -> Ident CloseFigureBracket OpenFigureBracket WhiteSpace
-    }
+    enums {}
+    constructs {}
     items {
         Items(Item) CloseFigureBracket
         StructArgsI(StructArgsV) CloseFigureBracket
         TupleArgsI(TupleArgsV) CloseRoundBracket
+    }
+    common {
+        Item -> FnHead | AnyBlock | AssignExpr | Literal | Idents | Ignore
+            FnHead -> Fn (Ignore) Ident (Ignore) FnArgs (Ignore) Block
+                
+                FnArgs -> StructArgsC | TupleArgsC
+                    StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
+                    TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
+            AnyBlock -> NamedDistrBlock | DistrBlock | NamedBlock | Block
+                NamedDistrBlock -> NamedBlock (Ignore) Distribution
+                DistrBlock -> Ident (Ignore) Distribution
+                NamedBlock -> Ident (Ignore) Block
+                Block -> OpenFigureBracket Items CloseFigureBracket
+            AssignExpr -> AssignAnd | Assign
+                AssignAnd -> Ident (Ignore) OpEq (Ignore) Literal
+                    OpEq -> Op Eq
+                Assign -> Ident (Ignore) Eq (Ignore) Literal
+            Literal -> String | Number
+            Idents -> Keyword | Ident
+
+        Ignore -> WhiteSpace | NextLine | Tab
+            WhiteSpace r" +"
+            NextLine r"\n"
+            Tab r"\t"
+
+        Op -> Add | Sub | Mul | Div
+            Add r#"\+"#
+            Sub r#"-"#
+            Mul r"\*"
+            Div r#"/"#
+        
+        Keyword -> Fn | Const | Struct | Trait | Let
+            Fn "fn"
+            Const "const"
+            Struct "struct"
+            Trait "trait"
+            Let "let"
+        
+        StructArgsV -> StructArg | Ignore
+            StructArg -> Ident (Ignore) Colon (Ignore) Ident (Ignore) Comma
+        TupleArgsV -> TupleArg | Ignore
+            TupleArg -> Ident (Ignore) Comma
+    }
+    common {
+        Tmp -> Ident Eq
+    }
+    common {
+        CacheConstructItem -> Var1 | Var2
+        Var1 -> Ident Ignore Eq Number WhiteSpace NamedDistrBlock Item Ignore AssignAnd WhiteSpace AssignExpr Literal Sub OpEq Op Number
+        Var2 -> Ident Ignore Eq Number WhiteSpace NamedDistrBlock Item Ignore AssignAnd WhiteSpace AssignExpr Literal Sub OpEq Op
+    }
+    common {
+        CacheConstructHead -> Var3 | CommCons1
+        CacheToken -> CommCons1 | Ident
+        CacheEnum -> Var5 | Op
+        CacheConstructWalkthroug -> Var6 | Var7 | Var8
+
+        CommCons1 -> Ident Distribution
+        Var3 -> CommCons1 Ident
+        Var5 -> Op Ident
+        Var6 -> Ident CloseFigureBracket Distribution
+        Var7 -> Ident CloseFigureBracket OpenFigureBracket CloseFigureBracket
+        Var8 -> Ident CloseFigureBracket OpenFigureBracket WhiteSpace
     }
 );
 

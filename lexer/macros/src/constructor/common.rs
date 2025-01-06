@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub fn common(
-    errors: HashMap<Ident, impl Iterator<Item = Ident> + Clone + Debug>,
+    errors: HashMap<Ident, Vec<Ident>>,
     v: [Vec<Ident>; 4],
 ) -> TokenStream2 {
     let construct = v.iter().flatten().collect::<Vec<_>>();
@@ -31,9 +31,9 @@ pub fn common(
                 }
             }
         }));
-    
+
     let errors = init_item.iter().map(|init_item| {
-        if let Some(errs) = errors.get(init_item).cloned() && errs.clone().next().is_some() {
+        if let Some(errs) = errors.get(init_item).cloned() && errs.clone().into_iter().next().is_some() {
             quote! {
                 #[derive(Clone, Debug)]
                 pub enum [<#init_item Error>] {

@@ -5,25 +5,32 @@ mod items;
 mod tokens;
 
 use common::common;
-use constructs::constructs;
-use enums::enums;
-use items::items;
+use constructs::{construct_recognize, constructs, constructs_reckog};
+use enums::{enum_recognize, enums};
+use items::{items, items_recognize};
 use proc_macro::TokenStream;
 use proc_macro2::{token_stream::IntoIter, Group, Literal, TokenStream as TokenStream2, TokenTree};
 use quote::{quote, ToTokens};
-use std::{collections::HashMap, hash::Hash, iter::Peekable, sync::LazyLock};
+use std::{
+    any::Any,
+    collections::HashMap,
+    hash::Hash,
+    iter::Peekable,
+    panic::{catch_unwind, AssertUnwindSafe, UnwindSafe},
+    sync::LazyLock,
+};
 use syn::{
     parse, parse2, parse_macro_input, punctuated::Punctuated, Attribute, Data, DataEnum,
     DataStruct, DeriveInput, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, ItemEnum, LitStr,
     Meta, MetaList, Token, Type, Variant,
 };
-use tokens::tokens;
+use tokens::{token_recognize, tokens};
 
 pub fn constructor(input: TokenStream) -> TokenStream {
     let mut iter = TokenStream2::from(input).into_iter().peekable();
 
-    const K: [&str; 4] = ["tokens", "enums", "constructs", "items"];
-    let mut map = HashMap::new();
+    const K: [&str; 5] = ["tokens", "enums", "constructs", "items", "common"];
+    let mut map: HashMap<String, TokenStream2> = HashMap::new();
     while let Some(item) = iter.next() {
         let TokenTree::Ident(key) = item else {
             panic!("expect ident, find {item:?}");
@@ -32,26 +39,116 @@ pub fn constructor(input: TokenStream) -> TokenStream {
         if !K.contains(&key.as_str()) {
             panic!("One of {K:?}");
         };
-        if map.contains_key(&key) {
-            panic!("field {key} already filled");
+
+        let v = fast_group(&mut iter).unwrap().stream();
+        if let Some(val) = map.get_mut(&key) {
+            val.extend(v);
+        } else {
+            map.insert(key, v);
         }
-        map.insert(key, fast_group(&mut iter).unwrap());
     }
-    let (t1, tokens, errors) = tokens(map.get("tokens").unwrap());
-    let (t2, enums) = enums(map.get("enums").unwrap());
-    let (t4, items) = items(map.get("items").unwrap());
-    let (t3, constructs) = constructs(map.get("constructs").unwrap(), &items);
+    let (
+        (mut gt_tokens, mut tokens, mut errors),
+        (mut gt_enums, mut enums),
+        (mut gt_items, mut items),
+    ) = (
+        tokens(map.get("tokens").unwrap().clone().into_iter()),
+        enums(map.get("enums").unwrap().clone().into_iter()),
+        items(map.get("items").unwrap().clone().into_iter()),
+    );
+
+    let (
+        [(t_tokens, ad_tokens), (t_enums, ad_enums), (t_items, ad_items), (t_constructs, ad_constructs)],
+        ad_errors,
+    ) = com(map.get("common").unwrap().clone().into_iter(), &items);
+
+    gt_tokens.extend(t_tokens);
+    tokens.extend(ad_tokens);
+    errors.extend(ad_errors);
+
+    gt_enums.extend(t_enums);
+    enums.extend(ad_enums);
+
+    gt_items.extend(t_items);
+    items.extend(ad_items);
+
+    let (mut gt_constructs, mut constructs) =
+        constructs(map.get("constructs").unwrap().clone().into_iter(), &items);
+    gt_constructs.extend(t_constructs);
+    constructs.extend(ad_constructs);
 
     let common = common(errors, [tokens, enums, items, constructs]);
     quote! {
-        #t1
-        #t2
-        #t3
-        #t4
+        #gt_tokens
+        #gt_enums
+        #gt_constructs
+        #gt_items
 
         #common
     }
     .into()
+}
+
+fn com(
+    mut iter: IntoIter,
+    itms: &Vec<Ident>,
+) -> ([(TokenStream2, Vec<Ident>); 4], HashMap<Ident, Vec<Ident>>) {
+    let [mut tokens, mut enums, mut items, mut constructs]: [Vec<Ident>; 4] = Default::default();
+    let [mut t_tokens, mut t_enums, mut t_items, mut t_constructs]: [TokenStream2; 4] =
+        Default::default();
+    let mut errors = HashMap::new();
+
+    while let Some(_) = iter.clone().next() {
+        {
+            tmp3(&mut iter, token_recognize).map(|(a, b, c)| {
+                t_tokens.extend(a);
+                tokens.push(b.clone());
+                c.map(|v| errors.insert(b, v));
+            })
+        }
+        .or_else(|_| {
+            tmp3(&mut iter, enum_recognize).map(|(a, b)| {
+                t_enums.extend(a);
+                enums.push(b);
+            })
+        })
+        .or_else(|_| {
+            tmp3(&mut iter, items_recognize).map(|(a, b)| {
+                t_items.extend(a);
+                items.push(b);
+            })
+        })
+        .or_else(|_| {
+            construct_recognize(&mut iter, itms).map(|(a, b)| {
+                t_constructs.extend(a);
+                constructs.push(b);
+            })
+        })
+        .unwrap();
+    }
+    (
+        [
+            (t_tokens, tokens),
+            (t_enums, enums),
+            (t_items, items),
+            (t_constructs, constructs),
+        ],
+        errors,
+    )
+}
+
+pub fn tmp3<T, O: Fn(&mut Peekable<IntoIter>) -> (T, usize)>(
+    iter: &mut IntoIter,
+    fn_: O,
+) -> Result<T, String> {
+    catch_unwind(AssertUnwindSafe(|| fn_(&mut iter.clone().peekable())))
+        .map(|(v, count)| {
+            for _ in 0..count {
+                iter.next().unwrap();
+            }
+            v
+        })
+        .map_err(tmp5)
 }
 
 const COMMON: LazyLock<TokenStream2> = LazyLock::new(|| {
@@ -98,6 +195,16 @@ fn fast_ident(item: &TokenTree) -> Result<Ident, String> {
     }
 }
 
+fn fast_ident2(iter: &mut Peekable<IntoIter>) -> Result<Ident, String> {
+    match out_of_bound(iter)? {
+        TokenTree::Ident(v) => {
+            iter.next();
+            Ok(v)
+        }
+        item => Err(format!("expect ident, find {item:?}")),
+    }
+}
+
 fn fast_group(iter: &mut Peekable<IntoIter>) -> Result<Group, String> {
     match out_of_bound(iter)? {
         TokenTree::Group(v) => {
@@ -122,4 +229,15 @@ fn out_of_bound(iter: &mut Peekable<IntoIter>) -> Result<TokenTree, String> {
     iter.peek()
         .cloned()
         .ok_or("выход за последний токен".into())
+}
+
+fn tmp(res: Result<(), Box<dyn Any + Send>>) -> Result<(), String> {
+    res.map_err(|v| tmp5(v))
+}
+
+fn tmp5(v: Box<dyn Any + Send>) -> String {
+    v.downcast_ref()
+        .cloned()
+        .or_else(|| v.downcast_ref::<&str>().map(|v| v.to_string()))
+        .unwrap()
 }

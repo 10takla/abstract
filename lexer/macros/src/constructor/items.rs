@@ -1,71 +1,78 @@
-use super::{check_pass_fail, fast_group, fast_ident, fast_puncts, COMMON};
-use proc_macro2::{Group, Ident, TokenStream as TokenStream2, TokenTree};
+use super::{check_pass_fail, fast_group, fast_ident, fast_ident2, fast_puncts, tmp, tmp3, COMMON};
+use proc_macro2::{token_stream::IntoIter, Group, Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
+use std::{
+    iter::Peekable,
+    panic::{catch_unwind, AssertUnwindSafe},
+};
 use syn::{parse2, LitStr};
 
-pub fn items(g: &Group) -> (TokenStream2, Vec<Ident>) {
-    let mut iter = g.stream().into_iter().peekable();
-    let mut vec = vec![];
-    let mut items_names = vec![];
-    while let Some(item) = iter.next() {
-        let items = fast_ident(&item).unwrap();
+pub fn items(mut iter: IntoIter) -> (TokenStream2, Vec<Ident>) {
+    let (mut tokens, mut names): (TokenStream2, Vec<Ident>) = Default::default();
 
-        items_names.push(items.clone());
-        
-        let item = {
-            let Ok(v) = fast_group(&mut iter) else {
-                continue;
-            };
-
-            fast_ident(&v.stream().into_iter().next().unwrap()).unwrap()
-        };
-
-        let break_ = fast_ident(&iter.next().unwrap()).unwrap();
-        
-        vec.push(
-            quote! {
-                #[derive(Debug, Clone, Deref)]
-                pub struct #items(
-                    Vec<#item>
-                );
-
-                impl Slicable for #items {
-                    fn slice(&self) -> Slice {
-                        self.first()
-                            .map(|v| RangeInclusive::new(*v.slice().start(), *self.last().unwrap().slice().end()))
-                            .unwrap()
-                    }
-                }
-
-                impl #items {
-                    pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
-                        let mut vec = vec![];
-                        loop {
-                            if arg.code.cursor >= arg.code.source.len() {
-                                break;
-                            }
-                            match #item::recog(arg, l) {
-                                Ok(v) => {
-                                    // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
-                                    arg.c_a_d.borrow_mut().cache.clear();
-                                    vec.push(v);
-                                }
-                                Err(e) => {
-                                    if #break_::recog(&mut arg.clone(), l).is_ok() {
-                                        break;
-                                    } else {
-                                        arg.code.cursor = *e.end() + 1;
-                                        arg.c_a_d.borrow_mut().errors.push(e);
-                                        continue;
-                                    }
-                                }
-                            };
-                        }
-                        Self(vec)
-                    }
-                }           
-            }
-        );
+    while iter.clone().next().is_some() {
+        let v = tmp3(&mut iter, items_recognize).unwrap();
+        tokens.extend(v.0);
+        names.push(v.1.clone());
     }
-    (quote! {#(#vec)*}, items_names)
+
+    (tokens, names)
+}
+
+pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), usize) {
+    let mut counter = 0;
+
+    let name = fast_ident2(iter).unwrap();
+    counter += 1;
+
+    let item = fast_ident2(&mut fast_group(iter).unwrap().stream().into_iter().peekable()).unwrap();
+    counter += 1;
+
+    let break_ = fast_ident2(iter).unwrap();
+    counter += 1;
+
+    let tokens = quote! {
+        #[derive(Debug, Clone, Deref)]
+        pub struct #name(
+            Vec<#item>
+        );
+
+        impl Slicable for #name {
+            fn slice(&self) -> Slice {
+                self.first()
+                    .map(|v| RangeInclusive::new(*v.slice().start(), *self.last().unwrap().slice().end()))
+                    .unwrap()
+            }
+        }
+
+        impl #name {
+            pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
+                let mut vec = vec![];
+                loop {
+                    if arg.code.cursor >= arg.code.source.len() {
+                        break;
+                    }
+                    match #item::recog(arg, l) {
+                        Ok(v) => {
+                            // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
+                            arg.c_a_d.borrow_mut().cache.clear();
+                            vec.push(v);
+                        }
+                        Err(e) => {
+                            if #break_::recog(&mut arg.clone(), l).is_ok() {
+                                break;
+                            } else {
+                                arg.code.cursor = *e.end() + 1;
+                                arg.c_a_d.borrow_mut().errors.push(e);
+                                continue;
+                            }
+                        }
+                    };
+                }
+                Self(vec)
+            }
+        }
+    };
+
+    ((tokens, name), counter)
 }

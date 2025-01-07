@@ -7,7 +7,7 @@ use lexer::{
 };
 use std::{
     fmt::Debug,
-    iter::{empty, once},
+    iter::{empty, once, Peekable},
     sync::{
         atomic::{AtomicUsize, Ordering},
         LazyLock, RwLock,
@@ -165,26 +165,29 @@ impl Backend {
         self.client
             .publish_diagnostics(
                 uri,
-                diags
-                    .iter()
-                    .cloned()
-                    .map(|diag| {
-                        let [[start, start_line], [end, end_line]] =
-                            split_into_start_end(&diag, &code);
-                        Diagnostic {
-                            range: Range {
-                                start: Position::new(start_line as u32, start as u32),
-                                // +1, так как в vscode decrement
-                                end: Position::new(end_line as u32, end as u32 + 1),
-                            },
-                            severity: Some(DiagnosticSeverity::ERROR),
-                            code: None,
-                            source: Some("abstract".to_string()),
-                            message: format!("Ошибка парсера: {diag}"),
-                            ..Default::default()
-                        }
-                    })
-                    .collect(),
+                {
+                    let iter = &mut get_iter(&code);
+                    diags
+                        .iter()
+                        .cloned()
+                        .map(|diag| {
+                            let [[start, start_line], [end, end_line]] =
+                                split_into_start_end(&diag, iter);
+                            Diagnostic {
+                                range: Range {
+                                    start: Position::new(start_line as u32, start as u32),
+                                    // +1, так как в vscode decrement
+                                    end: Position::new(end_line as u32, end as u32 + 1),
+                                },
+                                severity: Some(DiagnosticSeverity::ERROR),
+                                code: None,
+                                source: Some("abstract".to_string()),
+                                message: format!("Ошибка парсера: {diag}"),
+                                ..Default::default()
+                            }
+                        })
+                        .collect()
+                },
                 None,
             )
             .await;
@@ -197,41 +200,34 @@ impl Backend {
     }
 }
 
-fn split_into_start_end(diag: &Diag, code: &str) -> [[usize; 2]; 2] {
+fn split_into_start_end(
+    diag: &Diag,
+    iter: &mut Peekable<impl Iterator<Item = (usize, [usize; 2])>>,
+) -> [[usize; 2]; 2] {
     let [item_start, item_end] = [*diag.slice.start(), *diag.slice.end()];
-    let mut acc = 0;
-    let mut iter = code
-        .split_inclusive('\n')
-        .enumerate()
-        .peekable()
-        .map(|(i, line)| {
-            let start = acc;
-            let len: usize = line.chars().count();
-            if len > 0 {
-                acc += len;
-            }
-            let end = if acc != 0 { acc - 1 } else { 0 };
-            (i, [start, end])
-        });
 
-    while let Some((i, [line_start, line_end])) = iter.next() {
+    while let Some(&(i, [line_start, line_end])) = iter.peek() {
         // если начало находится на линии
         if item_start <= line_end {
             let [start_o, start_line_o] = [item_start - line_start, i];
-
             // если конец находится на линии
             if item_end <= line_end {
                 return [[start_o, start_line_o], [item_end - line_start, i]];
             } else {
+                iter.next().unwrap();
                 // иначе продолжить проход по линиям пока не будет найден конец
-                while let Some((i, [line_start, line_end])) = iter.next() {
+                while let Some(&(i, [line_start, line_end])) = iter.peek() {
                     // если конец находится на линии
                     if item_end <= line_end {
                         // то перейти к следующему элементу
                         return [[start_o, start_line_o], [item_end - line_start, i]];
+                    } else {
+                        iter.next().unwrap();
                     }
                 }
             }
+        } else {
+            iter.next().unwrap();
         }
     }
     unreachable!()
@@ -239,99 +235,135 @@ fn split_into_start_end(diag: &Diag, code: &str) -> [[usize; 2]; 2] {
 
 #[test]
 fn diag() {
-    let check = |source, b| {
-        assert_eq!(split_into_start_end(dbg!(&parse(source).1[0]), source), b);
+    let check = |source, b: Vec<[[usize; 2]; 2]>| {
+        let iter = &mut get_iter(source);
+        parse(source).1.into_iter().enumerate().for_each(|(i, v)| {
+            assert_eq!(split_into_start_end(&v, iter), b[i]);
+        });
     };
 
-    check("22dd", [[0, 0], [3, 0]]);
+    check("22dd", vec![[[0, 0], [3, 0]]]);
     check(
         "
 22dd
-    ",
-        [[0, 1], [3, 1]],
+        ",
+        vec![[[0, 1], [3, 1]]],
+    );
+
+    check(r#"22dd 22dd  "#, vec![[[0, 0], [3, 0]], [[5, 0], [8, 0]]]);
+
+    check(
+        r#"22dd 22dd  
+7fs 22dsf  
+
+   2hg"#,
+        vec![
+            [[0, 0], [3, 0]],
+            [[5, 0], [8, 0]],
+            [[0, 1], [2, 1]],
+            [[4, 1], [8, 1]],
+            [[3, 3], [5, 3]],
+        ],
+    );
+    check(
+        r#"22dd 22dd  
+"sdfsfdsf 22dsf  
+
+   2hg"#,
+        vec![[[0, 0], [3, 0]], [[5, 0], [8, 0]], [[5, 3], [5, 3]]],
     );
 }
 
 fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
     let items = &mut distruct_items(items);
-    let lines = &mut code.split_inclusive('\n').enumerate().peekable();
 
-    let glen = |line: &str| line.chars().count();
+    let iter = &mut get_iter(code).peekable();
 
-    let (mut tokens, mut last_start, mut last_line, mut len) = (vec![], None, 0, 0);
-    'l: while let Some(([start, end], type_)) = items.next() {
-        let mut push_token = |delta_line, delta_start, length| {
-            tokens.push(SemanticToken {
-                delta_line: delta_line as u32,
-                delta_start: delta_start as u32,
-                length: length as u32,
-                token_type: token_type(type_.clone()),
-                token_modifiers_bitset: 0,
-            });
-        };
+    let (mut tokens, mut last_start, mut last_line) = (vec![], None, 0);
+    while let Some((v, type_)) = items.next() {
+        split_item(
+            v,
+            iter,
+            &mut last_start,
+            &mut last_line,
+            |delta_line, delta_start, length| {
+                tokens.push(SemanticToken {
+                    delta_line: delta_line as u32,
+                    delta_start: delta_start as u32,
+                    length: length as u32,
+                    token_type: token_type(type_.clone()),
+                    token_modifiers_bitset: 0,
+                });
+            },
+        );
+    }
+    tokens
+}
 
-        macro_rules! go_to_next_item {
-            ({$($arg:expr),+} $start:expr, $i:expr) => {
-                push_token($($arg),+);
-                last_start = Some($start);
-                last_line = $i;
-                continue 'l;
-            };
-        }
+fn split_item(
+    [item_start, item_end]: [usize; 2],
+    iter: &mut Peekable<impl Iterator<Item = (usize, [usize; 2])>>,
+    last_start: &mut Option<usize>,
+    last_line: &mut usize,
+    mut push_token: impl FnMut(usize, usize, usize),
+) {
+    while let Some(&(i, [line_start, line_end])) = iter.peek() {
+        // если начало элемента находится на линии
+        if item_start <= line_end {
+            let delta_start = item_start - last_start.unwrap_or(line_start);
 
-        while let Some(&(i, line)) = lines.peek() {
-            // len with increment line len
-            let end_len = len + glen(line);
+            // если конец элемента находится на линии
+            if item_end <= line_end {
+                push_token(i - *last_line, delta_start, item_end - item_start + 1);
+                *last_start = Some(item_start);
+                *last_line = i;
+                return;
+            } else {
+                push_token(i - *last_line, delta_start, line_end - item_start + 1);
+                *last_start = Some(item_start);
+                *last_line = i;
+                iter.next().unwrap();
 
-            // если начало элемента находится на линии
-            if start < end_len {
-                let delta_line = i - last_line;
-                let delta_start = start - last_start.unwrap_or(len);
-
-                // если конец элемента находится на линии
-                if end < end_len {
-                    go_to_next_item!(
-                        {delta_line, delta_start, end - start + 1}
-                        start, i
-                    );
-                } else {
-                    push_token(delta_line, delta_start, end_len - start);
-                    lines.next().unwrap();
-                    last_start = Some(start);
-                    last_line = i;
-                    len = end_len;
-
-                    // иначе продолжить проход по линиям пока не будет найден конец элемента
-                    while let Some(&(i, line)) = lines.peek() {
-                        let line_len = glen(line);
-                        let tmp_len = len + line_len;
-                        let delta_line = i - last_line;
-
-                        // если конец элемента находится на линии
-                        if end < tmp_len {
-                            // то перейти к следующему элементу
-                            go_to_next_item!(
-                                {delta_line, 0, end - len + 1}
-                                len, i
-                            );
-                        } else {
-                            // иначе добавить диапазон до конца линии токен, как часть одного общего токена (необходимо, т.к. lsp поддерживает токены построчно)
-                            push_token(delta_line, 0, line_len);
-                            last_line = i;
-                            lines.next().unwrap();
-                            len = tmp_len;
-                        }
+                // иначе продолжить проход по линиям пока не будет найден конец элемента
+                while let Some(&(i, [line_start, line_end])) = iter.peek() {
+                    // если конец элемента находится на линии
+                    if item_start <= line_end {
+                        // то перейти к следующему элементу
+                        push_token(i - *last_line, 0, item_end - item_start + 1);
+                        *last_start = Some(item_start);
+                        *last_line = i;
+                        return;
+                    } else {
+                        // иначе добавить диапазон до конца линии токен, как часть одного общего токена (необходимо, т.к. lsp поддерживает токены построчно)
+                        push_token(i - *last_line, 0, line_end - line_start + 1);
+                        *last_line = i;
+                        iter.next().unwrap();
                     }
                 }
-            } else {
-                lines.next().unwrap();
-                len = end_len;
-                last_start = None;
             }
+        } else {
+            *last_start = None;
+            iter.next().unwrap();
         }
     }
+    unreachable!();
+}
 
-    tokens
+fn get_iter<'a>(code: &'a str) -> Peekable<impl Iterator<Item = (usize, [usize; 2])> + 'a> {
+    let mut acc = 0;
+    code.split_inclusive('\n')
+        .enumerate()
+        .peekable()
+        .map(move |(i, line)| {
+            let start = acc;
+            let len: usize = line.chars().count();
+            if len > 0 {
+                acc += len;
+            }
+            let end = if acc != 0 { acc - 1 } else { 0 };
+            (i, [start, end])
+        })
+        .peekable()
 }
 
 fn token_type(t: SemanticTokenType) -> u32 {

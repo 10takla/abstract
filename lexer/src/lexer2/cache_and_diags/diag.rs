@@ -37,6 +37,7 @@ pub struct Diag {
     pub slice: Slice,
     pub source: Source,
     pub error: ErrorType,
+    pub type_: Construct,
 }
 
 impl std::fmt::Display for Diag {
@@ -48,6 +49,7 @@ impl std::fmt::Display for Diag {
             },
             slice,
             error,
+            ..
         } = self;
 
         let get_line = |pos| {

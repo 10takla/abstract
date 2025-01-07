@@ -171,8 +171,7 @@ impl Backend {
                         .iter()
                         .cloned()
                         .map(|diag| {
-                            let [[start, start_line], [end, end_line]] =
-                                split_into_start_end(&diag, iter);
+                            let [[start, start_line], [end, end_line]] = diag_split(&diag, iter);
                             Diagnostic {
                                 range: Range {
                                     start: Position::new(start_line as u32, start as u32),
@@ -200,7 +199,7 @@ impl Backend {
     }
 }
 
-fn split_into_start_end(
+fn diag_split(
     diag: &Diag,
     iter: &mut Peekable<impl Iterator<Item = (usize, [usize; 2])>>,
 ) -> [[usize; 2]; 2] {
@@ -238,7 +237,7 @@ fn diag() {
     let check = |source, b: Vec<[[usize; 2]; 2]>| {
         let iter = &mut get_iter(source);
         parse(source).1.into_iter().enumerate().for_each(|(i, v)| {
-            assert_eq!(split_into_start_end(&v, iter), b[i]);
+            assert_eq!(diag_split(&v, iter), b[i]);
         });
     };
 
@@ -281,7 +280,7 @@ fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
 
     let (mut tokens, mut last_start, mut last_line) = (vec![], None, 0);
     while let Some((v, type_)) = items.next() {
-        split_item(
+        item_split(
             v,
             iter,
             &mut last_start,
@@ -300,7 +299,7 @@ fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
     tokens
 }
 
-fn split_item(
+fn item_split(
     [item_start, item_end]: [usize; 2],
     iter: &mut Peekable<impl Iterator<Item = (usize, [usize; 2])>>,
     last_start: &mut Option<usize>,

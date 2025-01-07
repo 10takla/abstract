@@ -31,19 +31,22 @@ pub fn common(
                 }
             }
         }));
+    
+       
 
-    let errors = init_item.iter().map(|init_item| {
-        if let Some(errs) = errors.get(init_item).cloned() && errs.clone().into_iter().next().is_some() {
+    let errors =  [init_item, cons_name].into_iter().flatten()
+    .map(|v| {
+        if let Some(errs) = errors.get(v).cloned() && errs.clone().into_iter().next().is_some() {
             quote! {
-                #[derive(Clone, Debug)]
-                pub enum [<#init_item Error>] {
+                #[derive(Clone, Debug, PartialEq)]
+                pub enum [<#v Error>] {
                     #(#errs),*
                 }
             }
         } else {
             quote! {
-                #[derive(Clone, Debug)]
-                pub enum [<#init_item Error>] {
+                #[derive(Clone, Debug, PartialEq)]
+                pub enum [<#v Error>] {
                     Some
                 }
             }
@@ -83,14 +86,14 @@ pub fn common(
         }
 
         paste! {
-            #[derive(Clone, Debug)]
+            #[derive(Clone, Debug, PartialEq)]
             pub enum ErrorType {
-                Reg,
+                Reg(&'static str),
                 LineOver,
                 Any,
                 #(#init_item([<#init_item Error>])),*,
                 // #(#enum_name([<#enum_name Error>])),+,
-                // #(#cons_name([<#cons_name Error>])),*
+                #(#cons_name([<#cons_name Error>])),*
 
 
                 // Ident(IdentError),

@@ -55,13 +55,14 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
                     match #item::recog(arg, l) {
                         Ok(v) => {
                             // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
-                            arg.c_a_d.borrow_mut().cache.clear();
+                            arg.c_a_d.borrow_mut().cache.pass.clear();
                             vec.push(v);
                         }
                         Err(e) => {
                             if #break_::recog(&mut arg.clone(), l).is_ok() {
                                 break;
                             } else {
+                                let e = arg.c_a_d.borrow().clone().cache.check(e);
                                 arg.code.cursor = *e.end() + 1;
                                 arg.c_a_d.borrow_mut().errors.push(e);
                                 continue;

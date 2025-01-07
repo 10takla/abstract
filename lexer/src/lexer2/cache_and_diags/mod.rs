@@ -1,8 +1,8 @@
 pub mod diag;
 
-use super::{Construct, ConstructItem, Pos};
+use super::{Construct, ConstructItem, Op, ParseArgs, Pos};
 use diag::Diag;
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::once};
 use std_reset::prelude::Deref;
 
 #[derive(Clone, Default, Debug)]
@@ -21,9 +21,18 @@ pub(super) struct Cache {
 }
 
 impl Cache {
-    pub fn clear(&mut self) {
+    pub(super) fn clear(&mut self) {
         self.pass.clear();
         self.fails.clear();
+    }
+
+    pub(super) fn check(self, e: Diag) -> Diag {
+        self.fails
+            .into_values()
+            .into_iter()
+            .chain(once(e))
+            .max_by(|a, b| a.slice.end().cmp(b.slice.end()))
+            .unwrap()
     }
 }
 

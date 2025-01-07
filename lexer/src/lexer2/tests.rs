@@ -104,14 +104,19 @@ mod errors {
 
     mod error_passing {
         use super::*;
+        use clap::Id;
 
         #[parse_test]
         fn assign_expr(print: Print) {
-            let mut args: ParseArgs = (r#"sdfsfd = "#, print).into();
+            let mut args: ParseArgs = (r#"sdfsfd -= "#, print).into();
             dbg!(Items::recog(&mut args, 0));
-            dbg!(&args.c_a_d.borrow().errors);
+            let e = args.c_a_d.borrow().errors[0].clone();
+            assert_eq!(
+                (*e.slice.end(), e.error, e.type_),
+                (10, ErrorType::LineOver, Construct::Literal)
+            );
         }
-        
+
         #[parse_test]
         fn plus(print: Print) {
             let mut args: ParseArgs = (r#"+"#, print).into();

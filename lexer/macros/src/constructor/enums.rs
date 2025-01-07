@@ -65,8 +65,9 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), 
                 Self::consume_parse(arg, l).map(|v| {
                     arg.print.pass_or_fail::<true>(l);
                     v
-                }).map_err(|e| {
+                }).map_err(|mut e| {
                     arg.print.pass_or_fail::<false>(l);
+                    e.type_ = Construct::#name;
                     e
                 })
             }

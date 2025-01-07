@@ -194,7 +194,6 @@ pub fn construct_recognize(
 ) -> Result<(TokenStream2, Ident), String> {
     catch_unwind(AssertUnwindSafe(|| construct_recogniz(&mut iter.clone().peekable(), items)))
         .map(|(v, count)| {
-            // panic!("{count}");
             for _ in 0..count {
                 iter.next().unwrap();
             }

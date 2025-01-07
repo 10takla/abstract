@@ -41,7 +41,7 @@ pub fn token_recognize(
             parse2::<LitStr>(TokenTree::from(v.clone()).into()).unwrap();
             counter += 1;
             quote! {
-                reg_observe(arg, #v).map_err(|v| (v..=v, ErrorType::Reg))
+                reg_observe(arg, #v).map_err(|v| (v..=v, ErrorType::Reg(#v)))
             }
         }
         TokenTree::Group(body) => {
@@ -102,7 +102,8 @@ pub fn token_recognize(
                 #body.map(Self).map_err(|(slice, error)| Diag {
                     slice,
                     source: arg.code.source.clone(),
-                    error
+                    error,
+                    type_: Construct::#name
                 })
             }
         }

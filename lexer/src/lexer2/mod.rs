@@ -205,15 +205,15 @@ constructor!(
     items {
         Items(Item) CloseFigureBracket
         StructArgsI(StructArgsV) CloseFigureBracket
-        TupleArgsI(TupleArgsV) CloseRoundBracket
+        TupleArgsI(TupleArgsV) CloseRoundBracket 
     }
     common {
-        Item -> FnHead | AnyBlock | AssignExpr | Literal | Idents | Ignore
-            FnHead -> Fn (Ignore) Ident (Ignore) FnArgs (Ignore) Block
-                
-                FnArgs -> StructArgsC | TupleArgsC
-                    StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
-                    TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
+        Args -> StructArgsC | TupleArgsC
+            StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
+            TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
+        Item -> FnC | StructC | AnyBlock | AssignExpr | Literal | Idents | Ignore
+            StructC -> Struct (Ignore) Ident (Ignore) Args
+            FnC -> Fn (Ignore) Ident (Ignore) Args (Ignore) Block
             AnyBlock -> NamedDistrBlock | DistrBlock | NamedBlock | Block
                 NamedDistrBlock -> NamedBlock (Ignore) Distribution
                 DistrBlock -> Ident (Ignore) Distribution

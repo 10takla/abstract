@@ -1,6 +1,6 @@
 use lexer::{
     lexer2::{
-        cache_and_diags::diag::Diag, AnyBlock, AssignExpr, Block, ErrorType, FnArgs, Ident,
+        cache_and_diags::diag::Diag, AnyBlock, Args, AssignExpr, Block, ErrorType, FnC, Ident,
         IdentError, Idents, Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable,
     },
     parse,
@@ -45,6 +45,7 @@ const TOKENS: LazyLock<Vec<SemanticTokenType>> = LazyLock::new(|| {
         SemanticTokenType::NUMBER,
         SemanticTokenType::KEYWORD,
         SemanticTokenType::FUNCTION,
+        SemanticTokenType::STRUCT,
     ]
 });
 
@@ -412,7 +413,12 @@ fn distruct_item<'a>(item: &'a Item) -> T<'a> {
     };
     use Item::*;
     match item {
-        FnHead(v) => Box::new(
+        StructC(v) => Box::new(
+            fast_box(&v.0, SemanticTokenType::KEYWORD)
+                .chain(fast_box(&v.1, SemanticTokenType::STRUCT))
+                .chain(v.2.color())
+        ),
+        FnC(v) => Box::new(
             fast_box(&v.0, SemanticTokenType::KEYWORD)
                 .chain(fast_box(&v.1, SemanticTokenType::FUNCTION))
                 .chain(v.2.color())
@@ -453,9 +459,9 @@ trait Tr {
     fn cl(&self) -> Vec<(&dyn StartEnd, SemanticTokenType)>;
 }
 
-impl Tr for FnArgs {
+impl Tr for Args {
     fn cl(&self) -> Vec<(&dyn StartEnd, SemanticTokenType)> {
-        use FnArgs::*;
+        use Args::*;
         match self {
             StructArgsC(v) => {
                 vec![

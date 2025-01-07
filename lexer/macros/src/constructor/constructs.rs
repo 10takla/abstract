@@ -189,22 +189,22 @@ pub fn constructs_reckog(
     )
 }
 
-pub fn construct_recognize(
-    iter: &mut IntoIter, items: &Vec<Ident>
-) -> Result<(TokenStream2, Ident), String> {
-    catch_unwind(AssertUnwindSafe(|| construct_recogniz(&mut iter.clone().peekable(), items)))
-        .map(|(v, count)| {
-            for _ in 0..count {
-                iter.next().unwrap();
-            }
-            v
-        })
-        .map_err(tmp5)
-}
+// pub fn construct_recognize(
+//     iter: &mut IntoIter, items: &Vec<Ident>
+// ) -> Result<(TokenStream2, Ident), String> {
+//     catch_unwind(AssertUnwindSafe(|| construct_recogniz(&mut iter.clone().peekable(), items)))
+//         .map(|(v, count)| {
+//             for _ in 0..count {
+//                 iter.next().unwrap();
+//             }
+//             v
+//         })
+//         .map_err(tmp5)
+// }
 
-fn construct_recogniz(
-    iter: &mut Peekable<IntoIter>, items: &Vec<Ident>
-) -> ((TokenStream2, Ident), usize) {
+pub fn construct_recognize(
+    iter: &mut Peekable<IntoIter>
+) -> ((Ident, Vec<(Ident, Option<Ident>)>), usize) {
     let mut counter = 0;
 
     let name = fast_ident2(iter).unwrap();
@@ -213,8 +213,7 @@ fn construct_recogniz(
     fast_puncts("->", iter).unwrap();
     counter += 2;
 
-    let mut cons_item = vec![];
-    let mut tmp = vec![];
+    let mut items_i = vec![];
     while let Some((v, maybe)) = {
         {
             let mut iter = iter.clone();
@@ -222,7 +221,7 @@ fn construct_recogniz(
                 let maybe = fast_group(&mut iter).ok().map(|v| {
                     let ignore = fast_ident(&v.stream().into_iter().next().unwrap()).unwrap();
                     counter += 1;
-                    quote! {#ignore::recog(arg, l + 1);}
+                    ignore
                 });
 
                 if let Some(vv) = iter.next() {
@@ -239,119 +238,130 @@ fn construct_recogniz(
             v
         })
     } {
-        cons_item.push(v.clone());
-        tmp.push(
-            if items.contains(&v) {
-                quote! {
-                    let v = #v::recog(arg, l + 1);
-                    cache_if_error.push((
-                        Construct::#v,
-                        when_not_fail,
-                        ConstructItem::#v(v.clone()),
-                    ));
-                    #maybe
-                    v
-                }
-            } else {
-                quote! {
-                    #v::check_pass(arg, l + 1)
-                        .map(|(i, v)| {
-                            if let Some(v) = ptr {
-                                if v != i {
-                                    ptr = None
-                                }
-                            } else {
-                                ptr = Some(i);
-                            }
-                            arg.c_a_d.borrow_mut().cache.pass[i].index += 1;
-                            v
-                        }).ok_or(())
-                        .or_else(|_| {
-                            #v::parse(arg, l + 1)
-                                .map(|v| {
-                                    cache_if_error.push((
-                                        Construct::#v,
-                                        when_not_fail,
-                                        ConstructItem::#v(v.clone()),
-                                    ));
-                                    v
-                                })
-                                .map_err(|e| {
-                                    if !cache_if_error.is_empty() {
-                                        if let Some(i) = ptr {
-                                            let v = &mut arg.c_a_d.borrow_mut().cache.pass[i];
-                                            v.index = 0;
-                                            v.items.extend(cache_if_error.clone());
-                                        } else {
-                                            arg.c_a_d.borrow_mut().cache.pass.push(PassList::new(cache_if_error.clone()));
-                                        }
-                                    }
-                                    arg.c_a_d.borrow_mut().cache.fails.insert((Construct::#v, when_not_fail), e.clone());
-                                    e
-                                })
-                        })
-                        .map(|v| {
-                            #maybe
-                            v
-                        })?
-                }
-            }
-        );
+        items_i.push((v.clone(), maybe));
     }
-    if cons_item.len() == 0 {
+    if items_i.len() == 0 {
         panic!("construct expect elements")
     }
-    let n = Index::from(cons_item.len() - 1);
+    
+    ((name, items_i), counter)
+}
+
+pub fn construct_tokens(
+    name: &Ident,
+    items: &Vec<Ident>,
+    items_i: Vec<(Ident, Option<Ident>)>
+) -> TokenStream2 {
+    let tmp = items_i.iter().map(|(v, maybe)| {
+        let maybe = maybe.as_ref().map(|v| quote! {#v::recog(arg, l + 1);});
+        if items.contains(&v) {
+            quote! {
+                let v = #v::recog(arg, l + 1);
+                cache_if_error.push((
+                    Construct::#v,
+                    when_not_fail,
+                    ConstructItem::#v(v.clone()),
+                ));
+                #maybe
+                v
+            }
+        } else {
+            quote! {
+                #v::check_pass(arg, l + 1)
+                    .map(|(i, v)| {
+                        if let Some(v) = ptr {
+                            if v != i {
+                                ptr = None
+                            }
+                        } else {
+                            ptr = Some(i);
+                        }
+                        arg.c_a_d.borrow_mut().cache.pass[i].index += 1;
+                        v
+                    }).ok_or(())
+                    .or_else(|_| {
+                        #v::parse(arg, l + 1)
+                            .map(|v| {
+                                cache_if_error.push((
+                                    Construct::#v,
+                                    when_not_fail,
+                                    ConstructItem::#v(v.clone()),
+                                ));
+                                v
+                            })
+                            .map_err(|e| {
+                                if !cache_if_error.is_empty() {
+                                    if let Some(i) = ptr {
+                                        let v = &mut arg.c_a_d.borrow_mut().cache.pass[i];
+                                        v.index = 0;
+                                        v.items.extend(cache_if_error.clone());
+                                    } else {
+                                        arg.c_a_d.borrow_mut().cache.pass.push(PassList::new(cache_if_error.clone()));
+                                    }
+                                }
+                                arg.c_a_d.borrow_mut().cache.fails.insert((Construct::#v, when_not_fail), e.clone());
+                                e
+                            })
+                    })
+                    .map(|v| {
+                        #maybe
+                        v
+                    })?
+            }
+        }
+    }).collect::<Vec<_>>();
+
+    let cons_item = items_i.iter().map(|v| &v.0);
+
+    let n = Index::from(items_i.len() - 1);
     let common = &*COMMON;
     let check_pass_fail = check_pass_fail("cons", &name);
-    let tokens = 
-        quote! {
-            #[derive(Clone, Debug)]
-            pub struct #name(#( pub #cons_item ),*);
-            impl CommonTypes for #name {
-                const CONST: Construct = Construct::#name;
+     
+    quote! {
+        #[derive(Clone, Debug)]
+        pub struct #name(#( pub #cons_item ),*);
+        impl CommonTypes for #name {
+            const CONST: Construct = Construct::#name;
+        }
+        impl #name {
+            #common
+
+            #check_pass_fail
+
+            // нет необходимости в consume ведь `items` сами это делаеют
+            fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                arg.print.print_colored(arg.get_head("cons", Self::CONST, arg.code.cursor), l);
+                Self::after_debug(arg, l).map(|v| {
+                    arg.print.pass_or_fail::<true>(l);
+                    v
+                }).map_err(|e| {
+                    arg.print.pass_or_fail::<false>(l);
+                    e
+                })
             }
-            impl #name {
-                #common
 
-                #check_pass_fail
-
-                // нет необходимости в consume ведь `items` сами это делаеют
-                fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                    arg.print.print_colored(arg.get_head("cons", Self::CONST, arg.code.cursor), l);
-                    Self::after_debug(arg, l).map(|v| {
-                        arg.print.pass_or_fail::<true>(l);
-                        v
-                    }).map_err(|e| {
-                        arg.print.pass_or_fail::<false>(l);
-                        e
-                    })
-                }
-
-                fn after_debug(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                    let mut cache_if_error: Vec<(Construct, Pos, ConstructItem)> = Default::default();
-                    let mut ptr = Default::default();
-                    Ok(
-                        Self(
-                            #(
-                                {
-                                    let when_not_fail = arg.code.cursor;
-                                    #tmp
-                                }
-                            ),*
-                        )
+            fn after_debug(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                let mut cache_if_error: Vec<(Construct, Pos, ConstructItem)> = Default::default();
+                let mut ptr = Default::default();
+                Ok(
+                    Self(
+                        #(
+                            {
+                                let when_not_fail = arg.code.cursor;
+                                #tmp
+                            }
+                        ),*
                     )
-                }
+                )
             }
+        }
 
-            impl Slicable for #name {
-                fn slice(&self) -> Slice {
-                    let start = self.0.slice();
-                    let end = self.#n.slice();
-                    *start.start()..=*end.end()
-                }
+        impl Slicable for #name {
+            fn slice(&self) -> Slice {
+                let start = self.0.slice();
+                let end = self.#n.slice();
+                *start.start()..=*end.end()
             }
-        };
-
-    ((tokens, name), counter)
+        }
+    }
 }

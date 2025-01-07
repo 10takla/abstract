@@ -5,7 +5,7 @@ mod items;
 mod tokens;
 
 use common::common;
-use constructs::{construct_recognize, constructs, constructs_reckog};
+use constructs::{construct_recognize, construct_tokens, constructs, constructs_reckog};
 use enums::{enum_recognize, enums};
 use items::{items, items_recognize};
 use proc_macro::TokenStream;
@@ -58,9 +58,10 @@ pub fn constructor(input: TokenStream) -> TokenStream {
     );
 
     let (
-        [(t_tokens, ad_tokens), (t_enums, ad_enums), (t_items, ad_items), (t_constructs, ad_constructs)],
+        [(t_tokens, ad_tokens), (t_enums, ad_enums), (t_items, ad_items)],
         ad_errors,
-    ) = com(map.get("common").unwrap().clone().into_iter(), &items);
+        ad_constructs,
+    ) = com(map.get("common").unwrap().clone().into_iter());
 
     gt_tokens.extend(t_tokens);
     tokens.extend(ad_tokens);
@@ -71,11 +72,15 @@ pub fn constructor(input: TokenStream) -> TokenStream {
 
     gt_items.extend(t_items);
     items.extend(ad_items);
+    
+    let t_constructs = ad_constructs
+        .iter()
+        .map(|v| construct_tokens(&v.0, &items, v.1.clone()));
 
     let (mut gt_constructs, mut constructs) =
         constructs(map.get("constructs").unwrap().clone().into_iter(), &items);
     gt_constructs.extend(t_constructs);
-    constructs.extend(ad_constructs);
+    constructs.extend(ad_constructs.into_iter().map(|(v, _)| v));
 
     let common = common(errors, [tokens, enums, items, constructs]);
     quote! {
@@ -91,11 +96,14 @@ pub fn constructor(input: TokenStream) -> TokenStream {
 
 fn com(
     mut iter: IntoIter,
-    itms: &Vec<Ident>,
-) -> ([(TokenStream2, Vec<Ident>); 4], HashMap<Ident, Vec<Ident>>) {
-    let [mut tokens, mut enums, mut items, mut constructs]: [Vec<Ident>; 4] = Default::default();
-    let [mut t_tokens, mut t_enums, mut t_items, mut t_constructs]: [TokenStream2; 4] =
-        Default::default();
+) -> (
+    [(TokenStream2, Vec<Ident>); 3],
+    HashMap<Ident, Vec<Ident>>,
+    Vec<(Ident, Vec<(Ident, Option<Ident>)>)>,
+) {
+    let [mut tokens, mut enums, mut items]: [Vec<Ident>; 3] = Default::default();
+    let [mut t_tokens, mut t_enums, mut t_items]: [TokenStream2; 3] = Default::default();
+    let mut constructs = vec![];
     let mut errors = HashMap::new();
 
     while let Some(_) = iter.clone().next() {
@@ -113,27 +121,22 @@ fn com(
             })
         })
         .or_else(|_| {
+            tmp3(&mut iter, construct_recognize).map(|v| {
+                constructs.push(v);
+            })
+        })
+        .or_else(|_| {
             tmp3(&mut iter, items_recognize).map(|(a, b)| {
                 t_items.extend(a);
                 items.push(b);
             })
         })
-        .or_else(|_| {
-            construct_recognize(&mut iter, itms).map(|(a, b)| {
-                t_constructs.extend(a);
-                constructs.push(b);
-            })
-        })
         .unwrap();
     }
     (
-        [
-            (t_tokens, tokens),
-            (t_enums, enums),
-            (t_items, items),
-            (t_constructs, constructs),
-        ],
+        [(t_tokens, tokens), (t_enums, enums), (t_items, items)],
         errors,
+        constructs,
     )
 }
 

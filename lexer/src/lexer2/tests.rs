@@ -17,7 +17,7 @@ fn tmp(print: Print) {
         print,
     )
         .into();
-    dbg!(FnHead::recog(&mut t, 0));
+    dbg!(FnC::recog(&mut t, 0));
 }
 
 mod cache {

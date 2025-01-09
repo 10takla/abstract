@@ -205,15 +205,22 @@ constructor!(
     items {
         Items(Item) CloseFigureBracket
         StructArgsI(StructArgsV) CloseFigureBracket
-        TupleArgsI(TupleArgsV) CloseRoundBracket 
+        TupleArgsI(TupleArgsV) CloseRoundBracket
+        ImplItemsI(ImplItemsV) CloseFigureBracket
     }
     common {
         Args -> StructArgsC | TupleArgsC
             StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
             TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
-        Item -> FnC | StructC | AnyBlock | AssignExpr | Literal | Idents | Ignore
+        Item -> FnC | StructC | TraitC | ImplC | AnyBlock | AssignExpr | Literal | Idents | Ignore
+            TraitC -> Trait (Ignore) Ident (Ignore) FnHead
+            ImplC -> Impl (Ignore) Ident (Ignore) ImplItemsIC
+                ImplItemsIC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
+                    ImplItemsV -> ConstC | FnC
+                        ConstC -> Const (Ignore) Ident (Ignore) Eq (Ignore) Literal
             StructC -> Struct (Ignore) Ident (Ignore) Args
-            FnC -> Fn (Ignore) Ident (Ignore) Args (Ignore) Block
+            FnC -> FnHead (Ignore) Block
+                FnHead -> Fn (Ignore) Ident (Ignore) Args
             AnyBlock -> NamedDistrBlock | DistrBlock | NamedBlock | Block
                 NamedDistrBlock -> NamedBlock (Ignore) Distribution
                 DistrBlock -> Ident (Ignore) Distribution
@@ -236,14 +243,15 @@ constructor!(
             Sub r#"-"#
             Mul r"\*"
             Div r#"/"#
-        
+
         Keyword -> Fn | Const | Struct | Trait | Let
             Fn "fn"
             Const "const"
             Struct "struct"
             Trait "trait"
             Let "let"
-        
+            Impl "impl"
+
         StructArgsV -> StructArg | Ignore
             StructArg -> Ident (Ignore) Colon (Ignore) Ident (Ignore) Comma
         TupleArgsV -> TupleArg | Ignore

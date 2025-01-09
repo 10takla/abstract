@@ -1,3 +1,6 @@
+mod distruct;
+
+use distruct::distruct_items;
 use lexer::{
     lexer2::{
         cache_and_diags::diag::Diag, AnyBlock, Args, AssignExpr, Block, ErrorType, FnC, Ident,
@@ -374,118 +377,6 @@ fn token_type(t: SemanticTokenType) -> u32 {
         .unwrap()
         .0 as u32
 }
-
-type DistrItem = ([usize; 2], SemanticTokenType);
-
-// итератор для ленивого прохода
-fn distruct_items<'a>(items: &'a Items) -> impl Iterator<Item = DistrItem> + 'a {
-    items.iter().flat_map(distruct_item)
-}
-
-// итератор для ленивого на всех вложенных уровнях
-type T<'a> = Box<dyn Iterator<Item = DistrItem> + 'a>;
-fn distruct_item<'a>(item: &'a Item) -> T<'a> {
-    fn fast_once<'a>(
-        v: &impl StartEnd,
-        t: SemanticTokenType,
-    ) -> impl Iterator<Item = DistrItem> + 'a {
-        once((v.start_end(), t))
-    }
-    fn fast_box<'a>(v: &impl StartEnd, t: SemanticTokenType) -> T<'a> {
-        Box::new(fast_once(v, t))
-    }
-
-    let block = |v: &'a Block| {
-        fast_once(&v.0, BLOCK)
-            .chain(distruct_items(&v.1))
-            .chain(fast_once(&v.2, BLOCK))
-    };
-    let named_block = |v: &'a NamedBlock| Box::new(fast_once(&v.0, BLOCK).chain(block(&v.1)));
-
-    let ident = |v| fast_box(v, SemanticTokenType::VARIABLE);
-
-    let literal = |v: &'a self::Literal| {
-        use self::Literal::*;
-        match v {
-            String(..) => fast_box(v, SemanticTokenType::STRING),
-            Number(..) => fast_box(v, SemanticTokenType::NUMBER),
-        }
-    };
-    use Item::*;
-    match item {
-        StructC(v) => Box::new(
-            fast_box(&v.0, SemanticTokenType::KEYWORD)
-                .chain(fast_box(&v.1, SemanticTokenType::STRUCT))
-                .chain(v.2.color())
-        ),
-        FnC(v) => Box::new(
-            fast_box(&v.0, SemanticTokenType::KEYWORD)
-                .chain(fast_box(&v.1, SemanticTokenType::FUNCTION))
-                .chain(v.2.color())
-                .chain(block(&v.3)),
-        ),
-        AnyBlock(v) => {
-            use self::AnyBlock::*;
-            match v {
-                Block(v) => Box::new(block(v)),
-                NamedBlock(v) => named_block(v),
-                NamedDistrBlock(v) => Box::new(named_block(&v.0).chain(fast_once(&v.1, BLOCK))),
-                DistrBlock(v) => fast_box(v, BLOCK),
-            }
-        }
-        Ignore(..) => Box::new(empty()),
-        AssignExpr(v) => {
-            use self::AssignExpr::*;
-            match v {
-                Assign(v) => Box::new(ident(&v.0).chain(literal(&v.2))),
-                AssignAnd(v) => Box::new(ident(&v.0).chain(literal(&v.2))),
-            }
-        }
-        Literal(v) => literal(v),
-        Idents(v) => {
-            use self::Idents::*;
-            match v {
-                Ident(v) => ident(v),
-                Keyword(v) => fast_box(v, SemanticTokenType::KEYWORD),
-            }
-        }
-    }
-}
-
-trait Tr {
-    fn color(&self) -> impl Iterator<Item = DistrItem> {
-        self.cl().into_iter().map(|(a, b)| (a.start_end(), b))
-    }
-    fn cl(&self) -> Vec<(&dyn StartEnd, SemanticTokenType)>;
-}
-
-impl Tr for Args {
-    fn cl(&self) -> Vec<(&dyn StartEnd, SemanticTokenType)> {
-        use Args::*;
-        match self {
-            StructArgsC(v) => {
-                vec![
-                    (&v.0, SemanticTokenType::FUNCTION),
-                    (&v.2, SemanticTokenType::FUNCTION),
-                ]
-            }
-            TupleArgsC(v) => {
-                vec![
-                    (&v.0, SemanticTokenType::FUNCTION),
-                    (&v.2, SemanticTokenType::FUNCTION),
-                ]
-            }
-        }
-    }
-}
-
-trait StartEnd: Slicable {
-    fn start_end(&self) -> [usize; 2] {
-        let v = self.slice();
-        [*v.start(), *v.end()]
-    }
-}
-impl<T: Slicable> StartEnd for T {}
 
 #[test]
 fn tokenize_() {

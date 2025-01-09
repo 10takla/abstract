@@ -206,18 +206,20 @@ constructor!(
         Items(Item) CloseFigureBracket
         StructArgsI(StructArgsV) CloseFigureBracket
         TupleArgsI(TupleArgsV) CloseRoundBracket
-        ImplItemsI(ImplItemsV) CloseFigureBracket
     }
     common {
         Args -> StructArgsC | TupleArgsC
             StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
             TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
         Item -> FnC | StructC | TraitC | ImplC | AnyBlock | AssignExpr | Literal | Idents | Ignore
-            TraitC -> Trait (Ignore) Ident (Ignore) FnHead
-            ImplC -> Impl (Ignore) Ident (Ignore) ImplItemsIC
-                ImplItemsIC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
-                    ImplItemsV -> ConstC | FnC
-                        ConstC -> Const (Ignore) Ident (Ignore) Eq (Ignore) Literal
+            TraitC -> Trait (Ignore) Ident (Ignore) MethodsC
+                MethodsC -> OpenFigureBracket (Ignore) Methods (Ignore) CloseFigureBracket
+                    Methods ! (FnHead) CloseFigureBracket
+            ImplC -> Impl (Ignore) Ident (Ignore) ImplItemsC
+                ImplItemsC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
+                    ImplItemsI ! (ImplItemsV) CloseFigureBracket
+                        ImplItemsV -> ConstC | FnC
+                            ConstC -> Const (Ignore) Ident (Ignore) Eq (Ignore) Literal
             StructC -> Struct (Ignore) Ident (Ignore) Args
             FnC -> FnHead (Ignore) Block
                 FnHead -> Fn (Ignore) Ident (Ignore) Args

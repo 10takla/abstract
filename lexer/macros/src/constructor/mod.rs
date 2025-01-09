@@ -121,16 +121,17 @@ fn com(
             })
         })
         .or_else(|_| {
-            tmp3(&mut iter, construct_recognize).map(|v| {
-                constructs.push(v);
-            })
-        })
-        .or_else(|_| {
             tmp3(&mut iter, items_recognize).map(|(a, b)| {
                 t_items.extend(a);
                 items.push(b);
             })
         })
+        .or_else(|_| {
+            tmp3(&mut iter, construct_recognize).map(|v| {
+                constructs.push(v);
+            })
+        })
+        
         .unwrap();
     }
     (

@@ -25,6 +25,10 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
     let name = fast_ident2(iter).unwrap();
     counter += 1;
 
+    fast_puncts("!", iter).map(|v| {
+        counter += 1;
+    });
+
     let item = fast_ident2(&mut fast_group(iter).unwrap().stream().into_iter().peekable()).unwrap();
     counter += 1;
 

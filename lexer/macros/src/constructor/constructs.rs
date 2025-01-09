@@ -223,9 +223,14 @@ pub fn construct_recognize(
                     counter += 1;
                     ignore
                 });
-
+               
                 if let Some(vv) = iter.next() {
-                    fast_ident(&vv).ok().map(|_| (v.clone(), maybe.clone()))
+                    // panic!("{vv:?}");
+                    fast_ident(&vv).ok()
+                    // .and_then(|_| {
+                    //     fast_puncts("(",  &mut iter).is_err().then_some(())
+                    // })
+                    .map(|_| (v.clone(), maybe.clone()))
                 } else {
                     Some((v, maybe))
                 }

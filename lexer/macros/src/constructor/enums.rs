@@ -47,7 +47,7 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), 
     let (first, other) = items.split_first().unwrap();
 
     let tokens = quote! {
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, PartialEq)]
         pub enum #name {
             #( #items(#items) ),*
         }

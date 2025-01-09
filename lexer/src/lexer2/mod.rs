@@ -203,7 +203,7 @@ constructor!(
     enums {}
     constructs {}
     items {
-        Items(Item) (Ignore) CloseFigureBracket
+        Items ! (Item) (Ignore)
     }
     common {
         Item -> FnC | StructC | TraitC | ImplC | AnyBlock | AssignExpr | Literal | Idents
@@ -222,7 +222,8 @@ constructor!(
                 NamedDistrBlock -> NamedBlock (Ignore) Distribution
                 DistrBlock -> Ident (Ignore) Distribution
                 NamedBlock -> Ident (Ignore) Block
-                Block -> OpenFigureBracket Items CloseFigureBracket
+                Block -> OpenFigureBracket BlockItems CloseFigureBracket
+                    BlockItems ! (Item) (Ignore) CloseFigureBracket
             AssignExpr -> AssignAnd | Assign
                 AssignAnd -> Ident (Ignore) OpEq (Ignore) Literal
                     OpEq -> Op Eq
@@ -238,10 +239,11 @@ constructor!(
                 TupleArgsI ! (TupleArg) (Ignore) CloseRoundBracket
                     TupleArg -> Ident (Ignore) Comma
 
-        Ignore -> WhiteSpace | NextLine | Tab
-            WhiteSpace r" +"
-            NextLine r"\n"
-            Tab r"\t"
+        Ignore ! (IgnoreV) #
+            IgnoreV -> WhiteSpace | NextLine | Tab
+                    WhiteSpace r" +"
+                    NextLine r"\n"
+                    Tab r"\t"
 
         Op -> Add | Sub | Mul | Div
             Add r#"\+"#
@@ -256,7 +258,6 @@ constructor!(
             Trait "trait"
             Let "let"
             Impl "impl"
-
     }
     common {
         Tmp -> Ident Eq
@@ -280,6 +281,14 @@ constructor!(
         Var8 -> Ident CloseFigureBracket OpenFigureBracket WhiteSpace
     }
 );
+
+#[test]
+fn ignore() {
+    let t = [Construct::Ignore, Construct::Ident]
+        .recog(&mut " \n\t\t  sdfsdf".into(), 0)
+        .unwrap();
+    assert_eq!(t[1], ConstructItem::Ident(Ident(6..=11)));
+}
 
 /// для диганостики обрабтывает единичные символы, а не связку
 fn reg_observe(arg: &ParseArgs, reg: &str) -> Result<Slice, usize> {

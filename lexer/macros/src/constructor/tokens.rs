@@ -64,7 +64,7 @@ pub fn token_recognize(
     let common = &*COMMON;
     let check_pass_fail = check_pass_fail("token", &name);
     let tokens = quote! {
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, PartialEq)]
         pub struct #name(Slice);
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;

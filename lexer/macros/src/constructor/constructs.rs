@@ -189,19 +189,6 @@ pub fn constructs_reckog(
     )
 }
 
-// pub fn construct_recognize(
-//     iter: &mut IntoIter, items: &Vec<Ident>
-// ) -> Result<(TokenStream2, Ident), String> {
-//     catch_unwind(AssertUnwindSafe(|| construct_recogniz(&mut iter.clone().peekable(), items)))
-//         .map(|(v, count)| {
-//             for _ in 0..count {
-//                 iter.next().unwrap();
-//             }
-//             v
-//         })
-//         .map_err(tmp5)
-// }
-
 pub fn construct_recognize(
     iter: &mut Peekable<IntoIter>
 ) -> ((Ident, Vec<(Ident, Option<Ident>)>), usize) {
@@ -225,11 +212,7 @@ pub fn construct_recognize(
                 });
                
                 if let Some(vv) = iter.next() {
-                    // panic!("{vv:?}");
                     fast_ident(&vv).ok()
-                    // .and_then(|_| {
-                    //     fast_puncts("(",  &mut iter).is_err().then_some(())
-                    // })
                     .map(|_| (v.clone(), maybe.clone()))
                 } else {
                     Some((v, maybe))
@@ -323,7 +306,7 @@ pub fn construct_tokens(
     let check_pass_fail = check_pass_fail("cons", &name);
      
     quote! {
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, PartialEq)]
         pub struct #name(#( pub #cons_item ),*);
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;

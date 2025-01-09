@@ -48,7 +48,6 @@ impl Distruct for Item {
             AssignExpr(v) => v.distruct(vec),
             Literal(v) => v.distruct(vec),
             Idents(v) => v.distruct(vec),
-            Ignore(v) => v.distruct(vec),
         }
     }
 }
@@ -113,12 +112,23 @@ impl Distruct for NamedBlock {
         self.1.distruct(vec);
     }
 }
+mod block {
+    use super::*;
+    use lexer::lexer2::BlockItems;
 
-impl Distruct for Block {
-    fn distruct(&self, vec: &mut DistrIter) {
-        vec.push_t(&self.0, BLOCK);
-        self.1.distruct(vec);
-        vec.push_t(&self.2, BLOCK);
+    impl Distruct for Block {
+        fn distruct(&self, vec: &mut DistrIter) {
+            vec.push_t(&self.0, BLOCK);
+            self.1.distruct(vec);
+            vec.push_t(&self.2, BLOCK);
+        }
+    }
+    impl Distruct for BlockItems {
+        fn distruct(&self, vec: &mut DistrIter) {
+            self.iter().for_each(|v| {
+                v.distruct(vec);
+            });
+        }
     }
 }
 impl Distruct for AssignExpr {

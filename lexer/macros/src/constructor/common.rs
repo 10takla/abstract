@@ -59,7 +59,7 @@ pub fn common(
             #(#construct),*
         }
 
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, PartialEq)]
         enum ConstructItem {
             #(#construct(#construct)),*
         }

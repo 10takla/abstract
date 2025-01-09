@@ -203,21 +203,16 @@ constructor!(
     enums {}
     constructs {}
     items {
-        Items(Item) CloseFigureBracket
-        StructArgsI(StructArgsV) CloseFigureBracket
-        TupleArgsI(TupleArgsV) CloseRoundBracket
+        Items(Item) (Ignore) CloseFigureBracket
     }
     common {
-        Args -> StructArgsC | TupleArgsC
-            StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
-            TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
-        Item -> FnC | StructC | TraitC | ImplC | AnyBlock | AssignExpr | Literal | Idents | Ignore
+        Item -> FnC | StructC | TraitC | ImplC | AnyBlock | AssignExpr | Literal | Idents
             TraitC -> Trait (Ignore) Ident (Ignore) MethodsC
-                MethodsC -> OpenFigureBracket (Ignore) Methods (Ignore) CloseFigureBracket
-                    Methods ! (FnHead) CloseFigureBracket
+                MethodsC -> OpenFigureBracket (Ignore) MethodsI (Ignore) CloseFigureBracket
+                    MethodsI ! (FnHead) (Ignore) CloseFigureBracket
             ImplC -> Impl (Ignore) Ident (Ignore) ImplItemsC
                 ImplItemsC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
-                    ImplItemsI ! (ImplItemsV) CloseFigureBracket
+                    ImplItemsI ! (ImplItemsV) (Ignore) CloseFigureBracket
                         ImplItemsV -> ConstC | FnC
                             ConstC -> Const (Ignore) Ident (Ignore) Eq (Ignore) Literal
             StructC -> Struct (Ignore) Ident (Ignore) Args
@@ -234,6 +229,14 @@ constructor!(
                 Assign -> Ident (Ignore) Eq (Ignore) Literal
             Literal -> String | Number
             Idents -> Keyword | Ident
+
+        Args -> StructArgsC | TupleArgsC
+            StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
+                StructArgsI ! (StructArg) (Ignore) CloseFigureBracket
+                    StructArg -> Ident (Ignore) Colon (Ignore) Ident (Ignore) Comma
+            TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
+                TupleArgsI ! (TupleArg) (Ignore) CloseRoundBracket
+                    TupleArg -> Ident (Ignore) Comma
 
         Ignore -> WhiteSpace | NextLine | Tab
             WhiteSpace r" +"
@@ -254,10 +257,6 @@ constructor!(
             Let "let"
             Impl "impl"
 
-        StructArgsV -> StructArg | Ignore
-            StructArg -> Ident (Ignore) Colon (Ignore) Ident (Ignore) Comma
-        TupleArgsV -> TupleArg | Ignore
-            TupleArg -> Ident (Ignore) Comma
     }
     common {
         Tmp -> Ident Eq

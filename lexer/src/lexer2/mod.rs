@@ -199,6 +199,7 @@ constructor!(
 
         Comma ","
         Colon ":"
+        For "for"
     }
     enums {}
     constructs {}
@@ -206,15 +207,17 @@ constructor!(
         Items ! (Item) (Ignore)
     }
     common {
-        Item -> FnC | StructC | TraitC | ImplC | AnyBlock | AssignExpr | Literal | Idents
+        Item -> FnC | StructC | TraitC | ImplV | AnyBlock | AssignExpr | Literal | Idents
             TraitC -> Trait (Ignore) Ident (Ignore) MethodsC
                 MethodsC -> OpenFigureBracket (Ignore) MethodsI (Ignore) CloseFigureBracket
                     MethodsI ! (FnHead) (Ignore) CloseFigureBracket
-            ImplC -> Impl (Ignore) Ident (Ignore) ImplItemsC
-                ImplItemsC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
-                    ImplItemsI ! (ImplItemsV) (Ignore) CloseFigureBracket
-                        ImplItemsV -> ConstC | FnC
-                            ConstC -> Const (Ignore) Ident (Ignore) Eq (Ignore) Literal
+            ImplV -> ImplFor | ImplC
+                ImplFor -> Impl (Ignore) Ident (Ignore) For (Ignore) Ident (Ignore) ImplItemsC
+                ImplC -> Impl (Ignore) Ident (Ignore) ImplItemsC
+                    ImplItemsC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
+                        ImplItemsI ! (ImplItemsV) (Ignore) CloseFigureBracket
+                            ImplItemsV -> ConstC | FnC
+                                ConstC -> Const (Ignore) Ident (Ignore) Eq (Ignore) Literal
             StructC -> Struct (Ignore) Ident (Ignore) Args
             FnC -> FnHead (Ignore) Block
                 FnHead -> Fn (Ignore) Ident (Ignore) Args

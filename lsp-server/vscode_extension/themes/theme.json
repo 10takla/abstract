@@ -1,10 +1,16 @@
 {
     "semanticTokenColors": {
-        "variable": "#9876aa",
-        "namedBlock": "#ffff00",
+        "trait": "#15ff00",
+        "impl": "#00e5ff",
+        "struct":  "#ff2200",
+        "block": "#ffff00",
+        "function": "#ffc66d",
+        
+        
         "string": "#6a8759",
         "number": "#6897bb",
-        "keyword": "#cc7832",
-        "function": "#ffc66d"
+        
+        "variable": "#9876aa",
+        "keyword": "#cc7832"
     }
 }

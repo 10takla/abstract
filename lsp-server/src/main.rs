@@ -39,11 +39,17 @@ struct Backend {
     version: AtomicUsize,
 }
 
-const BLOCK: SemanticTokenType = SemanticTokenType::new("namedBlock");
+const TRAIT: SemanticTokenType = SemanticTokenType::new("trait");
+const IMPL: SemanticTokenType = SemanticTokenType::new("impl");
+const BLOCK: SemanticTokenType = SemanticTokenType::new("block");
+const SYMBOL: SemanticTokenType = SemanticTokenType::new("symbol");
 const TOKENS: LazyLock<Vec<SemanticTokenType>> = LazyLock::new(|| {
     vec![
-        SemanticTokenType::VARIABLE,
+        TRAIT,
+        IMPL,
         BLOCK,
+        SYMBOL,
+        SemanticTokenType::VARIABLE,
         SemanticTokenType::STRING,
         SemanticTokenType::NUMBER,
         SemanticTokenType::KEYWORD,
@@ -211,7 +217,7 @@ fn diag_split(
 
     while let Some(&(i, [line_start, line_end])) = iter.peek() {
         // если начало находится на линии
-        if dbg!(dbg!(item_start) <= dbg!(line_end)) {
+        if item_start <= line_end {
             let [start_o, start_line_o] = [item_start - line_start, i];
             // если конец находится на линии
             if item_end <= line_end {
@@ -240,9 +246,12 @@ fn diag_split(
 fn diag() {
     let check = |source, b: Vec<[[usize; 2]; 2]>| {
         let iter = &mut get_iter(source);
-        dbg!(parse(source).1).into_iter().enumerate().for_each(|(i, v)| {
-            assert_eq!(diag_split(&v, iter), b[i]);
-        });
+        dbg!(parse(source).1)
+            .into_iter()
+            .enumerate()
+            .for_each(|(i, v)| {
+                assert_eq!(diag_split(&v, iter), b[i]);
+            });
     };
 
     check("22dd", vec![[[0, 0], [3, 0]]]);

@@ -1,17 +1,13 @@
-sdf = "sdfsf"
+trait Lt {
+    fn tmp()
+}
+impl Lt for main {
+    fn tmp() {
+        sdf = 2
+    }
+    const T = "dsf"
+}
+struct T { sdfds:T, }
 fn main ( sf, sdf, ) {
     sdf = 2
-    sdfsf 
-    sdfsf
-    sdf += 2
-    sdfsf
-    asd
-    ada dasd ad
-    asdad += 2
-} sdf = 2
-sdf
-sdf sd fgd
-sdfj sdfljl
-
-struct T { sdfds:T, }
-dsfs 
+}

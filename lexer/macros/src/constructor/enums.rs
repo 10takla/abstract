@@ -57,7 +57,6 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), 
         }
         impl #name {
             #common
-
             #check_pass_fail
 
             fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {

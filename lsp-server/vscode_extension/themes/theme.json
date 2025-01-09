@@ -2,14 +2,12 @@
     "semanticTokenColors": {
         "trait": "#15ff00",
         "impl": "#00e5ff",
-        "struct":  "#ff2200",
+        "struct": "#ff2200",
         "block": "#ffff00",
         "function": "#ffc66d",
-        
-        
+        "type": "#7948ff",
         "string": "#6a8759",
         "number": "#6897bb",
-        
         "variable": "#9876aa",
         "keyword": "#cc7832"
     }

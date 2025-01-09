@@ -207,7 +207,7 @@ constructor!(
         Items ! (Item) (Ignore)
     }
     common {
-        Item -> FnC | StructC | TraitC | ImplV | AnyBlock | AssignExpr | Literal | Idents
+        Item -> FnC | StructC | TraitC | ImplV | AnyBlock | ConstC | AssignExpr | Literal | Idents
             TraitC -> Trait (Ignore) Ident (Ignore) MethodsC
                 MethodsC -> OpenFigureBracket (Ignore) MethodsI (Ignore) CloseFigureBracket
                     MethodsI ! (FnHead) (Ignore) CloseFigureBracket
@@ -217,7 +217,6 @@ constructor!(
                     ImplItemsC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
                         ImplItemsI ! (ImplItemsV) (Ignore) CloseFigureBracket
                             ImplItemsV -> ConstC | FnC
-                                ConstC -> Const (Ignore) Ident (Ignore) Eq (Ignore) Literal
             StructC -> Struct (Ignore) Ident (Ignore) Args
             FnC -> FnHead (Ignore) Block
                 FnHead -> Fn (Ignore) Ident (Ignore) Args
@@ -227,33 +226,28 @@ constructor!(
                 NamedBlock -> Ident (Ignore) Block
                 Block -> OpenFigureBracket BlockItems CloseFigureBracket
                     BlockItems ! (Item) (Ignore) CloseFigureBracket
+            ConstC -> Const (Ignore) Assign
             AssignExpr -> AssignAnd | Assign
-                AssignAnd -> Ident (Ignore) OpEq (Ignore) Literal
+                AssignAnd -> IdentAndType (Ignore) OpEq (Ignore) Literal
                     OpEq -> Op Eq
-                Assign -> Ident (Ignore) Eq (Ignore) Literal
+                Assign -> IdentAndType (Ignore) Eq (Ignore) Literal
             Literal -> String | Number
             Idents -> Keyword | Ident
-
         Args -> StructArgsC | TupleArgsC
             StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
-                StructArgsI ! (StructArg) (Ignore) CloseFigureBracket
-                    StructArg -> Ident (Ignore) Colon (Ignore) Ident (Ignore) Comma
+                StructArgsI ! (IdentAndTypeC) (Ignore) CloseFigureBracket
             TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
-                TupleArgsI ! (TupleArg) (Ignore) CloseRoundBracket
-                    TupleArg -> Ident (Ignore) Comma
-
+                TupleArgsI ! (Type) (Ignore) CloseRoundBracket
         Ignore ! (IgnoreV) #
             IgnoreV -> WhiteSpace | NextLine | Tab
-                    WhiteSpace r" +"
-                    NextLine r"\n"
-                    Tab r"\t"
-
+                WhiteSpace r" +"
+                NextLine r"\n"
+                Tab r"\t"
         Op -> Add | Sub | Mul | Div
             Add r#"\+"#
             Sub r#"-"#
             Mul r"\*"
             Div r#"/"#
-
         Keyword -> Fn | Const | Struct | Trait | Let
             Fn "fn"
             Const "const"
@@ -261,6 +255,14 @@ constructor!(
             Trait "trait"
             Let "let"
             Impl "impl"
+        IdentAndType -> IdentAndTypeC | Ident
+            IdentAndTypeC -> Ident (Ignore) Colon (Ignore) Type
+        Type -> AnnotededTypeC | Ident
+            AnnotededTypeC -> OpenTriangularBracket (Ignore) AnnotededType (Ignore) CloseTriangularBracket
+                OpenTriangularBracket "<"
+                CloseTriangularBracket ">"
+                AnnotededType -> EqType | Ident
+                    EqType -> Ident (Ignore) Eq (Ignore) Ident
     }
     common {
         Tmp -> Ident Eq
@@ -284,6 +286,28 @@ constructor!(
         Var8 -> Ident CloseFigureBracket OpenFigureBracket WhiteSpace
     }
 );
+
+#[test]
+fn items() {
+    Items::recog(
+        &mut r#"trait Lt {
+    fn tmp()
+}
+impl Lt for main {
+    fn tmp() {
+        sdf = 2
+    }
+    const T = "dsf"
+}
+struct T { sdfds:T }
+fn main ( sf sdf ) {
+    sdf = 2
+}
+const T = "dsf""#
+            .into(),
+        0,
+    );
+}
 
 #[test]
 fn ignore() {

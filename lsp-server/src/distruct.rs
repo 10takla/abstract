@@ -1,9 +1,6 @@
 use super::SYMBOL;
 use crate::BLOCK;
-use lexer::lexer2::{
-    AnyBlock, Args, AssignExpr, Block, FnC, Ident, Idents, Ignore, ImplC, Item, Items, Keyword,
-    Literal, NamedBlock, Slicable, StructC, TraitC, *,
-};
+use lexer::lexer2::*;
 use tower_lsp::lsp_types::SemanticTokenType;
 
 type DistrIter = Vec<DistrItem>;
@@ -46,6 +43,7 @@ impl Distruct for Item {
             TraitC(v) => v.distruct(vec),
             ImplV(v) => v.distruct(vec),
             AnyBlock(v) => v.distruct(vec),
+            ConstC(v) => v.distruct(vec),
             AssignExpr(v) => v.distruct(vec),
             Literal(v) => v.distruct(vec),
             Idents(v) => v.distruct(vec),
@@ -101,9 +99,8 @@ mod trait_ {
 }
 mod impl_ {
     use super::*;
-    use crate::{distruct, IMPL};
-    use lexer::lexer2::{ConstC, ImplItemsC, ImplItemsI, ImplItemsV, ImplV};
-    use tower_lsp::lsp_types::SemanticTokens;
+    use crate::IMPL;
+    use lexer::lexer2::{ConstC, ImplItemsC, ImplItemsV, ImplV};
 
     impl Distruct for ImplV {
         fn distruct(&self, vec: &mut DistrIter) {
@@ -150,8 +147,6 @@ mod impl_ {
         fn distruct(&self, vec: &mut DistrIter) {
             vec.push_t(&self.0, SemanticTokenType::KEYWORD);
             self.1.distruct(vec);
-            self.2.distruct(vec);
-            self.3.distruct(vec);
         }
     }
 }
@@ -165,22 +160,26 @@ impl Distruct for StructC {
             StructArgsC(v) => {
                 vec.push_t(&v.0, SemanticTokenType::STRUCT);
                 v.1.iter().for_each(|v| {
-                    v.0.distruct(vec);
-                    v.1.distruct(vec);
-                    v.2.distruct(vec);
-                    v.3.distruct(vec);
+                    v.distruct(vec);
                 });
                 vec.push_t(&v.2, SemanticTokenType::STRUCT);
             }
             TupleArgsC(v) => {
                 vec.push_t(&v.0, SemanticTokenType::STRUCT);
                 v.1.iter().for_each(|v| {
-                    v.0.distruct(vec);
-                    v.1.distruct(vec);
+                    v.distruct(vec);
                 });
                 vec.push_t(&v.2, SemanticTokenType::STRUCT);
             }
         }
+    }
+}
+
+impl Distruct for IdentAndTypeC {
+    fn distruct(&self, vec: &mut DistrIter) {
+        self.0.distruct(vec);
+        self.1.distruct(vec);
+        self.2.distruct(vec);
     }
 }
 
@@ -225,19 +224,37 @@ mod block {
         }
     }
 }
-impl Distruct for AssignExpr {
-    fn distruct(&self, vec: &mut DistrIter) {
-        use self::AssignExpr::*;
-        match self {
-            Assign(v) => {
-                v.0.distruct(vec);
-                v.1.distruct(vec);
-                v.2.distruct(vec);
+mod assign_expr {
+    use super::*;
+    use tokio::task::Id;
+    impl Distruct for AssignExpr {
+        fn distruct(&self, vec: &mut DistrIter) {
+            use self::AssignExpr::*;
+            match self {
+                Assign(v) => {
+                    v.distruct(vec);
+                }
+                AssignAnd(v) => {
+                    v.0.distruct(vec);
+                    v.1.distruct(vec);
+                    v.2.distruct(vec);
+                }
             }
-            AssignAnd(v) => {
-                v.0.distruct(vec);
-                v.1.distruct(vec);
-                v.2.distruct(vec);
+        }
+    }
+    impl Distruct for Assign {
+        fn distruct(&self, vec: &mut DistrIter) {
+            self.0.distruct(vec);
+            self.1.distruct(vec);
+            self.2.distruct(vec);
+        }
+    }
+    impl Distruct for IdentAndType {
+        fn distruct(&self, vec: &mut DistrIter) {
+            use IdentAndType::*;
+            match self {
+                IdentAndTypeC(v) => v.distruct(vec),
+                Ident(v) => v.distruct(vec),
             }
         }
     }
@@ -249,6 +266,12 @@ impl Distruct for Literal {
             String(..) => vec.push_t(self, SemanticTokenType::STRING),
             Number(..) => vec.push_t(self, SemanticTokenType::NUMBER),
         }
+    }
+}
+
+impl Distruct for Type {
+    fn distruct(&self, vec: &mut DistrIter) {
+        vec.push_t(self, SemanticTokenType::TYPE);
     }
 }
 impl Distruct for Idents {

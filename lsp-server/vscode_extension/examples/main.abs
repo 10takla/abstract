@@ -5,9 +5,10 @@ impl Lt for main {
     fn tmp() {
         sdf = 2
     }
-    const T = "dsf"
+    const T : Gdfg = "dsf"
 }
-struct T { sdfds:T, }
-fn main ( sf, sdf, ) {
+struct T { sdfds:T }
+fn main ( sf sdf ) {
     sdf = 2
 }
+const T = "dsf"

@@ -247,14 +247,15 @@ fn diag_split(
 fn diag() {
     let check = |source, b: Vec<[[usize; 2]; 2]>| {
         let iter = &mut get_iter(source);
-        dbg!(parse(source).1)
-            .into_iter()
-            .enumerate()
-            .for_each(|(i, v)| {
-                assert_eq!(diag_split(&v, iter), b[i]);
-            });
+        assert_eq!(
+            parse(source)
+                .1
+                .into_iter()
+                .map(|v| diag_split(&v, iter))
+                .collect::<Vec<_>>(),
+            b
+        );
     };
-
     check("22dd", vec![[[0, 0], [3, 0]]]);
     check(
         "
@@ -340,9 +341,9 @@ fn item_split(
                 // иначе продолжить проход по линиям пока не будет найден конец элемента
                 while let Some(&(i, [line_start, line_end])) = iter.peek() {
                     // если конец элемента находится на линии
-                    if item_start <= line_end {
+                    if item_end <= line_end {
                         // то перейти к следующему элементу
-                        push_token(i - *last_line, 0, item_end - item_start + 1);
+                        push_token(i - *last_line, 0, item_end - line_start + 1);
                         *last_start = Some(item_start);
                         *last_line = i;
                         return;
@@ -388,21 +389,30 @@ fn token_type(t: SemanticTokenType) -> u32 {
         .0 as u32
 }
 
-#[test]
-fn tokenize_() {
-    let sem_token = |[delta_line, delta_start, length]: [u32; 3], token_type| SemanticToken {
-        delta_line,
-        delta_start,
-        length,
-        token_type: TOKENS.iter().position(|t| *t == token_type).unwrap() as u32,
-        token_modifiers_bitset: 0,
-    };
+#[cfg(test)]
+mod tests {
+    use crate::{tokenize, BLOCK, TOKENS};
+    use lexer::parse;
+    use tower_lsp::lsp_types::{SemanticToken, SemanticTokenType};
 
-    let any_types = |code, vec| {
+    fn sem_token(
+        [delta_line, delta_start, length]: [u32; 3],
+        token_type: SemanticTokenType,
+    ) -> SemanticToken {
+        SemanticToken {
+            delta_line,
+            delta_start,
+            length,
+            token_type: TOKENS.iter().position(|t| *t == token_type).unwrap() as u32,
+            token_modifiers_bitset: 0,
+        }
+    }
+
+    fn any_types(code: &str, vec: Vec<SemanticToken>) {
         assert_eq!(tokenize(&parse(code).0, code), vec);
-    };
+    }
 
-    let all_types = |token_type: SemanticTokenType| {
+    fn all_types(token_type: SemanticTokenType) -> impl Fn(&'static str, Vec<[u32; 3]>) {
         move |code: &'static str, b: Vec<[u32; 3]>| {
             any_types(
                 code,
@@ -411,49 +421,64 @@ fn tokenize_() {
                     .collect(),
             );
         }
-    };
+    }
+    #[test]
+    fn tokenize_() {
+        all_types(SemanticTokenType::VARIABLE)("abc abc", vec![[0, 0, 3], [0, 4, 3]]);
+        all_types(SemanticTokenType::VARIABLE)("abc\ndef", vec![[0, 0, 3], [1, 0, 3]]);
+        all_types(SemanticTokenType::VARIABLE)("a\nb", vec![[0, 0, 1], [1, 0, 1]]);
+        all_types(SemanticTokenType::VARIABLE)("\na", vec![[1, 0, 1]]);
+        all_types(SemanticTokenType::VARIABLE)("\n a", vec![[1, 1, 1]]);
+        all_types(SemanticTokenType::VARIABLE)("a\n a", vec![[0, 0, 1], [1, 1, 1]]);
+        all_types(SemanticTokenType::VARIABLE)(
+            "main sdfsfd sdf sf sdf sf sfd sdf sf",
+            vec![
+                [0, 0, 4],
+                [0, 5, 6],
+                [0, 7, 3],
+                [0, 4, 2],
+                [0, 3, 3],
+                [0, 4, 2],
+                [0, 3, 3],
+                [0, 4, 3],
+                [0, 4, 2],
+            ],
+        );
 
-    all_types(SemanticTokenType::VARIABLE)("abc abc", vec![[0, 0, 3], [0, 4, 3]]);
-    all_types(SemanticTokenType::VARIABLE)("abc\ndef", vec![[0, 0, 3], [1, 0, 3]]);
-    all_types(SemanticTokenType::VARIABLE)("a\nb", vec![[0, 0, 1], [1, 0, 1]]);
-    all_types(SemanticTokenType::VARIABLE)("\na", vec![[1, 0, 1]]);
-    all_types(SemanticTokenType::VARIABLE)("\n a", vec![[1, 1, 1]]);
-    all_types(SemanticTokenType::VARIABLE)("a\n a", vec![[0, 0, 1], [1, 1, 1]]);
-    all_types(SemanticTokenType::VARIABLE)(
-        "main sdfsfd sdf sf sdf sf sfd sdf sf",
-        vec![
-            [0, 0, 4],
-            [0, 5, 6],
-            [0, 7, 3],
-            [0, 4, 2],
-            [0, 3, 3],
-            [0, 4, 2],
-            [0, 3, 3],
-            [0, 4, 3],
-            [0, 4, 2],
-        ],
-    );
+        all_types(BLOCK)("main {}", vec![[0, 0, 4], [0, 5, 1], [0, 1, 1]]);
+        all_types(BLOCK)("main {\n}", vec![[0, 0, 4], [0, 5, 1], [1, 0, 1]]);
+        all_types(BLOCK)("main {\n\n}", vec![[0, 0, 4], [0, 5, 1], [2, 0, 1]]);
 
-    all_types(BLOCK)("main {}", vec![[0, 0, 4], [0, 5, 1], [0, 1, 1]]);
-    all_types(BLOCK)("main {\n}", vec![[0, 0, 4], [0, 5, 1], [1, 0, 1]]);
-    all_types(BLOCK)("main {\n\n}", vec![[0, 0, 4], [0, 5, 1], [2, 0, 1]]);
+        any_types(
+            "main {\n} a",
+            vec![
+                sem_token([0, 0, 4], BLOCK),
+                sem_token([0, 5, 1], BLOCK),
+                sem_token([1, 0, 1], BLOCK),
+                sem_token([0, 2, 1], SemanticTokenType::VARIABLE),
+            ],
+        );
+        any_types(
+            "main {\n\n} a",
+            vec![
+                sem_token([0, 0, 4], BLOCK),
+                sem_token([0, 5, 1], BLOCK),
+                sem_token([2, 0, 1], BLOCK),
+                sem_token([0, 2, 1], SemanticTokenType::VARIABLE),
+            ],
+        );
+    }
 
-    any_types(
-        "main {\n} a",
-        vec![
-            sem_token([0, 0, 4], BLOCK),
-            sem_token([0, 5, 1], BLOCK),
-            sem_token([1, 0, 1], BLOCK),
-            sem_token([0, 2, 1], SemanticTokenType::VARIABLE),
-        ],
-    );
-    any_types(
-        "main {\n\n} a",
-        vec![
-            sem_token([0, 0, 4], BLOCK),
-            sem_token([0, 5, 1], BLOCK),
-            sem_token([2, 0, 1], BLOCK),
-            sem_token([0, 2, 1], SemanticTokenType::VARIABLE),
-        ],
-    );
+    #[test]
+    fn issues() {
+        // issue - не все строки подсвечиваются как строка
+        all_types(SemanticTokenType::STRING)(
+            r#""dsf
+sdfsdf
+sdfs
+sdfsdf
+sdf""#,
+            vec![[0, 0, 5], [1, 0, 7], [1, 0, 5], [1, 0, 7], [1, 0, 4]],
+        );
+    }
 }

@@ -208,37 +208,38 @@ constructor!(
     }
     common {
         Item -> FnC | StructC | TraitC | ImplV | AnyBlock | ConstC | AssignExpr | Literal | Idents
-            TraitC -> Trait (Ignore) Ident (Ignore) MethodsC
-                MethodsC -> OpenFigureBracket (Ignore) MethodsI (Ignore) CloseFigureBracket
+            TraitC (Ignore) -> Trait Ident MethodsC
+                MethodsC (Ignore) -> OpenFigureBracket MethodsI CloseFigureBracket
                     MethodsI ! (FnHead) (Ignore) CloseFigureBracket
             ImplV -> ImplFor | ImplC
-                ImplFor -> Impl (Ignore) Ident (Ignore) For (Ignore) Ident (Ignore) ImplItemsC
-                ImplC -> Impl (Ignore) Ident (Ignore) ImplItemsC
-                    ImplItemsC -> OpenFigureBracket (Ignore) ImplItemsI (Ignore) CloseFigureBracket
+                ImplFor (Ignore) -> Impl Ident For Ident ImplItemsC
+                ImplC (Ignore) -> Impl Ident ImplItemsC
+                    ImplItemsC (Ignore) -> OpenFigureBracket ImplItemsI CloseFigureBracket
                         ImplItemsI ! (ImplItemsV) (Ignore) CloseFigureBracket
                             ImplItemsV -> ConstC | FnC
-            StructC -> Struct (Ignore) Ident (Ignore) Args
-            FnC -> FnHead (Ignore) Block
-                FnHead -> Fn (Ignore) Ident (Ignore) Args
+            StructC (Ignore) -> Struct Ident Args
+            FnC (Ignore) -> FnHead Block
+                FnHead (Ignore) -> Fn Ident Args
             AnyBlock -> NamedDistrBlock | DistrBlock | NamedBlock | Block
-                NamedDistrBlock -> NamedBlock (Ignore) Distribution
-                DistrBlock -> Ident (Ignore) Distribution
-                NamedBlock -> Ident (Ignore) Block
+                NamedDistrBlock (Ignore) -> NamedBlock Distribution
+                DistrBlock (Ignore) -> Ident Distribution
+                NamedBlock (Ignore) -> Ident Block
                 Block -> OpenFigureBracket BlockItems CloseFigureBracket
                     BlockItems ! (Item) (Ignore) CloseFigureBracket
-            ConstC -> Const (Ignore) Assign
+            ConstC (Ignore) -> Const Assign
             AssignExpr -> AssignAnd | Assign
-                AssignAnd -> IdentAndType (Ignore) OpEq (Ignore) Literal
+                AssignAnd (Ignore) -> IdentAndType OpEq Literal
                     OpEq -> Op Eq
-                Assign -> IdentAndType (Ignore) Eq (Ignore) Literal
+                Assign (Ignore) -> IdentAndType Eq Literal
             Literal -> String | Number
             Idents -> Keyword | Ident
         Args -> StructArgsC | TupleArgsC
-            StructArgsC -> OpenFigureBracket (Ignore) StructArgsI (Ignore) CloseFigureBracket
+            StructArgsC (Ignore) -> OpenFigureBracket StructArgsI CloseFigureBracket
                 StructArgsI ! (IdentAndTypeC) (Ignore) CloseFigureBracket
-            TupleArgsC -> OpenRoundBracket (Ignore) TupleArgsI (Ignore) CloseRoundBracket
+                    IdentAndTypeC (Ignore) -> Ident Colon Type
+            TupleArgsC (Ignore) -> OpenRoundBracket TupleArgsI CloseRoundBracket
                 TupleArgsI ! (Type) (Ignore) CloseRoundBracket
-        Ignore ! (IgnoreV) #
+        Ignore (IgnoreV) #
             IgnoreV -> WhiteSpace | NextLine | Tab
                 WhiteSpace r" +"
                 NextLine r"\n"
@@ -256,13 +257,12 @@ constructor!(
             Let "let"
             Impl "impl"
         IdentAndType -> IdentAndTypeC | Ident
-            IdentAndTypeC -> Ident (Ignore) Colon (Ignore) Type
         Type -> AnnotededTypeC | Ident
-            AnnotededTypeC -> OpenTriangularBracket (Ignore) AnnotededType (Ignore) CloseTriangularBracket
+            AnnotededTypeC (Ignore) -> OpenTriangularBracket AnnotededType CloseTriangularBracket
                 OpenTriangularBracket "<"
                 CloseTriangularBracket ">"
                 AnnotededType -> EqType | Ident
-                    EqType -> Ident (Ignore) Eq (Ignore) Ident
+                    EqType (Ignore) -> Ident Eq Ident
     }
     common {
         Tmp -> Ident Eq

@@ -1,8 +1,8 @@
 use std::{iter::Peekable, panic::{catch_unwind, AssertUnwindSafe}};
-use super::{check_pass_fail, fast_group, fast_ident, fast_ident2, fast_puncts, tmp, tmp5, COMMON};
+use super::{check_pass_fail, fast_group, fast_ident, fast_ident2, fast_puncts, tmp,  tmp5, COMMON};
 use proc_macro2::{token_stream::IntoIter, Group, Ident, TokenStream as TokenStream2};
 use quote::quote;
-use syn::Index;
+use syn::{parse::Peek, Index};
 
 
 pub fn constructs(
@@ -16,50 +16,47 @@ pub fn constructs(
     v
 }
 
+fn head(iter: &mut Peekable<IntoIter>, counter: &mut usize) -> Result<(Ident, Option<Ident>), String> {
+    let cons_name = fast_ident2(iter)?;
+    *counter += 1;
+    let common_ignore = fast_group(iter).ok().map(|v| {
+        *counter += 1;
+        fast_ident2(&mut v.stream().into_iter().peekable()).unwrap()
+    });
+    fast_puncts("->", iter)?;
+    *counter += 2;
+    Ok((cons_name, common_ignore))
+}
+
 pub fn constructs_reckog(
     iter: &mut IntoIter, items: &Vec<Ident>
-) -> (
-    (
-        TokenStream2,
-        Vec<Ident>,
-    ),
-    Result<(), String>,
-) {
+) -> ((TokenStream2, Vec<Ident>), Result<(), String>) {
     let mut vec = vec![];
     let mut construct_names = vec![];
     
     let res = catch_unwind(AssertUnwindSafe(|| {
         let mut iter = iter.clone().peekable();
-        while let Some(item) = iter.next() {
-            let Ok(cons_name) = fast_ident(&item) else {
-                break;
-            };
-            let Ok(_) = fast_puncts("->", &mut iter) else {
-                break;
+        while iter.peek().is_some() {
+            let Ok((cons_name, common_ignore)) = head(&mut iter, &mut 0) else {
+                break
             };
     
-            let mut cons_item = vec![];
-            let mut tmp = vec![];
+            let (mut cons_item, mut tmp) = (Vec::default(), Vec::default());
             while let Some((v, maybe)) = {
-                {
-                    let mut iter = iter.clone();
-                    iter.next().and_then(|v| fast_ident(&v).ok()).and_then(|v| {
-                        let maybe = fast_group(&mut iter).ok().map(|v| {
-                            let ignore = fast_ident(&v.stream().into_iter().next().unwrap()).unwrap();
-                            quote! {#ignore::recog(arg, l + 1);}
-                        });
-                        if let Some(vv) = iter.next() {
-                            fast_ident(&vv).ok().map(|_| (v.clone(), maybe.clone()))
-                        } else {
-                            Some((v, maybe))
-                        }
-                    })
-                }
-                .map(|v| {
-                    iter.next().unwrap();
-                    v.1.as_ref().map(|_| iter.next().unwrap());
-                    v
-                })
+                head(&mut iter.clone(), &mut 0).err()
+                    .and_then(|_| fast_ident2(&mut iter).ok())
+                    .map(|v| (
+                        v,
+                        common_ignore.clone()
+                            .or_else(|| {
+                                fast_group(&mut iter).ok().map(|v| {
+                                    fast_ident(&v.stream().into_iter().next().expect("1")).expect("2")
+                                })
+                            })
+                            .map(|v| {
+                                quote! {#v::recog(arg, l + 1);}
+                            })
+                    ))
             } {
                 cons_item.push(v.clone());
                 tmp.push(
@@ -128,7 +125,7 @@ pub fn constructs_reckog(
             let check_pass_fail = check_pass_fail("cons", &cons_name);
             vec.push(
                 quote! {
-                    #[derive(Clone, Debug)]
+                    #[derive(Clone, Debug, PartialEq)]
                     pub struct #cons_name(#( pub #cons_item ),*);
                     impl CommonTypes for #cons_name {
                         const CONST: Construct = Construct::#cons_name;
@@ -189,45 +186,58 @@ pub fn constructs_reckog(
     )
 }
 
+fn item_head(iter: &mut Peekable<IntoIter>) -> Result<(), String> {
+    fast_ident2(iter)?;
+    fast_puncts("!", iter)
+}
+
 pub fn construct_recognize(
     iter: &mut Peekable<IntoIter>
 ) -> ((Ident, Vec<(Ident, Option<Ident>)>), usize) {
     let mut counter = 0;
 
-    let name = fast_ident2(iter).unwrap();
-    counter += 1;
-
-    fast_puncts("->", iter).unwrap();
-    counter += 2;
+    let (name, common_ignore) = head(iter, &mut counter).unwrap();
 
     let mut items_i = vec![];
     while let Some((v, maybe)) = {
         {
-            let mut iter = iter.clone();
-            iter.next().and_then(|v| fast_ident(&v).ok()).and_then(|v| {
-                let maybe = fast_group(&mut iter).ok().map(|v| {
-                    let ignore = fast_ident(&v.stream().into_iter().next().unwrap()).unwrap();
-                    counter += 1;
-                    ignore
-                });
-               
-                if let Some(vv) = iter.next() {
-                    fast_ident(&vv).ok()
-                    .map(|_| (v.clone(), maybe.clone()))
-                } else {
-                    Some((v, maybe))
-                }
+            let mut iter2 = iter.clone();
+            fast_ident2(&mut iter2).ok()
+                .and_then(|v| {
+                    let maybe = fast_group(&mut iter2).ok().map(|v| {
+                        fast_ident(&v.stream().into_iter().next().unwrap()).unwrap()
+                    });
+                
+                    if let Some(vv) = iter2.next() {
+                        fast_ident(&vv).ok()
+                            .map(|_| (v.clone(), maybe.clone()))
+                    } else {
+                        Some((v, maybe))
+                    }
             })
         }
         .map(|v| {
             counter += 1;
             iter.next().unwrap();
-            v.1.as_ref().map(|_| iter.next().unwrap());
-            v
+            (
+                v.0,
+                common_ignore.clone().or_else(|| {
+                    v.1.as_ref().map(|v| {
+                        counter += 1;
+                        iter.next().unwrap();
+                    });
+                    v.1
+                })
+            )
         })
     } {
         items_i.push((v.clone(), maybe));
     }
+    common_ignore.and_then(|_| items_i.last_mut())
+        .map(|v| {
+            v.1 = None;
+        });
+
     if items_i.len() == 0 {
         panic!("construct expect elements")
     }

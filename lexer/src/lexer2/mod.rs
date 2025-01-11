@@ -262,7 +262,7 @@ constructor!(
                 OpenTriangularBracket "<"
                 CloseTriangularBracket ">"
                 AnnotededType -> EqType | Ident
-                    EqType (Ignore) -> Ident Eq Ident
+                    EqType (Ignore) -> Ident Eq Ident!
     }
     common {
         Tmp -> Ident Eq

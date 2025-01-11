@@ -186,56 +186,57 @@ pub fn constructs_reckog(
     )
 }
 
-fn item_head(iter: &mut Peekable<IntoIter>) -> Result<(), String> {
-    fast_ident2(iter)?;
-    fast_puncts("!", iter)
-}
-
 pub fn construct_recognize(
     iter: &mut Peekable<IntoIter>
-) -> ((Ident, Vec<(Ident, Option<Ident>)>), usize) {
+) -> ((Ident, Vec<(Ident, bool, Option<Ident>)>), usize) {
     let mut counter = 0;
 
     let (name, common_ignore) = head(iter, &mut counter).unwrap();
 
     let mut items_i = vec![];
-    while let Some((v, maybe)) = {
+    while let Some(v) = {
         {
             let mut iter2 = iter.clone();
             fast_ident2(&mut iter2).ok()
                 .and_then(|v| {
+                    let is_box = fast_puncts("!", &mut iter2).is_ok();
                     let maybe = fast_group(&mut iter2).ok().map(|v| {
                         fast_ident(&v.stream().into_iter().next().unwrap()).unwrap()
                     });
                 
                     if let Some(vv) = iter2.next() {
                         fast_ident(&vv).ok()
-                            .map(|_| (v.clone(), maybe.clone()))
+                            .map(|_| (v.clone(), is_box, maybe.clone()))
                     } else {
-                        Some((v, maybe))
+                        Some((v, is_box, maybe))
                     }
             })
         }
         .map(|v| {
             counter += 1;
             iter.next().unwrap();
+            if v.1 {
+                counter += 1;
+                iter.next().unwrap();
+            }
             (
                 v.0,
+                v.1,
                 common_ignore.clone().or_else(|| {
-                    v.1.as_ref().map(|v| {
+                    v.2.as_ref().map(|v| {
                         counter += 1;
                         iter.next().unwrap();
                     });
-                    v.1
+                    v.2
                 })
             )
         })
     } {
-        items_i.push((v.clone(), maybe));
+        items_i.push(v);
     }
     common_ignore.and_then(|_| items_i.last_mut())
         .map(|v| {
-            v.1 = None;
+            v.2 = None;
         });
 
     if items_i.len() == 0 {
@@ -248,10 +249,12 @@ pub fn construct_recognize(
 pub fn construct_tokens(
     name: &Ident,
     items: &Vec<Ident>,
-    items_i: Vec<(Ident, Option<Ident>)>
+    items_i: Vec<(Ident, bool, Option<Ident>)>
 ) -> TokenStream2 {
-    let tmp = items_i.iter().map(|(v, maybe)| {
+    let tmp = items_i.iter().map(|(v, is_box, maybe)| {
         let maybe = maybe.as_ref().map(|v| quote! {#v::recog(arg, l + 1);});
+        
+        
         if items.contains(&v) {
             quote! {
                 let v = #v::recog(arg, l + 1);
@@ -264,6 +267,15 @@ pub fn construct_tokens(
                 v
             }
         } else {
+            let is_box = is_box.then(|| quote! {
+                .map(|v| Box::new(v))
+            });
+            let maybe = maybe.as_ref().map(|v| quote! {
+                .map(|v| {
+                    #v
+                    v
+                })
+            });
             quote! {
                 #v::check_pass(arg, l + 1)
                     .map(|(i, v)| {
@@ -301,15 +313,19 @@ pub fn construct_tokens(
                                 e
                             })
                     })
-                    .map(|v| {
-                        #maybe
-                        v
-                    })?
+                    #is_box
+                    #maybe?
             }
         }
     }).collect::<Vec<_>>();
 
-    let cons_item = items_i.iter().map(|v| &v.0);
+    let cons_item = items_i.iter().map(|(name, is_box, _)| {
+        if *is_box {
+            quote! {Box<#name>}
+        } else {
+            quote! {#name}
+        }
+    });
 
     let n = Index::from(items_i.len() - 1);
     let common = &*COMMON;

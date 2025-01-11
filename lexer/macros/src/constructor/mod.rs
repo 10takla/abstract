@@ -99,7 +99,7 @@ fn com(
 ) -> (
     [(TokenStream2, Vec<Ident>); 3],
     HashMap<Ident, Vec<Ident>>,
-    Vec<(Ident, Vec<(Ident, Option<Ident>)>)>,
+    Vec<(Ident, Vec<(Ident, bool, Option<Ident>)>)>,
 ) {
     let [mut tokens, mut enums, mut items]: [Vec<Ident>; 3] = Default::default();
     let [mut t_tokens, mut t_enums, mut t_items]: [TokenStream2; 3] = Default::default();

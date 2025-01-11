@@ -66,7 +66,15 @@ mod fn_c {
         fn distruct(&self, vec: &mut DistrIter) {
             vec.push_t(&self.0, SemanticTokenType::KEYWORD);
             vec.push_t(&self.1, SemanticTokenType::FUNCTION);
-            self.2.distruct(vec);
+            use Args::*;
+            match &self.2 {
+                StructArgsC(v) => {
+                    v.bracket(vec, SemanticTokenType::FUNCTION);
+                }
+                TupleType(v) => {
+                    v.bracket(vec, SemanticTokenType::FUNCTION);
+                }
+            }
         }
     }
 }
@@ -158,18 +166,10 @@ impl Distruct for StructC {
         use Args::*;
         match &self.2 {
             StructArgsC(v) => {
-                vec.push_t(&v.0, SemanticTokenType::STRUCT);
-                v.1.iter().for_each(|v| {
-                    v.distruct(vec);
-                });
-                vec.push_t(&v.2, SemanticTokenType::STRUCT);
+                v.bracket(vec, SemanticTokenType::STRUCT);
             }
-            TupleArgsC(v) => {
-                vec.push_t(&v.0, SemanticTokenType::STRUCT);
-                v.1.iter().for_each(|v| {
-                    v.distruct(vec);
-                });
-                vec.push_t(&v.2, SemanticTokenType::STRUCT);
+            TupleType(v) => {
+                v.bracket(vec, SemanticTokenType::STRUCT);
             }
         }
     }
@@ -183,32 +183,31 @@ impl Distruct for IdentAndTypeC {
     }
 }
 
-impl Distruct for AnyBlock {
-    fn distruct(&self, vec: &mut DistrIter) {
-        use self::AnyBlock::*;
-        match self {
-            Block(v) => v.distruct(vec),
-            NamedBlock(v) => v.distruct(vec),
-            NamedDistrBlock(v) => {
-                v.0.distruct(vec);
-                vec.push_t(&v.1, BLOCK);
-            }
-            DistrBlock(v) => {
-                vec.push_t(v, BLOCK);
-            }
-        }
-    }
-}
-impl Distruct for NamedBlock {
-    fn distruct(&self, vec: &mut DistrIter) {
-        vec.push_t(&self.0, BLOCK);
-        self.1.distruct(vec);
-    }
-}
 mod block {
     use super::*;
     use lexer::lexer2::BlockItems;
-
+    impl Distruct for AnyBlock {
+        fn distruct(&self, vec: &mut DistrIter) {
+            use self::AnyBlock::*;
+            match self {
+                Block(v) => v.distruct(vec),
+                NamedBlock(v) => v.distruct(vec),
+                NamedDistrBlock(v) => {
+                    v.0.distruct(vec);
+                    vec.push_t(&v.1, BLOCK);
+                }
+                DistrBlock(v) => {
+                    vec.push_t(v, BLOCK);
+                }
+            }
+        }
+    }
+    impl Distruct for NamedBlock {
+        fn distruct(&self, vec: &mut DistrIter) {
+            vec.push_t(&self.0, BLOCK);
+            self.1.distruct(vec);
+        }
+    }
     impl Distruct for Block {
         fn distruct(&self, vec: &mut DistrIter) {
             vec.push_t(&self.0, BLOCK);
@@ -269,11 +268,18 @@ impl Distruct for Literal {
     }
 }
 
-impl Distruct for Type {
-    fn distruct(&self, vec: &mut DistrIter) {
-        vec.push_t(self, SemanticTokenType::TYPE);
+mod type_ {
+    use super::{DistrIter, Distruct, DI};
+    use lexer::lexer2::{TupleType, Type};
+    use tower_lsp::lsp_types::SemanticTokenType;
+
+    impl Distruct for Type {
+        fn distruct(&self, vec: &mut DistrIter) {
+            vec.push_t(self, SemanticTokenType::TYPE);
+        }
     }
 }
+
 impl Distruct for Idents {
     fn distruct(&self, vec: &mut DistrIter) {
         use self::Idents::*;
@@ -299,24 +305,8 @@ impl Distruct for Ignore {
     fn distruct(&self, _: &mut DistrIter) {}
 }
 
-impl Distruct for Args {
-    fn distruct(&self, vec: &mut DistrIter) {
-        use Args::*;
-        match self {
-            StructArgsC(v) => {
-                vec.push_t(&v.0, SemanticTokenType::FUNCTION);
-                vec.push_t(&v.2, SemanticTokenType::FUNCTION);
-            }
-            TupleArgsC(v) => {
-                vec.push_t(&v.0, SemanticTokenType::FUNCTION);
-                vec.push_t(&v.2, SemanticTokenType::FUNCTION);
-            }
-        }
-    }
-}
-
-macro_rules! symbls {
-    ($($ident:ident)*) => {
+macro_rules! fast {
+    (@symbls $($ident:ident)*) => {
         $(
             impl Distruct for $ident {
                 fn distruct(&self, vec: &mut DistrIter) {
@@ -325,9 +315,37 @@ macro_rules! symbls {
             }
         )*
     };
+    (@items $($ident:ident)*) => {
+        $(
+            impl Distruct for $ident {
+                fn distruct(&self, vec: &mut DistrIter) {
+                    self.iter().for_each(|v| {
+                        v.distruct(vec);
+                    });
+                }
+            }
+        )*
+    };
+    (@brakets $($ident:ident)*) => {
+        $(
+            impl Bracketable for $ident {
+                fn bracket(&self, vec: &mut DistrIter, type_: SemanticTokenType) {
+                    vec.push_t(&self.0, type_.clone());
+                    self.1.distruct(vec);
+                    vec.push_t(&self.2, type_);
+                }
+            }
+        )*
+    };
 }
 
-symbls!(Eq OpEq Colon Comma);
+fast!(@items StructArgsI TupleTypeI);
+fast!(@symbls Eq OpEq Colon Comma);
+fast!(@brakets StructArgsC TupleType);
+
+trait Bracketable {
+    fn bracket(&self, vec: &mut DistrIter, type_: SemanticTokenType);
+}
 
 trait StartEnd: Slicable {
     fn start_end(&self) -> [usize; 2] {

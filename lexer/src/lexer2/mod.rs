@@ -233,12 +233,10 @@ constructor!(
                 Assign (Ignore) -> IdentAndType Eq Literal
             Literal -> String | Number
             Idents -> Keyword | Ident
-        Args -> StructArgsC | TupleArgsC
+        Args -> StructArgsC | TupleType
             StructArgsC (Ignore) -> OpenFigureBracket StructArgsI CloseFigureBracket
                 StructArgsI ! (IdentAndTypeC) (Ignore) CloseFigureBracket
                     IdentAndTypeC (Ignore) -> Ident Colon Type
-            TupleArgsC (Ignore) -> OpenRoundBracket TupleArgsI CloseRoundBracket
-                TupleArgsI ! (Type) (Ignore) CloseRoundBracket
         Ignore (IgnoreV) #
             IgnoreV -> WhiteSpace | NextLine | Tab
                 WhiteSpace r" +"
@@ -257,12 +255,16 @@ constructor!(
             Let "let"
             Impl "impl"
         IdentAndType -> IdentAndTypeC | Ident
-        Type -> AnnotededTypeC | Ident
-            AnnotededTypeC (Ignore) -> OpenTriangularBracket AnnotededType CloseTriangularBracket
-                OpenTriangularBracket "<"
-                CloseTriangularBracket ">"
-                AnnotededType -> EqType | Ident
-                    EqType (Ignore) -> Ident Eq Ident!
+        Type -> TupleType | BaseType
+            TupleType (Ignore) -> OpenRoundBracket TupleTypeI CloseRoundBracket
+                TupleTypeI ! (Type) (Ignore) CloseRoundBracket
+            BaseType -> AnnotededTypeC | Ident
+                AnnotededTypeC (Ignore) -> Ident OpenTriangularBracket AnnotededTypeI CloseTriangularBracket
+                    OpenTriangularBracket "<"
+                    CloseTriangularBracket ">"
+                    AnnotededTypeI ! (AnnotededType) (Ignore) CloseTriangularBracket
+                        AnnotededType -> EqType | Ident
+                            EqType (Ignore) -> Ident Eq Type!
     }
     common {
         Tmp -> Ident Eq

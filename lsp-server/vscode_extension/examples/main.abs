@@ -7,8 +7,13 @@ impl Lt for main {
     }
     const T : Gdfg = "dsf"
 }
-struct T { sdfds:T }
+struct T { sdfds: T }
 fn main ( sf sdf ) {
-    sdf = 2
+    sdf: sdfsdf<sdfsdf=sdfsdf<sdfsdf> dsfds sdfsd sfd sdf sdfs
+    sdfsdf sdf sdfs f sdfsdf sdfs sdfs = dsf<sdfsdf = sdfsdf<sdfsdf>>> = 2
 }
-const T = "dsf"
+const T = "dsf 
+sdfsdf
+sdfs
+sdfsdf
+sdf"

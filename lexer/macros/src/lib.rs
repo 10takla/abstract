@@ -22,7 +22,7 @@ pub fn parse_test(_: TokenStream, annoted: TokenStream) -> TokenStream {
     quote! {
         #[test]
         fn #ident() {
-            #t_ident::#ident(cli_args());
+            #t_ident::#ident(crate::lexer2::tests::cli_args());
         }
         mod #t_ident {
             use super::*;

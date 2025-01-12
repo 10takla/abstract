@@ -31,7 +31,7 @@ use crate::parse;
 use cache_and_diags::{diag::Diag, Cache, CacheAndDiags, PassList};
 use code::{Code, Source};
 use colored::Colorize;
-use macros::constructor;
+use macros::{constructor, parse_test};
 use paste::paste;
 use print::{colored, tmp_pass_or_fail, Print};
 use regex::Regex;
@@ -132,42 +132,63 @@ trait CommonTypes: Sized {
 //     type_: T,
 // }
 
+#[parse_test]
+fn ident(print: Print) {
+    let check = |c| {
+        assert_eq!(
+            Ident::recog(&mut (c, print.clone()).into(), 0).is_ok(),
+            true
+        );
+    };
+    check("sdfsfd");
+
+    let check_err = |c, b| {
+        assert_eq!(
+            Ident::recog(&mut (c, print.clone()).into(), 0)
+                .err()
+                .unwrap()
+                .error,
+            b
+        );
+    };
+    check_err("*", ErrorType::Ident(IdentError::StartsWithAlphabetic));
+    check_err("!", ErrorType::Ident(IdentError::StartsWithAlphabetic));
+}
+
 constructor!(
     tokens {
-        Ident [StartsWithNumber] {
+        Ident [StartsWithAlphabetic Alphabetic] {
             // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
             let start_rule = |char: char| char.is_alphabetic() || char == '_';
 
             let mut iter = arg.code.iter();
             let &(i, char) = iter.next().ok_or((arg.code.cursor..=arg.code.cursor, ErrorType::LineOver))?;
 
-            let s = (!start_rule(char)).then_some(i);
-            let mut e = None;
-            let start = i;
-
-            let end = if start == arg.code.source.len() - 1 {
-                start
+            if let Some(start) = start_rule(char).then_some(i) {
+                if start == arg.code.source.len() - 1 {
+                    Ok(start..=start)
+                } else {
+                    let end = iter.find_map(|&(i, char)| {
+                            (!(start_rule(char) || char.is_digit(10))).then_some(i-1)
+                        })
+                        .unwrap_or_else(|| {
+                            arg.code.source.len() - 1
+                        });
+                    Ok(start..=end)
+                }
             } else {
-                iter.find_map(|&(i, char)| {
-                    if start_rule(char) || char.is_digit(10) {
-                        e = Some(i);
-                        None
-                    } else {
-                        Some(i - 1)
-                    }
-                })
-                .unwrap_or_else(|| {
-                    e = Some(arg.code.source.len() - 1);
-                    arg.code.source.len() - 1
-                })
-            };
-            match (s, e) {
-                (Some(s), Some(t)) => return Err((s..=t, ErrorType::Ident(IdentError::StartsWithNumber))),
-                (Some(s), None) => return Err((s..=s, ErrorType::Ident(IdentError::StartsWithNumber))),
-                _ => {}
+                if i == arg.code.source.len() - 1 {
+                    Err((i..=i, ErrorType::Ident(IdentError::StartsWithAlphabetic)))
+                } else {
+                    let end = iter.find_map(|&(i, char)| {
+                            (!( start_rule(char) || char.is_digit(10))).then_some(i - 1)
+                        })
+                        .unwrap_or_else(|| {
+                            arg.code.source.len() - 1
+                        });
+                    Err((i..=end, ErrorType::Ident(IdentError::Alphabetic)))
+                }
             }
-
-            Ok(start..=end)
         }
         String [StartsWithNumber StartsWithQuote EndsWithQuote] {
             // r#""[^"\\]*(?:\\.[^"\\]*)*""#
@@ -234,7 +255,6 @@ constructor!(
         Args -> StructArgsC | TupleType
             StructArgsC (Ignore) -> OpenFigureBracket StructArgsI CloseFigureBracket
                 StructArgsI ! (IdentAndTypeC) (Ignore) CloseFigureBracket
-                    IdentAndTypeC (Ignore) -> Ident Colon Type
         Ignore (IgnoreV) #
             IgnoreV -> WhiteSpace | NextLine | Tab
                 WhiteSpace r" +"
@@ -246,6 +266,7 @@ constructor!(
             Mul r"\*"
             Div r#"/"#
         IdentAndType -> IdentAndTypeC | Ident
+            IdentAndTypeC (Ignore) -> Ident Colon Type
         Type -> TupleType | BaseType
             TupleType (Ignore) -> OpenRoundBracket TupleTypeI CloseRoundBracket
                 TupleTypeI ! (Type) (Ignore) CloseRoundBracket
@@ -256,18 +277,19 @@ constructor!(
                     AnnotededTypeI ! (AnnotededType) (Ignore) CloseAngleBracket
                         AnnotededType -> EqType | Ident
                             EqType (Ignore) -> Ident Eq Type!
-        Path -> CratePath | GlobalPath | EndPath
-            CratePath (Ignore) -> Crate NameSpace EndPath
-                EndPath (Ignore) -> BasePath PathItemEnd
-                    BasePath ! (PathEl) #
-                        PathEl (Ignore)-> Ident NameSpace
-                    PathItemEnd -> PathItemsC | GlobImport | Ident
-                        PathItemsC (Ignore) -> OpenFigureBracket PathItemsI CloseFigureBracket
-                            PathItemsI ! (PathItemC) (Ignore) CloseFigureBracket
-                                PathItemC (Ignore) -> PathItemV Colon
-                                    PathItemV -> Self_ | Super | GlobImport | EndPath | Ident
-                                        GlobImport r#"\*"#
-            GlobalPath -> NameSpace EndPath
+        Path -> CurrenPath | EndPath | Ident
+            CurrenPath (Ignore) -> CurrentPathV EndPath
+                CurrentPathV -> Self_ | Super | Crate | Ident
+                EndPath -> WithItemsEnd | IdentPath
+                    IdentPath ! (PathEl) #
+                            PathEl (Ignore)-> NameSpace Ident
+                    WithItemsEnd (Ignore) ->  IdentPath NameSpace PathItemEnd
+                        PathItemEnd -> GlobImport | PathItemsC
+                            PathItemsC (Ignore) -> OpenFigureBracket PathItemsI CloseFigureBracket
+                                PathItemsI ! (PathItemC) (Ignore) CloseFigureBracket
+                                    PathItemC (Ignore) -> PathItemV Comma
+                                        PathItemV -> Self_ | Super | GlobImport | Ident
+                                            GlobImport r#"\*"#
         // Keywords
         Fn "fn"
         Const "const"

@@ -3,6 +3,8 @@
 //!
 //! - `'s` (source) - время жизни исходной строки  
 
+#![feature(let_chains)]
+#![feature(if_let_guard)]
 #![doc(html_no_source)]
 #![feature(type_alias_impl_trait)]
 #![feature(associated_type_defaults)]

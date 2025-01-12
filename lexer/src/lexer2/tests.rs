@@ -159,33 +159,76 @@ mod items {
     #[parse_test]
     fn path(print: Print) {
         macro_rules! check {
-            ($l:literal, $type_:pat) => {
+            ($l:literal, $($type_:tt)*) => {
                 let mut t = ($l, print.clone()).into();
-                assert!(matches!(Path::recog(&mut t, 0), $type_));
+                assert!(
+                    match Path::recog(&mut t, 0) {
+                        $($type_)* => true,
+                        _ => false,
+                    }
+                );
             };
         }
 
-        check!("crate::sdfsdf::sdfsdf", Ok(Path::CratePath(CratePath(..))));
-        check!("::sdfsdf::sdfsdf", Ok(Path::GlobalPath(GlobalPath(..))));
-
         check!(
-            "sdfsdf::sdfsdf::*",
-            Ok(Path::EndPath(EndPath(
-                BasePath(_),
-                PathItemEnd::GlobImport(_)
-            )))
+            "crate::sdfsdf::sdfsdf",
+            Ok(Path::CurrenPath(CurrenPath(CurrentPathV::Crate(_), ..)))
+        );
+        check!(
+            "self::sdfsdf::sdfsdf",
+            Ok(Path::CurrenPath(CurrenPath(CurrentPathV::Self_(_), ..)))
+        );
+        check!(
+            "super::sdfsdf::sdfsdf",
+            Ok(Path::CurrenPath(CurrenPath(CurrentPathV::Super(_), ..)))
         );
         check!(
             "sdfsdf::sdfsdf::sdfsfdf",
-            Ok(Path::EndPath(EndPath(BasePath(_), PathItemEnd::Ident(_))))
+            Ok(Path::CurrenPath(CurrenPath(CurrentPathV::Ident(_), ..)))
         );
-        // check!(
-        //     "sdfsdf::sdfsdf::{ sdfsfdf, }",
-        //     Ok(Path::EndPath(EndPath(
-        //         BasePath(_),
-        //         PathItemEnd::PathItemsC(_)
-        //     )))
-        // );
+        check!("::sdfsdf::sdfsdf", Ok(Path::EndPath(_)));
+
+        check!(
+            "sdfsdf::sdfsdf::*",
+            Ok(Path::CurrenPath(CurrenPath(
+                _,
+                EndPath::WithItemsEnd(WithItemsEnd(_, _, PathItemEnd::GlobImport(_)))
+            )))
+        );
+
+        check!(
+            "sdfsdf::sdfsdf::{ *, }",
+            Ok(Path::CurrenPath(
+                CurrenPath(_, EndPath::WithItemsEnd(WithItemsEnd(
+                        _,
+                        _,
+                        PathItemEnd::PathItemsC(PathItemsC(_, PathItemsI(vec), _))
+                    )
+                ))
+            )) if let PathItemC(PathItemV::GlobImport(_), ..) = vec[0]
+        );
+        check!(
+            "sdfsdf::sdfsdf::{ self, }",
+            Ok(Path::CurrenPath(
+                CurrenPath(_, EndPath::WithItemsEnd(WithItemsEnd(
+                        _,
+                        _,
+                        PathItemEnd::PathItemsC(PathItemsC(_, PathItemsI(vec), _))
+                    )
+                ))
+            )) if let PathItemC(PathItemV::Self_(_), ..) = vec[0]
+        );
+        check!(
+            "sdfsdf::sdfsdf::{ sdfsdf, }",
+            Ok(Path::CurrenPath(
+                CurrenPath(_, EndPath::WithItemsEnd(WithItemsEnd(
+                        _,
+                        _,
+                        PathItemEnd::PathItemsC(PathItemsC(_, PathItemsI(vec), _))
+                    )
+                ))
+            )) if let PathItemC(PathItemV::Ident(_), ..) = vec[0]
+        );
     }
 }
 

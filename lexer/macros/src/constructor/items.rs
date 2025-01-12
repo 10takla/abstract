@@ -41,33 +41,35 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
             }
         })
         .ok();
-    
+
     let break_ = fast_puncts("#", iter)
         .map(|_| {
             counter += 1;
         })
-        .err()
-        .map(|_| {
-            fast_ident2(iter).map(|break_| {
-                counter += 1;
-                quote! {
-                    if #break_::recog(&mut arg.clone(), l + 1).is_ok() {
-                        break;
-                    } else {
-                        let e = arg.c_a_d.borrow().clone().cache.check(e);
-                        arg.code.cursor = *e.end() + 1;
-                        arg.c_a_d.borrow_mut().errors.push(e);
-                        continue;
+        .ok()
+        .map(|_| quote! {break})
+        .unwrap_or_else(|| {
+            fast_ident2(iter)
+                .map(|break_| {
+                    counter += 1;
+                    quote! {
+                        if #break_::recog(&mut arg.clone(), l + 1).is_ok() {
+                            break;
+                        } else {
+                            let e = arg.c_a_d.borrow().clone().cache.check(e);
+                            arg.code.cursor = *e.end() + 1;
+                            arg.c_a_d.borrow_mut().errors.push(e);
+                            continue;
+                        }
                     }
-                }
-            }).unwrap_or(quote! {
-                let e = arg.c_a_d.borrow().clone().cache.check(e);
-                arg.code.cursor = *e.end() + 1;
-                arg.c_a_d.borrow_mut().errors.push(e);
-                continue;
-            })
-        })
-        .unwrap_or(quote! {break});
+                })
+                .unwrap_or(quote! {
+                    let e = arg.c_a_d.borrow().clone().cache.check(e);
+                    arg.code.cursor = *e.end() + 1;
+                    arg.c_a_d.borrow_mut().errors.push(e);
+                    continue;
+                })
+        });
 
     let tokens = quote! {
         #[derive(Debug, Clone, Deref, PartialEq)]
@@ -88,11 +90,12 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
                     if arg.code.cursor >= arg.code.source.len() {
                         break;
                     }
-                    match #item::recog(arg, l + 1) {
+                    match #item::recog(&mut arg.clone(), l + 1) {
                         Ok(v) => {
                             // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
                             arg.c_a_d.borrow_mut().cache.pass.clear();
-                            vec.push(v);
+                            vec.push(v.clone());
+                            arg.code.cursor = *v.slice().end() + 1;
                         }
                         Err(e) => {
                             #break_

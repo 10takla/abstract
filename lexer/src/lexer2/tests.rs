@@ -181,6 +181,20 @@ mod items {
                 PathV::EndPath(_)
             )))
         );
+        check!(
+            "::sdfsdf::sdfsdf::",
+            Ok(Path::RootPath(RootPath(
+                NameSpace(_),
+                PathV::BasePath(_)
+            )))
+        );
+        check!(
+            "::sdfsdf::sdfsdf::sdfsfdf",
+            Ok(Path::RootPath(RootPath(
+                NameSpace(_),
+                PathV::EndPath(_)
+            )))
+        );
     }
 }
 

@@ -165,36 +165,27 @@ mod items {
             };
         }
 
+        check!("crate::sdfsdf::sdfsdf", Ok(Path::CratePath(CratePath(..))));
+        check!("::sdfsdf::sdfsdf", Ok(Path::GlobalPath(GlobalPath(..))));
+
         check!(
-            "crate::sdfsdf::sdfsdf::",
-            Ok(Path::CratePath(CratePath(
-                Crate(_),
-                NameSpace(_),
-                PathV::BasePath(_)
+            "sdfsdf::sdfsdf::*",
+            Ok(Path::EndPath(EndPath(
+                BasePath(_),
+                PathItemEnd::GlobImport(_)
             )))
         );
         check!(
-            "crate::sdfsdf::sdfsdf::sdfsfdf",
-            Ok(Path::CratePath(CratePath(
-                Crate(_),
-                NameSpace(_),
-                PathV::EndPath(_)
-            )))
+            "sdfsdf::sdfsdf::sdfsfdf",
+            Ok(Path::EndPath(EndPath(BasePath(_), PathItemEnd::Ident(_))))
         );
-        check!(
-            "::sdfsdf::sdfsdf::",
-            Ok(Path::RootPath(RootPath(
-                NameSpace(_),
-                PathV::BasePath(_)
-            )))
-        );
-        check!(
-            "::sdfsdf::sdfsdf::sdfsfdf",
-            Ok(Path::RootPath(RootPath(
-                NameSpace(_),
-                PathV::EndPath(_)
-            )))
-        );
+        // check!(
+        //     "sdfsdf::sdfsdf::{ sdfsfdf, }",
+        //     Ok(Path::EndPath(EndPath(
+        //         BasePath(_),
+        //         PathItemEnd::PathItemsC(_)
+        //     )))
+        // );
     }
 }
 

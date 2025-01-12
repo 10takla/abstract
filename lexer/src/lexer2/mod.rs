@@ -33,7 +33,7 @@ use code::{Code, Source};
 use colored::Colorize;
 use macros::constructor;
 use paste::paste;
-use print::{tmp_pass_or_fail, Print};
+use print::{colored, tmp_pass_or_fail, Print};
 use regex::Regex;
 use regex_automata::{
     dfa::{dense::DFA, Automaton},
@@ -93,9 +93,9 @@ impl ParseArgs {
 
     fn get_head(&self, name: &str, const_: impl Debug, pos: usize) -> std::string::String {
         format!(
-            "{name} {const_:?}({pos}) {}",
+            "{name} {const_:?}({pos}){}",
             if self.print.cache {
-                format!("{:?}", self.c_a_d.borrow().cache.pass)
+                format!(" {:?}", self.c_a_d.borrow().cache.pass)
             } else {
                 Default::default()
             }
@@ -250,19 +250,24 @@ constructor!(
             TupleType (Ignore) -> OpenRoundBracket TupleTypeI CloseRoundBracket
                 TupleTypeI ! (Type) (Ignore) CloseRoundBracket
             BaseType -> AnnotededTypeC | Ident
-                AnnotededTypeC (Ignore) -> Ident OpenTriangularBracket AnnotededTypeI CloseTriangularBracket
-                    OpenTriangularBracket "<"
-                    CloseTriangularBracket ">"
-                    AnnotededTypeI ! (AnnotededType) (Ignore) CloseTriangularBracket
+                AnnotededTypeC (Ignore) -> Ident OpenAngleBracket AnnotededTypeI CloseAngleBracket
+                    OpenAngleBracket "<"
+                    CloseAngleBracket ">"
+                    AnnotededTypeI ! (AnnotededType) (Ignore) CloseAngleBracket
                         AnnotededType -> EqType | Ident
                             EqType (Ignore) -> Ident Eq Type!
-        Path -> CratePath | RootPath
-            CratePath -> Crate NameSpace PathV
-                PathV -> EndPath | BasePath
-                    EndPath -> BasePath Ident
+        Path -> CratePath | GlobalPath | EndPath
+            CratePath (Ignore) -> Crate NameSpace EndPath
+                EndPath (Ignore) -> BasePath PathItemEnd
                     BasePath ! (PathEl) #
-                        PathEl -> Ident NameSpace
-            RootPath -> NameSpace PathV
+                        PathEl (Ignore)-> Ident NameSpace
+                    PathItemEnd -> PathItemsC | GlobImport | Ident
+                        PathItemsC (Ignore) -> OpenFigureBracket PathItemsI CloseFigureBracket
+                            PathItemsI ! (PathItemC) (Ignore) CloseFigureBracket
+                                PathItemC (Ignore) -> PathItemV Colon
+                                    PathItemV -> Self_ | Super | GlobImport | EndPath | Ident
+                                        GlobImport r#"\*"#
+            GlobalPath -> NameSpace EndPath
         // Keywords
         Fn "fn"
         Const "const"
@@ -272,6 +277,8 @@ constructor!(
         Impl "impl"
         Crate "crate"
         For "for"
+        Self_ "self"
+        Super "super"
     }
     common {
         Tmp -> Ident Eq

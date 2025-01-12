@@ -24,7 +24,7 @@ impl Print {
 
     pub(super) fn pass_or_fail<const PASS: bool>(&self, l: usize) {
         // if PASS || l < self.max_fail_level {
-            self.print_colored(tmp_pass_or_fail::<PASS>(), l);
+        self.print_colored(tmp_pass_or_fail::<PASS>(), l);
         // }
     }
 
@@ -45,7 +45,7 @@ pub(super) fn tmp_pass_or_fail<const PASS: bool>() -> &'static str {
     }
 }
 
-fn colored(t: impl Display, l: usize) -> std::string::String {
+pub fn colored(t: impl Display, l: usize) -> std::string::String {
     let (r, g, b) = hsv_to_rgb(((l * 80) % 360) as f32, 1.0, 1.0);
     format!("{}", t.to_string().truecolor(r, g, b))
 }

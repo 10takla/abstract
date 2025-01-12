@@ -254,7 +254,6 @@ pub fn construct_tokens(
     let tmp = items_i.iter().map(|(v, is_box, maybe)| {
         let maybe = maybe.as_ref().map(|v| quote! {#v::recog(arg, l + 1);});
         
-        
         if items.contains(&v) {
             quote! {
                 let v = #v::recog(arg, l + 1);

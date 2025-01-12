@@ -199,7 +199,6 @@ constructor!(
 
         Comma ","
         Colon ":"
-        For "for"
     }
     enums {}
     constructs {}
@@ -207,7 +206,7 @@ constructor!(
         Items ! (Item) (Ignore)
     }
     common {
-        Item -> FnC | StructC | TraitC | ImplV | AnyBlock | ConstC | AssignExpr | Literal | Idents
+        Item -> FnC | StructC | TraitC | ImplV | AnyBlock | ConstC | AssignExpr | Literal | Ident
             TraitC (Ignore) -> Trait Ident MethodsC
                 MethodsC (Ignore) -> OpenFigureBracket MethodsI CloseFigureBracket
                     MethodsI ! (FnHead) (Ignore) CloseFigureBracket
@@ -222,7 +221,7 @@ constructor!(
                 FnHead (Ignore) -> Fn Ident Args
             AnyBlock -> NamedDistrBlock | DistrBlock | NamedBlock | Block
                 NamedDistrBlock (Ignore) -> NamedBlock Distribution
-                DistrBlock (Ignore) -> Ident Distribution
+                DistrBlock (Ignore) -> Path Distribution
                 NamedBlock (Ignore) -> Ident Block
                 Block -> OpenFigureBracket BlockItems CloseFigureBracket
                     BlockItems ! (Item) (Ignore) CloseFigureBracket
@@ -232,7 +231,6 @@ constructor!(
                     OpEq -> Op Eq
                 Assign (Ignore) -> IdentAndType Eq Literal
             Literal -> String | Number
-            Idents -> Keyword | Ident
         Args -> StructArgsC | TupleType
             StructArgsC (Ignore) -> OpenFigureBracket StructArgsI CloseFigureBracket
                 StructArgsI ! (IdentAndTypeC) (Ignore) CloseFigureBracket
@@ -247,13 +245,6 @@ constructor!(
             Sub r#"-"#
             Mul r"\*"
             Div r#"/"#
-        Keyword -> Fn | Const | Struct | Trait | Let
-            Fn "fn"
-            Const "const"
-            Struct "struct"
-            Trait "trait"
-            Let "let"
-            Impl "impl"
         IdentAndType -> IdentAndTypeC | Ident
         Type -> TupleType | BaseType
             TupleType (Ignore) -> OpenRoundBracket TupleTypeI CloseRoundBracket
@@ -265,6 +256,22 @@ constructor!(
                     AnnotededTypeI ! (AnnotededType) (Ignore) CloseTriangularBracket
                         AnnotededType -> EqType | Ident
                             EqType (Ignore) -> Ident Eq Type!
+        Path -> CratePath | RootPath
+            CratePath -> Crate NameSpace PathV
+                PathV -> EndPath | BasePath
+                    EndPath -> BasePath Ident
+                    BasePath ! (PathEl) #
+                        PathEl -> Ident NameSpace
+            RootPath -> NameSpace PathV
+        // Keywords
+        Fn "fn"
+        Const "const"
+        Struct "struct"
+        Trait "trait"
+        Let "let"
+        Impl "impl"
+        Crate "crate"
+        For "for"
     }
     common {
         Tmp -> Ident Eq

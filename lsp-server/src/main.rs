@@ -4,7 +4,7 @@ use distruct::distruct_items;
 use lexer::{
     lexer2::{
         cache_and_diags::diag::Diag, AnyBlock, Args, AssignExpr, Block, ErrorType, FnC, Ident,
-        IdentError, Idents, Item, Items, Keyword, Literal, NamedBlock, NamedDistrBlock, Slicable,
+        IdentError, Item, Items, Literal, NamedBlock, NamedDistrBlock, Slicable,
     },
     parse,
 };

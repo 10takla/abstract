@@ -46,7 +46,7 @@ impl Distruct for Item {
             ConstC(v) => v.distruct(vec),
             AssignExpr(v) => v.distruct(vec),
             Literal(v) => v.distruct(vec),
-            Idents(v) => v.distruct(vec),
+            Ident(v) => v.distruct(vec),
         }
     }
 }
@@ -64,7 +64,7 @@ mod fn_c {
 
     impl Distruct for FnHead {
         fn distruct(&self, vec: &mut DistrIter) {
-            vec.push_t(&self.0, SemanticTokenType::KEYWORD);
+            self.0.distruct(vec);
             vec.push_t(&self.1, SemanticTokenType::FUNCTION);
             use Args::*;
             match &self.2 {
@@ -85,7 +85,7 @@ mod trait_ {
     use lexer::lexer2::{MethodsC, MethodsI};
     impl Distruct for TraitC {
         fn distruct(&self, vec: &mut DistrIter) {
-            vec.push_t(&self.0, SemanticTokenType::KEYWORD);
+            self.0.distruct(vec);
             vec.push_t(&self.1, SemanticTokenType::VARIABLE);
             self.2.distruct(vec);
         }
@@ -115,14 +115,14 @@ mod impl_ {
             use ImplV::*;
             match self {
                 ImplFor(v) => {
-                    vec.push_t(&v.0, SemanticTokenType::KEYWORD);
+                    v.0.distruct(vec);
                     vec.push_t(&v.1, SemanticTokenType::VARIABLE);
-                    vec.push_t(&v.2, SemanticTokenType::KEYWORD);
+                    v.2.distruct(vec);
                     v.3.distruct(vec);
                     v.4.distruct(vec);
                 }
                 ImplC(v) => {
-                    vec.push_t(&v.0, SemanticTokenType::KEYWORD);
+                    v.0.distruct(vec);
                     v.1.distruct(vec);
                     v.2.distruct(vec);
                 }
@@ -153,7 +153,7 @@ mod impl_ {
     }
     impl Distruct for ConstC {
         fn distruct(&self, vec: &mut DistrIter) {
-            vec.push_t(&self.0, SemanticTokenType::KEYWORD);
+            self.0.distruct(vec);
             self.1.distruct(vec);
         }
     }
@@ -161,7 +161,7 @@ mod impl_ {
 
 impl Distruct for StructC {
     fn distruct(&self, vec: &mut DistrIter) {
-        vec.push_t(&self.0, SemanticTokenType::KEYWORD);
+        self.0.distruct(vec);
         vec.push_t(&self.1, SemanticTokenType::VARIABLE);
         use Args::*;
         match &self.2 {
@@ -280,24 +280,9 @@ mod type_ {
     }
 }
 
-impl Distruct for Idents {
-    fn distruct(&self, vec: &mut DistrIter) {
-        use self::Idents::*;
-        match self {
-            Ident(v) => v.distruct(vec),
-            Keyword(v) => vec.push_t(v, SemanticTokenType::KEYWORD),
-        }
-    }
-}
 impl Distruct for Ident {
     fn distruct(&self, vec: &mut DistrIter) {
         vec.push_t(self, SemanticTokenType::VARIABLE);
-    }
-}
-
-impl Distruct for Keyword {
-    fn distruct(&self, vec: &mut DistrIter) {
-        vec.push_t(self, SemanticTokenType::KEYWORD);
     }
 }
 
@@ -337,11 +322,21 @@ macro_rules! fast {
             }
         )*
     };
+    (@keywords $($ident:ident)*) => {
+        $(
+            impl Distruct for $ident {
+                fn distruct(&self, vec: &mut DistrIter) {
+                    vec.push_t(self, SemanticTokenType::KEYWORD);
+                }
+            }
+        )*
+    };
 }
 
 fast!(@items StructArgsI TupleTypeI);
 fast!(@symbls Eq OpEq Colon Comma);
 fast!(@brakets StructArgsC TupleType);
+fast!(@keywords Crate Fn Const Struct Trait Let Impl For);
 
 trait Bracketable {
     fn bracket(&self, vec: &mut DistrIter, type_: SemanticTokenType);

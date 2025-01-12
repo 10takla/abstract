@@ -6,7 +6,7 @@ mod tokens;
 
 use common::common;
 use constructs::{construct_recognize, construct_tokens, constructs, constructs_reckog};
-use enums::{enum_recognize, enums};
+use enums::{enum_recognize, enum_tokens, enums};
 use items::{items, items_recognize};
 use proc_macro::TokenStream;
 use proc_macro2::{token_stream::IntoIter, Group, Literal, TokenStream as TokenStream2, TokenTree};
@@ -47,40 +47,48 @@ pub fn constructor(input: TokenStream) -> TokenStream {
             map.insert(key, v);
         }
     }
-    let (
-        (mut gt_tokens, mut tokens, mut errors),
-        (mut gt_enums, mut enums),
-        (mut gt_items, mut items),
-    ) = (
+    let ((mut gt_tokens, mut tokens, mut errors), (mut gt_items, mut items)) = (
         tokens(map.get("tokens").unwrap().clone().into_iter()),
-        enums(map.get("enums").unwrap().clone().into_iter()),
         items(map.get("items").unwrap().clone().into_iter()),
     );
 
-    let (
-        [(t_tokens, ad_tokens), (t_enums, ad_enums), (t_items, ad_items)],
-        ad_errors,
-        ad_constructs,
-    ) = com(map.get("common").unwrap().clone().into_iter());
+    let ([(t_tokens, ad_tokens), (t_items, ad_items)], ad_errors, ad_enums, ad_constructs) =
+        com(map.get("common").unwrap().clone().into_iter());
 
     gt_tokens.extend(t_tokens);
     tokens.extend(ad_tokens);
     errors.extend(ad_errors);
 
-    gt_enums.extend(t_enums);
-    enums.extend(ad_enums);
-
     gt_items.extend(t_items);
     items.extend(ad_items);
-    
-    let t_constructs = ad_constructs
-        .iter()
-        .map(|v| construct_tokens(&v.0, &items, v.1.clone()));
 
-    let (mut gt_constructs, mut constructs) =
-        constructs(map.get("constructs").unwrap().clone().into_iter(), &items);
-    gt_constructs.extend(t_constructs);
-    constructs.extend(ad_constructs.into_iter().map(|(v, _)| v));
+    let (gt_enums, enums) = {
+        let mut v = enums(map.get("constructs").unwrap().clone().into_iter());
+        v.extend(ad_enums);
+        let mut enums = vec![];
+        (
+            v.iter()
+                .map(|v| {
+                    enums.push(v.0.clone());
+                    enum_tokens(&v.0, &v.1, &items)
+                })
+                .collect::<TokenStream2>(),
+            enums,
+        )
+    };
+
+    let (gt_constructs, constructs) = {
+        let t_constructs = ad_constructs
+            .iter()
+            .map(|v| construct_tokens(&v.0, &items, v.1.clone()));
+
+        let (mut gt_constructs, mut constructs) =
+            constructs(map.get("constructs").unwrap().clone().into_iter(), &items);
+        gt_constructs.extend(t_constructs);
+        constructs.extend(ad_constructs.into_iter().map(|(v, _)| v));
+
+        (gt_constructs, constructs)
+    };
 
     let common = common(errors, [tokens, enums, items, constructs]);
     quote! {
@@ -97,13 +105,15 @@ pub fn constructor(input: TokenStream) -> TokenStream {
 fn com(
     mut iter: IntoIter,
 ) -> (
-    [(TokenStream2, Vec<Ident>); 3],
+    [(TokenStream2, Vec<Ident>); 2],
     HashMap<Ident, Vec<Ident>>,
+    Vec<(Ident, Vec<Ident>)>,
     Vec<(Ident, Vec<(Ident, bool, Option<Ident>)>)>,
 ) {
-    let [mut tokens, mut enums, mut items]: [Vec<Ident>; 3] = Default::default();
-    let [mut t_tokens, mut t_enums, mut t_items]: [TokenStream2; 3] = Default::default();
+    let [mut tokens, mut items]: [Vec<Ident>; 2] = Default::default();
+    let [mut t_tokens, mut t_items]: [TokenStream2; 2] = Default::default();
     let mut constructs = vec![];
+    let mut enums = vec![];
     let mut errors = HashMap::new();
 
     while let Some(_) = iter.clone().next() {
@@ -115,9 +125,8 @@ fn com(
             })
         }
         .or_else(|_| {
-            tmp3(&mut iter, enum_recognize).map(|(a, b)| {
-                t_enums.extend(a);
-                enums.push(b);
+            tmp3(&mut iter, enum_recognize).map(|v| {
+                enums.push(v);
             })
         })
         .or_else(|_| {
@@ -134,8 +143,9 @@ fn com(
         .unwrap();
     }
     (
-        [(t_tokens, tokens), (t_enums, enums), (t_items, items)],
+        [(t_tokens, tokens), (t_items, items)],
         errors,
+        enums,
         constructs,
     )
 }

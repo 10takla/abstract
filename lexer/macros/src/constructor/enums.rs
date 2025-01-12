@@ -7,19 +7,15 @@ use std::{
 };
 use syn::{custom_punctuation, parse2, LitStr};
 
-pub fn enums(mut iter: IntoIter) -> (TokenStream2, Vec<Ident>) {
-    let (mut tokens, mut names): (TokenStream2, Vec<Ident>) = Default::default();
-
+pub fn enums(mut iter: IntoIter) -> Vec<(Ident, Vec<Ident>)> {
+    let mut vec = vec![];
     while iter.clone().next().is_some() {
-        let v = tmp3(&mut iter, enum_recognize).unwrap();
-        tokens.extend(v.0);
-        names.push(v.1.clone());
+        vec.push(tmp3(&mut iter, enum_recognize).unwrap());
     }
-
-    (tokens, names)
+    vec
 }
 
-pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), usize) {
+pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((Ident, Vec<Ident>), usize) {
     let mut counter = 0;
 
     let name = fast_ident2(iter).unwrap();
@@ -41,12 +37,57 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), 
     if items.len() < 2 {
         panic!("Expect minimum 2 items")
     }
+    ((name, items), counter)
+}
 
+pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> TokenStream2 {
     let common = &*COMMON;
     let check_pass_fail = check_pass_fail("enum", &name);
-    let (first, other) = items.split_first().unwrap();
 
-    let tokens = quote! {
+    let tmp = {
+        let (first, other) = items.split_first().unwrap();
+
+        let tmp = |v| {
+            if items2.contains(v) {
+                quote! {
+                    let v = #v::recog(&mut arg.clone(), l + 1);
+                    (!v.0.is_empty())
+                        .then_some(Self::#v(v))
+                        .ok_or(Diag {
+                            slice: arg.code.cursor..=arg.code.cursor,
+                            source: arg.code.source.clone(),
+                            error: ErrorType::Any,
+                            type_: Construct::#v
+                        })
+                }
+            } else {
+                quote! {
+                    #v::recog(&mut arg.clone(), l + 1).map(Self::#v)
+                }
+            }
+        };
+
+        let first = tmp(first);
+        let other = other.iter().map(|other| {
+            let out = tmp(other);
+            quote! {
+                #out
+                    .map_err(|e| {
+                        (e.end() > error.end()).then_some(e).unwrap_or(error)
+                    })
+            }
+        });
+        quote! {
+            #first
+            #(
+                .or_else(|error| {
+                    #other
+                })
+            )*
+        }
+    };
+
+    quote! {
         #[derive(Clone, Debug, PartialEq)]
         pub enum #name {
             #( #items(#items) ),*
@@ -85,15 +126,7 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), 
             // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
             // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
             fn after_debug(arg: &ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                #first::recog(&mut arg.clone(), l + 1).map(Self::#first)
-                #(
-                    .or_else(|error| {
-                        #other::recog(&mut arg.clone(), l + 1).map(Self::#other)
-                        .map_err(|e| {
-                            (e.end() > error.end()).then_some(e).unwrap_or(error)
-                        })
-                    })
-                )*
+                #tmp
             }
         }
 
@@ -104,7 +137,5 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident), 
                 }
             }
         }
-    };
-
-    ((tokens, name), counter)
+    }
 }

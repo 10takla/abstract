@@ -10,14 +10,8 @@ fn tmp(print: Print) {
     // let mut t = "fn ываыва( dsfs, dsfs, ){sdfsdf}".into();
     // dbg!(FnHead::recog(&mut t));
 
-    let mut t = (
-        "fn ываыва
-    
-    { dsfs: Ar, dsfs: Ty, }{sdfsdf}",
-        print,
-    )
-        .into();
-    dbg!(FnC::recog(&mut t, 0));
+    let mut t = ("crate::sdfsdf::sdfsdf::", print).into();
+    dbg!(Path::recog(&mut t, 0));
 }
 
 mod cache {
@@ -157,6 +151,37 @@ fn code() {
             .into(),
         0
     ));
+}
+
+mod items {
+    use super::*;
+
+    #[parse_test]
+    fn path(print: Print) {
+        macro_rules! check {
+            ($l:literal, $type_:pat) => {
+                let mut t = ($l, print.clone()).into();
+                assert!(matches!(Path::recog(&mut t, 0), $type_));
+            };
+        }
+
+        check!(
+            "crate::sdfsdf::sdfsdf::",
+            Ok(Path::CratePath(CratePath(
+                Crate(_),
+                NameSpace(_),
+                PathV::BasePath(_)
+            )))
+        );
+        check!(
+            "crate::sdfsdf::sdfsdf::sdfsfdf",
+            Ok(Path::CratePath(CratePath(
+                Crate(_),
+                NameSpace(_),
+                PathV::EndPath(_)
+            )))
+        );
+    }
 }
 
 mod issues {

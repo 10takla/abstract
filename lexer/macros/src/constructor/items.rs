@@ -37,7 +37,7 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
         .map(|v| {
             counter += 1;
             quote! {
-                #v::recog(arg, l);
+                #v::recog(arg, l + 1);
             }
         })
         .ok();
@@ -51,7 +51,7 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
             fast_ident2(iter).map(|break_| {
                 counter += 1;
                 quote! {
-                    if #break_::recog(&mut arg.clone(), l).is_ok() {
+                    if #break_::recog(&mut arg.clone(), l + 1).is_ok() {
                         break;
                     } else {
                         let e = arg.c_a_d.borrow().clone().cache.check(e);
@@ -75,23 +75,20 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
             Vec<#item>
         );
 
-        impl Slicable for #name {
-            fn slice(&self) -> Slice {
-                self.first()
-                    .map(|v| RangeInclusive::new(*v.slice().start(), *self.last().unwrap().slice().end()))
-                    .unwrap()
-            }
+        impl CommonTypes for #name {
+            const CONST: Construct = Construct::#name;
         }
 
         impl #name {
             pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
+                arg.print.print_colored(arg.get_head("items", Self::CONST, arg.code.cursor), l);
                 let mut vec = vec![];
                 loop {
                     #join
                     if arg.code.cursor >= arg.code.source.len() {
                         break;
                     }
-                    match #item::recog(arg, l) {
+                    match #item::recog(arg, l + 1) {
                         Ok(v) => {
                             // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
                             arg.c_a_d.borrow_mut().cache.pass.clear();
@@ -103,7 +100,16 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
                     };
                 }
                 #join
+                arg.print.pass_or_fail::<true>(l);
                 Self(vec)
+            }
+        }
+
+        impl Slicable for #name {
+            fn slice(&self) -> Slice {
+                self.first()
+                    .map(|v| RangeInclusive::new(*v.slice().start(), *self.last().unwrap().slice().end()))
+                    .unwrap()
             }
         }
     };

@@ -83,7 +83,10 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
 
         impl #name {
             pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
-                arg.print.print_colored(arg.get_head("items", Self::CONST, arg.code.cursor), l);
+                arg.print.print_tab(
+                    format!("{} ignored", colored(arg.get_head("items", Self::CONST, arg.code.cursor), l)),
+                    l
+                );
                 let mut vec = vec![];
                 loop {
                     #join
@@ -103,7 +106,11 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
                     };
                 }
                 #join
-                arg.print.pass_or_fail::<true>(l);
+                if vec.is_empty() {
+                    arg.print.pass_or_fail::<false>(l);
+                } else {
+                    arg.print.pass_or_fail::<true>(l);
+                }
                 Self(vec)
             }
         }

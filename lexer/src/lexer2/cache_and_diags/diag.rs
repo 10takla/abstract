@@ -70,34 +70,38 @@ impl std::fmt::Display for Diag {
         let (l, b, [min, max]) = ("|".blue(), "...", [0, 4]);
         let [distr_after, distr_before] = [
             *slice.start() > min,
-            source.len() - slice.end() != 0 && source.len() - 1 - slice.end() >= max,
+            source.len().saturating_sub(*slice.end()) != 0 && source.len() - 1 - slice.end() >= max,
         ]
         .map(|cond| cond.then_some(b).unwrap_or_default());
 
         let code = format!(
             "{}{}{}",
-            f(&source[{
-                let i = *slice.start();
-                let r = if i < min { 0 } else { i - min };
-                r..i
-            }]),
+            f(&source
+                .get({
+                    let i = *slice.start();
+                    let r = if i < min { 0 } else { i - min };
+                    r..i
+                })
+                .unwrap_or_default()),
             f(&source
                 .get(slice.clone())
                 .unwrap_or(&[*source.last().unwrap()]))
             .underline()
             .red(),
-            f(&source[{
-                let i = *slice.end();
-                if source.len() - i == 0 {
-                    i..source.len()
-                } else {
-                    i + 1..if source.len() - 1 - i < max {
-                        source.len()
+            f(&source
+                .get({
+                    let i = *slice.end();
+                    if source.len().saturating_sub(i) == 0 {
+                        i..source.len()
                     } else {
-                        i + max
+                        i + 1..if source.len() - 1 - i < max {
+                            source.len()
+                        } else {
+                            i + max
+                        }
                     }
-                }
-            }])
+                })
+                .unwrap_or_default())
         );
 
         let front_p = 3;

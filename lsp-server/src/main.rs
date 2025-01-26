@@ -3,8 +3,8 @@ mod distruct;
 use distruct::distruct_items;
 use lexer::{
     lexer2::{
-        cache_and_diags::diag::Diag, AnyBlock, Args, AssignExpr, Block, ErrorType, FnC, Ident,
-        IdentError, Item, Items, Literal, NamedBlock, NamedDistrBlock, Slicable,
+        cache_and_diags::diag::Diag, code::Source, AnyBlock, Args, AssignExpr, Block, ErrorType,
+        FnC, Ident, IdentError, Item, Items, Literal, NamedBlock, NamedDistrBlock, Slicable, Slice,
     },
     parse,
 };
@@ -182,7 +182,8 @@ impl Backend {
                         .iter()
                         .cloned()
                         .map(|diag| {
-                            let [[start, start_line], [end, end_line]] = diag_split(&diag, iter);
+                            let [[start, start_line], [end, end_line]] =
+                                diag_split(diag.slice.clone(), iter);
                             Diagnostic {
                                 range: Range {
                                     start: Position::new(start_line as u32, start as u32),
@@ -211,47 +212,73 @@ impl Backend {
 }
 
 fn diag_split(
-    diag: &Diag,
+    diag_slice: Slice,
     iter: &mut Peekable<impl Iterator<Item = (usize, [usize; 2])>>,
 ) -> [[usize; 2]; 2] {
-    let [item_start, item_end] = [*diag.slice.start(), *diag.slice.end()];
-
-    while let Some(&(i, [line_start, line_end])) = iter.peek() {
+    let [item_start, item_end] = [*diag_slice.start(), *diag_slice.end()];
+    let mut acc = [0, 0];
+    while let Some(&(i, [line_start, line_end])) = dbg!(iter.peek()) {
+        acc = [line_start, i];
         // если начало находится на линии
         if item_start <= line_end {
-            let [start_o, start_line_o] = [item_start - line_start, i];
+            let [start_char_index, start_line_index] = [item_start - line_start, i];
             // если конец находится на линии
             if item_end <= line_end {
-                return [[start_o, start_line_o], [item_end - line_start, i]];
+                return [
+                    [start_char_index, start_line_index],
+                    [item_end - line_start, i],
+                ];
             } else {
                 iter.next().unwrap();
+
+                let mut acc = [0, 0];
                 // иначе продолжить проход по линиям пока не будет найден конец
                 while let Some(&(i, [line_start, line_end])) = iter.peek() {
+                    acc = [line_start, i];
                     // если конец находится на линии
                     if item_end <= line_end {
                         // то перейти к следующему элементу
-                        return [[start_o, start_line_o], [item_end - line_start, i]];
+                        return [
+                            [start_char_index, start_line_index],
+                            [item_end - line_start, i],
+                        ];
                     } else {
                         iter.next().unwrap();
                     }
                 }
+                return [
+                    [start_char_index, start_line_index],
+                    [item_end - dbg!(acc)[0], acc[1]],
+                ];
             }
         } else {
             iter.next().unwrap();
         }
     }
-    unreachable!()
+    [[item_start - acc[0], acc[1]], [item_end - acc[0], acc[1]]]
+}
+
+#[test]
+fn diag_split_() {
+    let check = |(source, slice), b: [[usize; 2]; 2]| {
+        assert_eq!(diag_split(slice, &mut get_iter(source)), b)
+    };
+
+    // выход диганостики за гранцицу кода
+    check(("{", 1..=1), [[1, 0], [1, 0]]);
+    check(("{", 0..=1), [[0, 0], [1, 0]]);
+    check(("  \n{", 0..=4), [[0, 0], [1, 1]]);
+    check(("  \n\n\n{", 0..=6), [[0, 0], [1, 3]]);
 }
 
 #[test]
 fn diag() {
     let check = |source, b: Vec<[[usize; 2]; 2]>| {
-        let iter = &mut get_iter(source);
         assert_eq!(
             parse(source)
                 .1
                 .into_iter()
-                .map(|v| diag_split(&v, iter))
+                .map(|v| diag_split(v.slice.clone(), &mut get_iter(source)))
                 .collect::<Vec<_>>(),
             b
         );
@@ -286,6 +313,7 @@ fn diag() {
    2hg"#,
         vec![[[0, 0], [3, 0]], [[5, 0], [8, 0]], [[5, 3], [5, 3]]],
     );
+    check(r#"{"#, vec![[[1, 0], [1, 0]]]);
 }
 
 fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
@@ -370,7 +398,7 @@ fn get_iter<'a>(code: &'a str) -> Peekable<impl Iterator<Item = (usize, [usize; 
         .peekable()
         .map(move |(i, line)| {
             let start = acc;
-            let len: usize = line.chars().count();
+            let len = line.chars().count();
             if len > 0 {
                 acc += len;
             }

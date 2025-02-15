@@ -1,6 +1,6 @@
 use std::{iter::Peekable, panic::{catch_unwind, AssertUnwindSafe}};
 use super::{check_pass_fail, fast_group, fast_ident, fast_ident2, fast_puncts, tmp,  tmp5, COMMON};
-use proc_macro2::{token_stream::IntoIter, Group, Ident, TokenStream as TokenStream2};
+use proc_macro2::{token_stream::IntoIter, Group, Ident, Literal, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{parse::Peek, Index};
 
@@ -328,31 +328,30 @@ pub fn construct_tokens(
 
     let n = Index::from(items_i.len() - 1);
     let common = &*COMMON;
-    let check_pass_fail = check_pass_fail("cons", &name);
-     
+
     quote! {
         #[derive(Clone, Debug, PartialEq)]
         pub struct #name(#( pub #cons_item ),*);
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;
         }
-        impl #name {
-            #common
 
-            #check_pass_fail
-
-            // нет необходимости в consume ведь `items` сами это делаеют
-            fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                arg.print.print_colored(arg.get_head("cons", Self::CONST, arg.code.cursor), l);
-                Self::after_debug(arg, l).map(|v| {
-                    arg.print.pass_or_fail::<true>(l);
-                    v
-                }).map_err(|e| {
-                    arg.print.pass_or_fail::<false>(l);
-                    e
-                })
+        impl Recog for #name {
+            fn parse2(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                ConstructRecog::parse(arg, l)
             }
+        }
 
+        impl CacheCheck for #name {
+            const PREFIX: &str = "cons";
+
+            fn unwrap_item(item: ConstructItem) -> Self {
+                let ConstructItem::#name(v) = item else {unreachable!()};
+                v
+            }
+        }
+
+        impl ConstructRecog for #name {
             fn after_debug(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                 let mut cache_if_error: Vec<(Construct, Pos, ConstructItem)> = Default::default();
                 let mut ptr = Default::default();

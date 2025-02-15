@@ -42,7 +42,6 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((Ident, Vec<Ident>), us
 
 pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> TokenStream2 {
     let common = &*COMMON;
-    let check_pass_fail = check_pass_fail("enum", &name);
 
     let tmp = {
         let (first, other) = {
@@ -104,10 +103,23 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;
         }
-        impl #name {
-            #common
-            #check_pass_fail
 
+        impl Recog for #name {
+            fn parse2(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                EnumRecog::parse(arg, l)
+            }
+        }
+
+        impl CacheCheck for #name {
+            const PREFIX: &str = "enum";
+
+            fn unwrap_item(item: ConstructItem) -> Self {
+                let ConstructItem::#name(v) = item else {unreachable!()};
+                v
+            }
+        }
+
+        impl EnumRecog for #name {
             fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                 arg.print.print_colored(arg.get_head("enum", Self::CONST, arg.code.cursor), l);
                 Self::consume_parse(arg, l)

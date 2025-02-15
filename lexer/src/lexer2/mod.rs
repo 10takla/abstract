@@ -323,6 +323,137 @@ constructor!(
     }
 );
 
+trait CacheCheck: CommonTypes
+where
+    Self: Sized,
+{
+    const PREFIX: &str;
+
+    fn check_pass(arg: &mut ParseArgs, l: usize) -> Option<(usize, Self)>
+    where
+        Self: Slicable,
+    {
+        let when_not_fail = arg.code.cursor;
+        arg.c_a_d
+            .borrow()
+            .cache
+            .pass
+            .iter()
+            .enumerate()
+            .find_map(|(i, k)| {
+                k.items.get(k.index).and_then(|v| {
+                    (v.0 == Self::CONST && v.1 == when_not_fail).then(|| {
+                        let v: Self = CacheCheck::unwrap_item(v.2.clone());
+                        arg.code.cursor = v.slice().end() + 1;
+                        arg.print.from_cache::<true>(Self::PREFIX, Self::CONST, l);
+                        (i, v)
+                    })
+                })
+            })
+    }
+
+    fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<Diag> {
+        arg.c_a_d
+            .borrow()
+            .cache
+            .fails
+            .get(&(Self::CONST, arg.code.cursor))
+            .map(|e| {
+                arg.print.from_cache::<false>(Self::PREFIX, Self::CONST, l);
+                e
+            })
+            .cloned()
+    }
+
+    fn unwrap_item(item: ConstructItem) -> Self;
+}
+
+trait Recog: CacheCheck
+where
+    Self: Sized + Slicable,
+{
+    fn recog(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag> {
+        if let Some(e) = Self::check_fail(arg, l) {
+            Err(e)
+        } else {
+            Self::check_pass(arg, l)
+                .map(|(_, s)| Ok(s))
+                .unwrap_or_else(|| Self::parse2(arg, l))
+        }
+    }
+
+    fn parse2(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+}
+
+trait TokenRecog: CommonTypes + CacheCheck
+where
+    Self: Sized,
+{
+    fn parse(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag> {
+        let pos = arg.code.cursor;
+        let mut fast_print = |arg: &mut ParseArgs, v| {
+            arg.print.print_colored(
+                format!("{v} {}", arg.get_head("token", Self::CONST, pos)),
+                l,
+            );
+        };
+
+        Self::consume_parse(arg)
+            .map(|v| {
+                fast_print(arg, format!("{}", tmp_pass_or_fail::<true>()));
+                v
+            })
+            .map_err(|e| {
+                fast_print(arg, format!("{}({})", tmp_pass_or_fail::<false>(), e.end()));
+                e
+            })
+    }
+
+    fn consume_parse(arg: &mut ParseArgs) -> Result<Self, Diag> {
+        Self::after_debug(arg).map(|(v, slice)| {
+            arg.code.cursor = slice.end() + 1;
+            v
+        })
+    }
+
+    fn after_debug(arg: &ParseArgs) -> Result<(Self, RangeInclusive<usize>), Diag>;
+}
+
+trait EnumRecog: CommonTypes + CacheCheck {
+    fn parse(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+
+    // есть необходимость в `consume` ведь мы делаем `arg.clone`
+    fn consume_parse(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+
+    // enum не кешируется, потому что:
+    // 1. состоит из токенов и конструкций, которые кешируются
+    // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
+    // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
+    fn after_debug(arg: &ParseArgs, l: usize) -> Result<Self, Diag>;
+}
+
+trait ConstructRecog: CommonTypes + CacheCheck
+where
+    Self: Sized,
+{
+    // нет необходимости в consume ведь `items` сами это делаеют
+    fn parse(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag> {
+        arg.print
+            .print_colored(arg.get_head("cons", Self::CONST, arg.code.cursor), l);
+        Self::after_debug(arg, l)
+            .map(|v| {
+                arg.print.pass_or_fail::<true>(l);
+                v
+            })
+            .map_err(|e| {
+                arg.print.pass_or_fail::<false>(l);
+                e
+            })
+    }
+
+    fn after_debug(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+}
+
 #[test]
 fn items() {
     Items::recog(

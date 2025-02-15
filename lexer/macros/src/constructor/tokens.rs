@@ -1,5 +1,5 @@
 use super::{check_pass_fail, fast_group, fast_ident, fast_ident2, tmp, tmp3, tmp5, COMMON};
-use proc_macro2::{token_stream::IntoIter, Group, Ident, TokenStream as TokenStream2, TokenTree};
+use proc_macro2::{token_stream::IntoIter, Group, Ident, Literal, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use std::{
     collections::HashMap,
@@ -63,48 +63,38 @@ pub fn token_recognize(
 
     let common = &*COMMON;
     let check_pass_fail = check_pass_fail("token", &name);
+        
     let tokens = quote! {
         #[derive(Clone, Debug, PartialEq)]
         pub struct #name(Slice);
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;
         }
-        impl #name {
-            #common
 
-            #check_pass_fail
-
-            fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                let pos = arg.code.cursor;
-                let mut tmp = |arg: &mut ParseArgs, v| {
-                    arg.print.print_colored(format!("{v} {}", arg.get_head("token", Self::CONST, pos)), l);
-                };
-
-                Self::consume_parse(arg)
-                .map(|v| {
-                    tmp(arg, format!("{}", tmp_pass_or_fail::<true>()));
-                    v
-                }).map_err(|e| {
-                    tmp(arg, format!("{}({})", tmp_pass_or_fail::<false>(), e.end()));
-                    e
-                })
+        impl Recog for #name {
+            fn parse2(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+                TokenRecog::parse(arg, l)
             }
+        }
 
-            fn consume_parse(arg: &mut ParseArgs) -> <Self as CommonTypes>::Output {
-                Self::after_debug(arg)
-                .map(|v| {
-                    arg.code.cursor = v.slice().end() + 1;
-                    v
-                })
+        impl CacheCheck for #name {
+            const PREFIX: &str = "token";
+
+            fn unwrap_item(item: ConstructItem) -> Self {
+                let ConstructItem::#name(v) = item else {unreachable!()};
+                v
             }
+        }
 
-            fn after_debug(arg: &ParseArgs) -> <Self as CommonTypes>::Output {
-                #body.map(Self).map_err(|(slice, error)| Diag {
-                    slice,
-                    source: arg.code.source.clone(),
-                    error,
-                    type_: Construct::#name
-                })
+        impl TokenRecog for #name {
+            fn after_debug(arg: &ParseArgs) -> Result<(Self, RangeInclusive<usize>), Diag> {
+                #body.map(|v| (Self(v.clone()), v))
+                    .map_err(|(slice, error)| Diag {
+                        slice,
+                        source: arg.code.source.clone(),
+                        error,
+                        type_: Self::CONST
+                    })
             }
         }
 

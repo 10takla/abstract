@@ -13,6 +13,9 @@
 #![feature(macro_metavar_expr)]
 #![feature(inherent_associated_types)]
 #![feature(internal_output_capture)]
+#![feature(negative_impls)]
+#![feature(specialization)]
+#![feature(min_specialization)]
 
 pub mod lexer2;
 

@@ -49,7 +49,7 @@ impl From<&str> for Code {
     }
 }
 
-#[derive(Clone, Debug, Deref)]
+#[derive(Clone, Debug, Deref, PartialEq)]
 pub struct Source {
     pub real_source: std::string::String,
     #[deref]

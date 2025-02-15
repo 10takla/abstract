@@ -221,8 +221,6 @@ constructor!(
         Comma ","
         Colon ":"
     }
-    enums {}
-    constructs {}
     items {
         Items ! (Item) (Ignore)
     }

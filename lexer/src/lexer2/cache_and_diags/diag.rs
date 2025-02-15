@@ -31,7 +31,7 @@ use std::{
 use std_reset::prelude::Deref;
 use tracing::info;
 
-#[derive(Clone, Debug, Deref)]
+#[derive(Clone, Debug, Deref, PartialEq)]
 pub struct Diag {
     #[deref]
     pub slice: Slice,

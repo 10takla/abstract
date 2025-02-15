@@ -1,12 +1,8 @@
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
 use std::collections::HashMap;
-use std::fmt::Debug;
 
-pub fn common(
-    errors: HashMap<Ident, Vec<Ident>>,
-    v: [Vec<Ident>; 4],
-) -> TokenStream2 {
+pub fn common(errors: HashMap<Ident, Vec<Ident>>, v: [Vec<Ident>; 4]) -> TokenStream2 {
     let construct = v.iter().flatten().collect::<Vec<_>>();
 
     if construct.is_empty() {
@@ -31,12 +27,11 @@ pub fn common(
                 }
             }
         }));
-    
-       
 
-    let errors =  [init_item, cons_name].into_iter().flatten()
-    .map(|v| {
-        if let Some(errs) = errors.get(v).cloned() && errs.clone().into_iter().next().is_some() {
+    let errors = [init_item, cons_name, items].into_iter().flatten().map(|v| {
+        if let Some(errs) = errors.get(v).cloned()
+            && errs.clone().into_iter().next().is_some()
+        {
             quote! {
                 #[derive(Clone, Debug, PartialEq)]
                 pub enum [<#v Error>] {
@@ -92,12 +87,8 @@ pub fn common(
                 LineOver,
                 Any,
                 #(#init_item([<#init_item Error>])),*,
-                // #(#enum_name([<#enum_name Error>])),+,
+                #(#enum_name(Vec<Diag>)),*,
                 #(#cons_name([<#cons_name Error>])),*
-
-
-                // Ident(IdentError),
-                // String(StringError),
             }
             #(#errors)*
         }

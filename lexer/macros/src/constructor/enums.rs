@@ -45,45 +45,53 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
     let check_pass_fail = check_pass_fail("enum", &name);
 
     let tmp = {
-        let (first, other) = items.split_first().unwrap();
+        let (first, other) = {
+            let item_recog = |item| {
+                if items2.contains(item) {
+                    quote! {
+                        let v = #item::recog(&mut arg.clone(), l + 1);
+                        (!v.0.is_empty())
+                            .then_some(Self::#item(v))
+                            .ok_or(Diag {
+                                slice: arg.code.cursor..=arg.code.cursor,
+                                source: arg.code.source.clone(),
+                                error: ErrorType::Any,
+                                type_: Construct::#item
+                            })
+                    }
+                } else {
+                    quote! {
+                        #item::recog(&mut arg.clone(), l + 1).map(Self::#item)
+                    }
+                }
+            };
 
-        let tmp = |v| {
-            if items2.contains(v) {
-                quote! {
-                    let v = #v::recog(&mut arg.clone(), l + 1);
-                    (!v.0.is_empty())
-                        .then_some(Self::#v(v))
-                        .ok_or(Diag {
-                            slice: arg.code.cursor..=arg.code.cursor,
-                            source: arg.code.source.clone(),
-                            error: ErrorType::Any,
-                            type_: Construct::#v
-                        })
-                }
-            } else {
-                quote! {
-                    #v::recog(&mut arg.clone(), l + 1).map(Self::#v)
-                }
-            }
+            let (first, other) = items.split_first().unwrap();
+            (item_recog(first), other.iter().map(item_recog))
         };
 
-        let first = tmp(first);
-        let other = other.iter().map(|other| {
-            let out = tmp(other);
-            quote! {
-                #out
-                    .map_err(|e| {
-                        (e.end() > error.end()).then_some(e).unwrap_or(error)
-                    })
-            }
-        });
         quote! {
             #first
+                .map_err(|diag| {
+                    (diag.slice.clone(), diag.source.clone(), vec![diag.clone()], diag.type_)
+                })
             #(
-                .or_else(|error| {
+                .or_else(|(slice, source, mut diags, type_)| {
                     #other
+                        .map_err(|diag| {
+                            diags.push(diag.clone());
+                            (slice, source, diags, type_)
+                        })
                 })
             )*
+            .map_err(|(slice, source, diags, type_)| {
+                Diag {
+                    slice,
+                    source,
+                    error: ErrorType::#name(diags),
+                    type_
+                }
+            })
         }
     };
 
@@ -102,23 +110,25 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
 
             fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                 arg.print.print_colored(arg.get_head("enum", Self::CONST, arg.code.cursor), l);
-                Self::consume_parse(arg, l).map(|v| {
-                    arg.print.pass_or_fail::<true>(l);
-                    v
-                }).map_err(|mut e| {
-                    arg.print.pass_or_fail::<false>(l);
-                    e.type_ = Construct::#name;
-                    e
-                })
+                Self::consume_parse(arg, l)
+                    .map(|v| {
+                        arg.print.pass_or_fail::<true>(l);
+                        v
+                    })
+                    .map_err(|mut e| {
+                        arg.print.pass_or_fail::<false>(l);
+                        e.type_ = Construct::#name;
+                        e
+                    })
             }
 
             // есть необходимость в `consume` ведь мы делаем `arg.clone`
             fn consume_parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
                 Self::after_debug(arg, l)
-                .map(|v| {
-                    arg.code.cursor = v.slice().end() + 1;
-                    v
-                })
+                    .map(|v| {
+                        arg.code.cursor = v.slice().end() + 1;
+                        v
+                    })
             }
 
             // enum не кешируется, потому что:
@@ -135,6 +145,13 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
                 match self {
                     #( Self::#items(v) => v.slice() ),*
                 }
+            }
+        }
+
+        paste! {
+            #[derive(Clone, Debug, PartialEq)]
+            enum [<#name Error>] {
+                #( #items([<#items Error>]) ),*
             }
         }
     }

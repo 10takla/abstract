@@ -2,6 +2,7 @@
 #![feature(let_chains)]
 #![feature(proc_macro_diagnostic)]
 #![feature(type_alias_impl_trait)]
+#![allow(unused)]
 
 mod constructor;
 

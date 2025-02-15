@@ -47,13 +47,18 @@ pub fn constructor(input: TokenStream) -> TokenStream {
             map.insert(key, v);
         }
     }
-    let ((mut gt_tokens, mut tokens, mut errors), (mut gt_items, mut items)) = (
-        tokens(map.get("tokens").unwrap().clone().into_iter()),
-        items(map.get("items").unwrap().clone().into_iter()),
-    );
+
+    let tokens_iter = map.get("tokens").cloned().unwrap_or(TokenStream2::new()).into_iter();
+    let constructs_iter = map.get("constructs").cloned().unwrap_or(TokenStream2::new()).into_iter();
+    let enums_iter = map.get("enums").cloned().unwrap_or(TokenStream2::new()).into_iter();
+    let items_iter = map.get("items").cloned().unwrap_or(TokenStream2::new()).into_iter();
+    let common_iter = map.get("common").cloned().unwrap_or(TokenStream2::new()).into_iter();
+
+    let (mut gt_tokens, mut tokens, mut errors) = tokens(tokens_iter);
+    let (mut gt_items, mut items) = items(items_iter);
 
     let ([(t_tokens, ad_tokens), (t_items, ad_items)], ad_errors, ad_enums, ad_constructs) =
-        com(map.get("common").unwrap().clone().into_iter());
+        com(common_iter);
 
     gt_tokens.extend(t_tokens);
     tokens.extend(ad_tokens);
@@ -63,7 +68,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
     items.extend(ad_items);
 
     let (gt_enums, enums) = {
-        let mut v = enums(map.get("constructs").unwrap().clone().into_iter());
+        let mut v = enums(enums_iter);
         v.extend(ad_enums);
         let mut enums = vec![];
         (
@@ -82,8 +87,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
             .iter()
             .map(|v| construct_tokens(&v.0, &items, v.1.clone()));
 
-        let (mut gt_constructs, mut constructs) =
-            constructs(map.get("constructs").unwrap().clone().into_iter(), &items);
+        let (mut gt_constructs, mut constructs) = constructs(constructs_iter, &items);
         gt_constructs.extend(t_constructs);
         constructs.extend(ad_constructs.into_iter().map(|(v, _)| v));
 

@@ -96,13 +96,34 @@ mod errors {
         dbg!([Construct::WhiteSpace, Construct::String].recog(&mut t, 0));
     }
 
+    #[parse_test]
+    fn enum_errors(print: Print) {
+        let e = dbg!(Op::recog(&mut (r#"2"#, print).into(), 0)).unwrap_err();
+        let ErrorType::Op(diags) = e.error else {
+            panic!()
+        };
+        
+        assert_eq!(
+            diags
+                .into_iter()
+                .map(|v| (v.slice, v.error, v.type_))
+                .collect::<Vec<_>>(),
+            vec![
+                (0..=0, ErrorType::Reg("\\+",), Construct::Add),
+                (0..=0, ErrorType::Reg("-"), Construct::Sub),
+                (0..=0, ErrorType::Reg("\\*"), Construct::Mul),
+                (0..=0, ErrorType::Reg("/"), Construct::Div)
+            ]
+        );
+    }
+
     mod error_passing {
         use super::*;
         use clap::Id;
 
         #[parse_test]
         fn assign_expr(print: Print) {
-            let mut args: ParseArgs = (r#"sdfsfd -= "#, print).into();
+            let mut args = (r#"sdfsfd -= "#, print).into();
             dbg!(Items::recog(&mut args, 0));
             let e = args.c_a_d.borrow().errors[0].clone();
             assert_eq!(

@@ -255,7 +255,7 @@ mod items {
 
 mod issues {
     use super::{Code, Literal, ParseArgs, Print, Source};
-    use crate::lexer2::{tests::cli_args, Items};
+    use crate::lexer2::{tests::cli_args, Items, SequenceRecog};
     use clap::Parser;
     use macros::parse_test;
 

@@ -1,7 +1,7 @@
 use crate::{
     lexer2::{
         code::Source, tests::cli_args, Construct, ConstructParse, ErrorType, Items, ParseArgs,
-        Slice,
+        Slice, Print, SequenceRecog
     },
     parse,
 };
@@ -128,7 +128,7 @@ impl std::fmt::Display for Diag {
 }
 
 #[parse_test]
-fn display(print: crate::lexer2::print::Print) {
+fn display(print: Print) {
     let mut code = (
         r#"2fdg  2fdg      
     2fdg"#,
@@ -142,7 +142,7 @@ fn display(print: crate::lexer2::print::Print) {
 }
 
 mod issues {
-    use crate::lexer2::{print::Print, tests::cli_args, Items};
+    use crate::lexer2::{print::Print, tests::cli_args, Items, SequenceRecog};
     use macros::parse_test;
 
     // Ошибка происходит из-за необработки в `Diag::display` диапазона ошибки, выходящей за границу кода

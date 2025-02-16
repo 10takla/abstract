@@ -19,7 +19,7 @@
 
 pub mod lexer2;
 
-use lexer2::{cache_and_diags::diag::Diag, Items, ParseArgs};
+use lexer2::{cache_and_diags::diag::Diag, Items, SequenceRecog, ParseArgs};
 
 pub fn parse(source: &str) -> (Items, Vec<Diag>) {
     let mut t: ParseArgs = source.into();

@@ -55,7 +55,7 @@ use std::{
     fmt::{Debug, Display},
     hash::DefaultHasher,
     io::{self, stdout, Cursor, Read, Write},
-    ops::RangeInclusive,
+    ops::{ControlFlow, RangeInclusive},
     option::Iter,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -125,7 +125,7 @@ pub trait Slicable {
 //     fn check_good_cache(arg: &ParseArgs) -> Option<Self>;
 // }
 
-trait CommonTypes: Sized {
+pub trait CommonTypes: Sized {
     const CONST: Construct;
     type Output = Result<Self, Self::Error>;
     type Error = Diag;
@@ -163,7 +163,7 @@ fn ident(print: Print) {
     check_err("!", ErrorType::Ident(IdentError::StartsWithAlphabetic));
 }
 
-trait CacheCheck: CommonTypes
+pub trait CacheCheck: CommonTypes
 where
     Self: Sized,
 {
@@ -208,7 +208,7 @@ where
     fn unwrap_item(item: ConstructItem) -> Self;
 }
 
-trait Recog: CacheCheck
+pub trait Recog: CacheCheck
 where
     Self: Sized + Slicable,
 {
@@ -292,6 +292,61 @@ where
     }
 
     fn after_debug(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+}
+
+pub trait SequenceRecog: CommonTypes
+where
+    Self: Sized,
+{
+    type Item: Recog + Clone;
+
+    fn recog(arg: &mut ParseArgs, l: usize) -> Self;
+
+    fn items(arg: &mut ParseArgs, l: usize) -> Vec<Self::Item> {
+        arg.print.print_tab(
+            format!(
+                "{} ignored",
+                colored(arg.get_head("items", Self::CONST, arg.code.cursor), l)
+            ),
+            l,
+        );
+        let mut vec = vec![];
+        loop {
+            Self::join(arg, l + 1);
+
+            if arg.code.cursor >= arg.code.source.len() {
+                break;
+            }
+            match Self::Item::recog(&mut arg.clone(), l + 1) {
+                Ok(v) => {
+                    // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
+                    arg.c_a_d.borrow_mut().cache.pass.clear();
+                    vec.push(v.clone());
+                    arg.code.cursor = *v.slice().end() + 1;
+                }
+                Err(e) => match Self::break_(arg, l + 1, e) {
+                    ControlFlow::Continue(..) => continue,
+                    ControlFlow::Break(..) => break,
+                },
+            };
+        }
+        Self::join(arg, l + 1);
+        if vec.is_empty() {
+            arg.print.pass_or_fail::<false>(l);
+        } else {
+            arg.print.pass_or_fail::<true>(l);
+        }
+        vec
+    }
+
+    fn join(arg: &mut ParseArgs, l: usize) {}
+
+    fn break_(arg: &mut ParseArgs, l: usize, e: Diag) -> ControlFlow<()> {
+        let e = arg.c_a_d.borrow().clone().cache.check(e);
+        arg.code.cursor = *e.end() + 1;
+        arg.c_a_d.borrow_mut().errors.push(e);
+        ControlFlow::Continue(())
+    }
 }
 
 trait ConstructParse<const N: usize> {

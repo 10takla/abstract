@@ -37,37 +37,38 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
         .map(|v| {
             counter += 1;
             quote! {
-                #v::recog(arg, l + 1);
+                fn join(arg: &mut ParseArgs, l: usize) {
+                    #v::recog(arg, l + 1);
+                }
             }
         })
         .ok();
-
+    
     let break_ = fast_puncts("#", iter)
         .map(|_| {
             counter += 1;
+            Some(quote! {
+                fn break_(arg: &mut ParseArgs, l: usize, e: Diag) -> ControlFlow<()> {
+                    ControlFlow::Break(())
+                }
+            })
         })
-        .ok()
-        .map(|_| quote! {break})
-        .unwrap_or_else(|| {
-            fast_ident2(iter)
+        .unwrap_or_else(|_| {
+            fast_ident2(iter).ok()
                 .map(|break_| {
                     counter += 1;
                     quote! {
-                        if #break_::recog(&mut arg.clone(), l + 1).is_ok() {
-                            break;
-                        } else {
-                            let e = arg.c_a_d.borrow().clone().cache.check(e);
-                            arg.code.cursor = *e.end() + 1;
-                            arg.c_a_d.borrow_mut().errors.push(e);
-                            continue;
+                        fn break_(arg: &mut ParseArgs, l: usize, e: Diag) -> ControlFlow<()> {
+                            if #break_::recog(&mut arg.clone(), l + 1).is_ok() {
+                                ControlFlow::Break(())
+                            } else {
+                                let e = arg.c_a_d.borrow().clone().cache.check(e);
+                                arg.code.cursor = *e.end() + 1;
+                                arg.c_a_d.borrow_mut().errors.push(e);
+                                ControlFlow::Continue(())
+                            }
                         }
                     }
-                })
-                .unwrap_or(quote! {
-                    let e = arg.c_a_d.borrow().clone().cache.check(e);
-                    arg.code.cursor = *e.end() + 1;
-                    arg.c_a_d.borrow_mut().errors.push(e);
-                    continue;
                 })
         });
 
@@ -79,38 +80,16 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
             const CONST: Construct = Construct::#name;
         }
 
-        impl #name {
-            pub fn recog(arg: &mut ParseArgs, l: usize) -> Self {
-                arg.print.print_tab(
-                    format!("{} ignored", colored(arg.get_head("items", Self::CONST, arg.code.cursor), l)),
-                    l
-                );
-                let mut vec = vec![];
-                loop {
-                    #join
-                    if arg.code.cursor >= arg.code.source.len() {
-                        break;
-                    }
-                    match #item::recog(&mut arg.clone(), l + 1) {
-                        Ok(v) => {
-                            // не влияет на алгоритм, но очищает ненужную память, ускоряет поиск в списке
-                            arg.c_a_d.borrow_mut().cache.pass.clear();
-                            vec.push(v.clone());
-                            arg.code.cursor = *v.slice().end() + 1;
-                        }
-                        Err(e) => {
-                            #break_
-                        }
-                    };
-                }
-                #join
-                if vec.is_empty() {
-                    arg.print.pass_or_fail::<false>(l);
-                } else {
-                    arg.print.pass_or_fail::<true>(l);
-                }
-                Self(vec)
+        impl SequenceRecog for #name {
+            type Item = #item;
+
+            fn recog(arg: &mut ParseArgs, l: usize) -> Self {
+                #name(Self::items(arg, l))
             }
+
+            #join
+
+            #break_
         }
 
         impl Slicable for #name {

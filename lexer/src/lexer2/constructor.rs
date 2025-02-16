@@ -67,7 +67,7 @@ constructor!(
         Comma ","
         Colon ":"
     }
-    items {
+    items { 
         Items ! (Item) (Ignore)
     }
     common {
@@ -126,7 +126,7 @@ constructor!(
                 CurrentPathV -> Self_ | Super | Crate | Ident
                 EndPath -> WithItemsEnd | IdentPath
                     IdentPath ! (PathEl) #
-                            PathEl (Ignore)-> NameSpace Ident
+                            PathEl (Ignore) -> NameSpace Ident
                     WithItemsEnd (Ignore) ->  IdentPath NameSpace PathItemEnd
                         PathItemEnd -> GlobImport | PathItemsC
                             PathItemsC (Ignore) -> OpenFigureBracket PathItemsI CloseFigureBracket

@@ -125,8 +125,11 @@ pub trait Slicable {
 //     fn check_good_cache(arg: &ParseArgs) -> Option<Self>;
 // }
 
-pub trait CommonTypes: Sized {
+pub trait ConstructTypes {
     const CONST: Construct;
+}
+
+pub trait CommonTypes: ConstructTypes + Sized {
     type Output = Result<Self, Self::Error>;
     type Error = Diag;
 }
@@ -140,33 +143,7 @@ impl<T> Slicable for Token<T> {
     }
 }
 
-#[parse_test]
-fn ident(print: Print) {
-    let check = |c| {
-        assert_eq!(
-            Ident::recog(&mut (c, print.clone()).into(), 0).is_ok(),
-            true
-        );
-    };
-    check("sdfsfd");
-
-    let check_err = |c, b| {
-        assert_eq!(
-            Ident::recog(&mut (c, print.clone()).into(), 0)
-                .err()
-                .unwrap()
-                .error,
-            b
-        );
-    };
-    check_err("*", ErrorType::Ident(IdentError::StartsWithAlphabetic));
-    check_err("!", ErrorType::Ident(IdentError::StartsWithAlphabetic));
-}
-
-pub trait CacheCheck: CommonTypes
-where
-    Self: Sized,
-{
+pub trait CacheCheck: ConstructTypes + Sized {
     const PREFIX: &str;
 
     fn check_pass(arg: &mut ParseArgs, l: usize) -> Option<(usize, Self)>
@@ -208,11 +185,8 @@ where
     fn unwrap_item(item: ConstructItem) -> Self;
 }
 
-pub trait Recog: CacheCheck
-where
-    Self: Sized + Slicable,
-{
-    fn recog(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag> {
+pub trait Recog: CacheCheck + Slicable + CommonTypes<Output = Result<Self, Diag>> {
+    fn recog(arg: &mut ParseArgs, l: usize) -> Self::Output {
         if let Some(e) = Self::check_fail(arg, l) {
             Err(e)
         } else {
@@ -222,14 +196,11 @@ where
         }
     }
 
-    fn parse2(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+    fn parse2(arg: &mut ParseArgs, l: usize) -> Self::Output;
 }
 
-trait TokenRecog<T>: CommonTypes + CacheCheck
-where
-    T: Sized,
-{
-    fn parse(arg: &mut ParseArgs, l: usize) -> Result<Token<T>, Diag> {
+trait TokenRecog<T>: CacheCheck + CommonTypes<Output = Result<Token<T>, Diag>> {
+    fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
         let pos = arg.code.cursor;
         let mut fast_print = |arg: &mut ParseArgs, v| {
             arg.print.print_colored(
@@ -249,35 +220,32 @@ where
             })
     }
 
-    fn consume_parse(arg: &mut ParseArgs) -> Result<Token<T>, Diag> {
+    fn consume_parse(arg: &mut ParseArgs) -> Self::Output {
         Self::after_debug(arg).map(|v| {
             arg.code.cursor = v.1.end() + 1;
             v
         })
     }
 
-    fn after_debug(arg: &ParseArgs) -> Result<Token<T>, Diag>;
+    fn after_debug(arg: &ParseArgs) -> Self::Output;
 }
 
-trait EnumRecog: CommonTypes + CacheCheck {
-    fn parse(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+trait EnumRecog: CacheCheck + CommonTypes {
+    fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output;
 
     // есть необходимость в `consume` ведь мы делаем `arg.clone`
-    fn consume_parse(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+    fn consume_parse(arg: &mut ParseArgs, l: usize) -> Self::Output;
 
     // enum не кешируется, потому что:
     // 1. состоит из токенов и конструкций, которые кешируются
     // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
     // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
-    fn after_debug(arg: &ParseArgs, l: usize) -> Result<Self, Diag>;
+    fn after_debug(arg: &ParseArgs, l: usize) -> Self::Output;
 }
 
-trait ConstructRecog: CommonTypes + CacheCheck
-where
-    Self: Sized,
-{
+trait ConstructRecog: CacheCheck + CommonTypes<Output = Result<Self, Diag>> {
     // нет необходимости в consume ведь `items` сами это делаеют
-    fn parse(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag> {
+    fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
         arg.print
             .print_colored(arg.get_head("cons", Self::CONST, arg.code.cursor), l);
         Self::after_debug(arg, l)
@@ -291,13 +259,10 @@ where
             })
     }
 
-    fn after_debug(arg: &mut ParseArgs, l: usize) -> Result<Self, Diag>;
+    fn after_debug(arg: &mut ParseArgs, l: usize) -> Self::Output;
 }
 
-pub trait SequenceRecog: CommonTypes
-where
-    Self: Sized,
-{
+pub trait SequenceRecog: ConstructTypes {
     type Item: Recog + Clone;
 
     fn recog(arg: &mut ParseArgs, l: usize) -> Self;
@@ -364,6 +329,29 @@ impl<const N: usize> ConstructParse<N> for [Box<dyn ConstructMarker>; N] {
             .collect::<Result<Vec<_>, _>>()
             .map(|v| v.try_into().unwrap())
     }
+}
+
+#[parse_test]
+fn ident(print: Print) {
+    let check = |c| {
+        assert_eq!(
+            Ident::recog(&mut (c, print.clone()).into(), 0).is_ok(),
+            true
+        );
+    };
+    check("sdfsfd");
+    
+    let check_err = |c, b| {
+        assert_eq!(
+            Ident::recog(&mut (c, print.clone()).into(), 0)
+                .err()
+                .unwrap()
+                .error,
+            b
+        );
+    };
+    check_err("*", ErrorType::Ident(IdentError::StartsWithAlphabetic));
+    check_err("!", ErrorType::Ident(IdentError::StartsWithAlphabetic));
 }
 
 #[test]

@@ -82,7 +82,7 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
             }
         }
 
-        impl CommonTypes for #name {
+        impl ConstructTypes for #name {
             const CONST: Construct = Construct::#name;
         }
 

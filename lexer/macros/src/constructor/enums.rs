@@ -102,14 +102,16 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
                 #name::recog(arg, l).map(ConstructItem::#name)
             }
         }
-
-        impl CommonTypes for #name {
+        
+        impl ConstructTypes for #name {
             const CONST: Construct = Construct::#name;
         }
 
+        impl CommonTypes for #name {}
+
         impl Recog for #name {
-            fn parse2(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                EnumRecog::parse(arg, l)
+            fn parse2(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                <#name as EnumRecog>::parse(arg, l)
             }
         }
 
@@ -123,7 +125,7 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
         }
 
         impl EnumRecog for #name {
-            fn parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+            fn parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
                 arg.print.print_colored(arg.get_head("enum", Self::CONST, arg.code.cursor), l);
                 Self::consume_parse(arg, l)
                     .map(|v| {
@@ -138,7 +140,7 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
             }
 
             // есть необходимость в `consume` ведь мы делаем `arg.clone`
-            fn consume_parse(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+            fn consume_parse(arg: &mut ParseArgs, l: usize) -> Self::Output {
                 Self::after_debug(arg, l)
                     .map(|v| {
                         arg.code.cursor = v.slice().end() + 1;
@@ -150,7 +152,7 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
             // 1. состоит из токенов и конструкций, которые кешируются
             // 2. enum состоит из вариций, если кешировать одну это значит кешировать любую другую
             // fn cache_parse(arg: &mut ParseArgs) -> Self::Output
-            fn after_debug(arg: &ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+            fn after_debug(arg: &ParseArgs, l: usize) -> Self::Output {
                 #tmp
             }
         }

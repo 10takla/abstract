@@ -1,7 +1,7 @@
 use std::{iter::Peekable, panic::{catch_unwind, AssertUnwindSafe}};
 use super::{fast_group, fast_ident, fast_ident2, fast_puncts, tmp,  tmp5};
 use proc_macro2::{token_stream::IntoIter, Group, Ident, Literal, TokenStream as TokenStream2};
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{parse::Peek, Index};
 
 
@@ -120,56 +120,8 @@ pub fn constructs_reckog(
             if cons_item.len() == 0 {
                 panic!("construct expect elements")
             }
-            let n = Index::from(cons_item.len() - 1);
-            vec.push(
-                quote! {
-                    #[derive(Clone, Debug, PartialEq)]
-                    pub struct #name(#( pub #cons_item ),*);
-                    impl CommonTypes for #name {
-                        const CONST: Construct = Construct::#name;
-                    }
-
-                    impl Recog for #name {
-                        fn parse2(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                            EnumRecog::parse(arg, l)
-                        }
-                    }
-
-                    impl CacheCheck for #name {
-                        const PREFIX: &str = "cons";
             
-                        fn unwrap_item(item: ConstructItem) -> Self {
-                            let ConstructItem::#name(v) = item else {unreachable!()};
-                            v
-                        }
-                    }
-
-                    impl ConstructRecog for #name {
-                        fn after_debug(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                            let mut cache_if_error: Vec<(Construct, Pos, ConstructItem)> = Default::default();
-                            let mut ptr = Default::default();
-                            Ok(
-                                Self(
-                                    #(
-                                        {
-                                            let when_not_fail = arg.code.cursor;
-                                            #tmp
-                                        }
-                                    ),*
-                                )
-                            )
-                        }
-                    }
-    
-                    impl Slicable for #name {
-                        fn slice(&self) -> Slice {
-                            let start = self.0.slice();
-                            let end = self.#n.slice();
-                            *start.start()..=*end.end()
-                        }
-                    }
-                }
-            );
+            vec.push(tmp2(&name, cons_item.iter().map(ToTokens::to_token_stream), tmp, cons_item.len()));
     
             construct_names.push(name);
         }
@@ -324,8 +276,11 @@ pub fn construct_tokens(
         }
     });
 
-    let n = Index::from(items_i.len() - 1);
+    tmp2(name, cons_item, tmp, items_i.len())
+}
 
+fn tmp2(name: &Ident, cons_item: impl Iterator<Item = TokenStream2>, tmp: Vec<TokenStream2>, cons_item_len: usize) -> TokenStream2 {
+    let n = Index::from(cons_item_len - 1);
     quote! {
         #[derive(Clone, Debug, PartialEq)]
         pub struct #name(#( pub #cons_item ),*);
@@ -336,13 +291,15 @@ pub fn construct_tokens(
             }
         }
         
-        impl CommonTypes for #name {
+        impl ConstructTypes for #name {
             const CONST: Construct = Construct::#name;
         }
 
+        impl CommonTypes for #name {}
+
         impl Recog for #name {
-            fn parse2(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                ConstructRecog::parse(arg, l)
+            fn parse2(arg: &mut ParseArgs, l: usize) -> Self::Output {
+                <#name as ConstructRecog>::parse(arg, l)
             }
         }
 
@@ -356,7 +313,7 @@ pub fn construct_tokens(
         }
 
         impl ConstructRecog for #name {
-            fn after_debug(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
+            fn after_debug(arg: &mut ParseArgs, l: usize) -> Self::Output {
                 let mut cache_if_error: Vec<(Construct, Pos, ConstructItem)> = Default::default();
                 let mut ptr = Default::default();
                 Ok(

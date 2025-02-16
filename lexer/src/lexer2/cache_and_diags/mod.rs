@@ -52,7 +52,7 @@ impl PassList {
             items,
         }
     }
-    pub fn get(&self) -> &(Construct, Pos, ConstructItem) {
+    pub fn get(&self) -> &Pass {
         &self.items[self.index]
     }
 }

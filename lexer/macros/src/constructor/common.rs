@@ -2,21 +2,22 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
 use std::collections::HashMap;
 
-pub fn common(errors: HashMap<Ident, Vec<Ident>>, v: [Vec<Ident>; 4]) -> TokenStream2 {
-    let construct = v.iter().flatten().collect::<Vec<_>>();
-
-    if construct.is_empty() {
+pub fn common(errors: HashMap<Ident, Vec<Ident>>, all_items: [Vec<Ident>; 4]) -> TokenStream2 {
+   
+    let v = all_items.iter().flatten().collect::<Vec<_>>();
+    
+    if v.is_empty() {
         return quote! {};
     }
 
-    let [init_item, enum_name, items, cons_name] = &v;
+    let [init_item, enum_name, items, cons_name] = &all_items;
     let construct_parse = [init_item, enum_name, cons_name]
         .into_iter()
         .flatten()
         .map(|tmp| {
             quote! {
                 Construct::#tmp => {
-                    #tmp::recog(arg, l).map(|v| ConstructItem::#tmp(v))
+                    #tmp::recog(arg, l).map(ConstructItem::#tmp)
                 }
             }
         })
@@ -28,40 +29,54 @@ pub fn common(errors: HashMap<Ident, Vec<Ident>>, v: [Vec<Ident>; 4]) -> TokenSt
             }
         }));
 
-    let errors = [init_item, cons_name, items].into_iter().flatten().map(|v| {
-        if let Some(errs) = errors.get(v).cloned()
-            && errs.clone().into_iter().next().is_some()
-        {
-            quote! {
-                #[derive(Clone, Debug, PartialEq)]
-                pub enum [<#v Error>] {
-                    #(#errs),*
+    let errors = [init_item, cons_name, items]
+        .into_iter()
+        .flatten()
+        .map(|v| {
+            if let Some(errs) = errors.get(v).cloned()
+                && errs.clone().into_iter().next().is_some()
+            {
+                quote! {
+                    #[derive(Clone, Debug, PartialEq)]
+                    pub enum [<#v Error>] {
+                        #(#errs),*
+                    }
+                }
+            } else {
+                quote! {
+                    #[derive(Clone, Debug, PartialEq)]
+                    pub enum [<#v Error>] {
+                        Some
+                    }
                 }
             }
-        } else {
-            quote! {
-                #[derive(Clone, Debug, PartialEq)]
-                pub enum [<#v Error>] {
-                    Some
-                }
-            }
-        }
-    });
+        });
+
+    let v2 = init_item.into_iter().map(|init_item| {
+            quote! {#init_item([<#init_item Error>])}
+        })
+        .chain(
+            enum_name.into_iter().map(|enum_name| {
+                quote! {#enum_name(Vec<Diag>)}
+            })
+        )
+        .chain(
+            cons_name.into_iter().map(|cons_name| {
+                quote! {#cons_name([<#cons_name Error>])}
+            })
+        );
 
     quote! {
         #[derive(Clone, Debug, Eq, PartialEq, Hash)]
         pub enum Construct {
-            #(#construct),*
+            #(#v),*
         }
 
         #[derive(Clone, Debug, PartialEq)]
-        enum ConstructItem {
-            #(#construct(#construct)),*
+        pub enum ConstructItem {
+            #(#v(#v)),*
         }
 
-        trait ConstructParse<const N: usize> {
-            fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag>;
-        }
         impl<const N: usize> ConstructParse<N> for [Construct; N] {
             fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag> {
                 self.iter().map(|item| {
@@ -75,7 +90,7 @@ pub fn common(errors: HashMap<Ident, Vec<Ident>>, v: [Vec<Ident>; 4]) -> TokenSt
         impl Slicable for ConstructItem {
             fn slice(&self) -> Slice {
                 match self {
-                    #(Self::#construct(v) => v.slice()),*
+                    #(Self::#v(v) => v.slice()),*
                 }
             }
         }
@@ -86,9 +101,7 @@ pub fn common(errors: HashMap<Ident, Vec<Ident>>, v: [Vec<Ident>; 4]) -> TokenSt
                 Reg(&'static str),
                 LineOver,
                 Any,
-                #(#init_item([<#init_item Error>])),*,
-                #(#enum_name(Vec<Diag>)),*,
-                #(#cons_name([<#cons_name Error>])),*
+                #(#v2),*
             }
             #(#errors)*
         }

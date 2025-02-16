@@ -1,4 +1,4 @@
-use super::{check_pass_fail, fast_group, fast_ident, fast_ident2, fast_puncts, tmp, tmp3, COMMON};
+use super::{fast_group, fast_ident, fast_ident2, fast_puncts, tmp, tmp3};
 use proc_macro2::{token_stream::IntoIter, Group, Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use std::{
@@ -73,9 +73,7 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
 
     let tokens = quote! {
         #[derive(Debug, Clone, Deref, PartialEq)]
-        pub struct #name(
-            Vec<#item>
-        );
+        pub struct #name(pub Vec<#item>);
 
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;

@@ -1,9 +1,8 @@
-use super::{check_pass_fail, fast_ident, fast_ident2, fast_puncts, tmp, tmp3, tmp5, COMMON};
+use super::{fast_ident, fast_ident2, fast_puncts, tmp, tmp3, tmp5};
 use proc_macro2::{token_stream::IntoIter, Group, Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use std::{
-    iter::Peekable,
-    panic::{catch_unwind, AssertUnwindSafe},
+    collections::HashSet, iter::Peekable, panic::{catch_unwind, AssertUnwindSafe}
 };
 use syn::{custom_punctuation, parse2, LitStr};
 
@@ -41,8 +40,6 @@ pub fn enum_recognize(iter: &mut Peekable<IntoIter>) -> ((Ident, Vec<Ident>), us
 }
 
 pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> TokenStream2 {
-    let common = &*COMMON;
-
     let tmp = {
         let (first, other) = {
             let item_recog = |item| {
@@ -93,7 +90,7 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
             })
         }
     };
-
+    
     quote! {
         #[derive(Clone, Debug, PartialEq)]
         pub enum #name {

@@ -13,7 +13,7 @@ use proc_macro2::{token_stream::IntoIter, Group, Literal, TokenStream as TokenSt
 use quote::{quote, ToTokens};
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::Hash,
     iter::Peekable,
     panic::{catch_unwind, AssertUnwindSafe, UnwindSafe},
@@ -48,37 +48,55 @@ pub fn constructor(input: TokenStream) -> TokenStream {
         }
     }
 
-    let tokens_iter = map.get("tokens").cloned().unwrap_or(TokenStream2::new()).into_iter();
-    let constructs_iter = map.get("constructs").cloned().unwrap_or(TokenStream2::new()).into_iter();
-    let enums_iter = map.get("enums").cloned().unwrap_or(TokenStream2::new()).into_iter();
-    let items_iter = map.get("items").cloned().unwrap_or(TokenStream2::new()).into_iter();
-    let common_iter = map.get("common").cloned().unwrap_or(TokenStream2::new()).into_iter();
+    let tokens_iter = map
+        .get("tokens")
+        .cloned()
+        .unwrap_or(TokenStream2::new())
+        .into_iter();
+    let constructs_iter = map
+        .get("constructs")
+        .cloned()
+        .unwrap_or(TokenStream2::new())
+        .into_iter();
+    let enums_iter = map
+        .get("enums")
+        .cloned()
+        .unwrap_or(TokenStream2::new())
+        .into_iter();
+    let items_iter = map
+        .get("items")
+        .cloned()
+        .unwrap_or(TokenStream2::new())
+        .into_iter();
+    let common_iter = map
+        .get("common")
+        .cloned()
+        .unwrap_or(TokenStream2::new())
+        .into_iter();
 
     let (mut gt_tokens, mut tokens, mut errors) = tokens(tokens_iter);
     let (mut gt_items, mut items) = items(items_iter);
 
-    let ([(t_tokens, ad_tokens), (t_items, ad_items)], ad_errors, ad_enums, ad_constructs) =
-        com(common_iter);
+    let mut enums = enums(enums_iter);
+    let ad_constructs = com(
+        common_iter,
+        (&mut gt_tokens, &mut tokens),
+        (&mut gt_items, &mut items),
+        &mut errors,
+        &mut enums,
+    );
 
-    gt_tokens.extend(t_tokens);
-    tokens.extend(ad_tokens);
-    errors.extend(ad_errors);
-
-    gt_items.extend(t_items);
-    items.extend(ad_items);
-
-    let (gt_enums, enums) = {
-        let mut v = enums(enums_iter);
-        v.extend(ad_enums);
-        let mut enums = vec![];
+    let (gt_enums, enum_names) = {
+        let mut enum_names = vec![];
         (
-            v.iter()
-                .map(|v| {
-                    enums.push(v.0.clone());
-                    enum_tokens(&v.0, &v.1, &items)
+            enums
+                .iter()
+                .map(|(name, v)| {
+                    enum_names.push(name.clone());
+                    enum_tokens(name, v, &items) 
                 })
                 .collect::<TokenStream2>(),
-            enums,
+            enum_names,
         )
     };
 
@@ -94,7 +112,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
         (gt_constructs, constructs)
     };
 
-    let common = common(errors, [tokens, enums, items, constructs]);
+    let common = common(errors, [tokens.into_iter().collect::<Vec<_>>(), enum_names, items, constructs]);
     quote! {
         #gt_tokens
         #gt_enums
@@ -108,17 +126,12 @@ pub fn constructor(input: TokenStream) -> TokenStream {
 
 fn com(
     mut iter: IntoIter,
-) -> (
-    [(TokenStream2, Vec<Ident>); 2],
-    HashMap<Ident, Vec<Ident>>,
-    Vec<(Ident, Vec<Ident>)>,
-    Vec<(Ident, Vec<(Ident, bool, Option<Ident>)>)>,
-) {
-    let [mut tokens, mut items]: [Vec<Ident>; 2] = Default::default();
-    let [mut t_tokens, mut t_items]: [TokenStream2; 2] = Default::default();
+    (t_tokens, tokens): (&mut TokenStream2, &mut Vec<Ident>),
+    (t_items, items): (&mut TokenStream2, &mut Vec<Ident>),
+    errors: &mut HashMap<Ident, Vec<Ident>>,
+    enums: &mut Vec<(Ident, Vec<Ident>)>,
+) -> Vec<(Ident, Vec<(Ident, bool, Option<Ident>)>)> {
     let mut constructs = vec![];
-    let mut enums = vec![];
-    let mut errors = HashMap::new();
 
     while let Some(_) = iter.clone().next() {
         {
@@ -146,12 +159,7 @@ fn com(
         })
         .unwrap();
     }
-    (
-        [(t_tokens, tokens), (t_items, items)],
-        errors,
-        enums,
-        constructs,
-    )
+    constructs
 }
 
 pub fn tmp3<T, O: Fn(&mut Peekable<IntoIter>) -> (T, usize)>(
@@ -166,43 +174,6 @@ pub fn tmp3<T, O: Fn(&mut Peekable<IntoIter>) -> (T, usize)>(
             v
         })
         .map_err(tmp5)
-}
-
-const COMMON: LazyLock<TokenStream2> = LazyLock::new(|| {
-    quote! {
-        fn recog(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-            if let Some(e) = Self::check_fail(arg, l) {
-                Err(e)
-            } else {
-                Self::check_pass(arg, l).map(|(_, s)| Ok(s)).unwrap_or_else(|| Self::parse(arg, l))
-            }
-        }
-    }
-});
-
-fn check_pass_fail(name: &str, t: impl ToTokens) -> TokenStream2 {
-    let literal = Literal::string(name);
-    quote! {
-        fn check_pass(arg: &mut ParseArgs, l: usize) -> Option<(usize, Self)> {
-            let when_not_fail = arg.code.cursor;
-            arg.c_a_d.borrow().cache.pass.iter().enumerate().find_map(|(i, k)| {
-                k.items.get(k.index).and_then(|v| {
-                    (v.0 == Self::CONST && v.1 == when_not_fail).then(|| {
-                        let ConstructItem::#t(ref v) = v.2 else {unreachable!()};
-                        arg.code.cursor = v.slice().end() + 1;
-                        arg.print.from_cache::<true>(#literal, Self::CONST, l);
-                        (i, v.clone())
-                    })
-                })
-            })
-        }
-        fn check_fail(arg: &mut ParseArgs, l: usize) -> Option<<Self as CommonTypes>::Error> {
-            arg.c_a_d.borrow().cache.fails.get(&(Self::CONST, arg.code.cursor)).map(|e| {
-                arg.print.from_cache::<false>(#literal, Self::CONST, l);
-                e
-            }).cloned()
-        }
-    }
 }
 
 fn fast_ident(item: &TokenTree) -> Result<Ident, String> {

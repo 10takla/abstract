@@ -1,8 +1,8 @@
-use super::{check_pass_fail, fast_group, fast_ident, fast_ident2, tmp, tmp3, tmp5, COMMON};
+use super::{fast_group, fast_ident, fast_ident2, tmp, tmp3, tmp5};
 use proc_macro2::{token_stream::IntoIter, Group, Ident, Literal, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Debug,
     iter::Peekable,
     panic::{catch_unwind, AssertUnwindSafe},
@@ -60,20 +60,28 @@ pub fn token_recognize(
         }
         _ => unreachable!(),
     };
-
-    let common = &*COMMON;
-    let check_pass_fail = check_pass_fail("token", &name);
-        
+    
     let tokens = quote! {
-        #[derive(Clone, Debug, PartialEq)]
-        pub struct #name(Slice);
+        paste!{
+            #[derive(Clone, Debug, PartialEq)]
+            pub struct [<#name Marker>];
+
+            pub type #name = Token<[<#name Marker>]>;
+
+            impl #name {
+                pub const fn new(slice: Slice) -> Self {
+                    Self([<#name Marker>], slice)
+                }
+            }
+        }
+
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;
         }
 
         impl Recog for #name {
             fn parse2(arg: &mut ParseArgs, l: usize) -> <Self as CommonTypes>::Output {
-                TokenRecog::parse(arg, l)
+                #name::parse(arg, l)
             }
         }
 
@@ -85,22 +93,17 @@ pub fn token_recognize(
                 v
             }
         }
-
-        impl TokenRecog for #name {
-            fn after_debug(arg: &ParseArgs) -> Result<(Self, RangeInclusive<usize>), Diag> {
-                #body.map(|v| (Self(v.clone()), v))
-                    .map_err(|(slice, error)| Diag {
-                        slice,
-                        source: arg.code.source.clone(),
-                        error,
-                        type_: Self::CONST
-                    })
-            }
-        }
-
-        impl Slicable for #name {
-            fn slice(&self) -> Slice {
-                self.0.clone()
+        paste!{
+            impl TokenRecog<[<#name Marker>]> for #name {
+                fn after_debug(arg: &ParseArgs) -> Result<Self, Diag> {
+                    #body.map(|v| Self([<#name Marker>], v))
+                        .map_err(|(slice, error)| Diag {
+                            slice,
+                            source: arg.code.source.clone(),
+                            error,
+                            type_: Self::CONST
+                        })
+                }
             }
         }
     };

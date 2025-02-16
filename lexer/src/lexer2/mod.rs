@@ -353,6 +353,19 @@ trait ConstructParse<const N: usize> {
     fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag>;
 }
 
+trait ConstructMarker {
+    fn item(&self, arg: &mut ParseArgs, l: usize) -> Result<ConstructItem, Diag>;
+}
+
+impl<const N: usize> ConstructParse<N> for [Box<dyn ConstructMarker>; N] {
+    fn recog(&self, arg: &mut ParseArgs, l: usize) -> Result<[ConstructItem; N], Diag> {
+        self.iter()
+            .map(|item| item.item(arg, l))
+            .collect::<Result<Vec<_>, _>>()
+            .map(|v| v.try_into().unwrap())
+    }
+}
+
 #[test]
 fn items() {
     Items::recog(

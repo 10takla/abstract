@@ -76,6 +76,12 @@ pub fn items_recognize(iter: &mut Peekable<IntoIter>) -> ((TokenStream2, Ident),
         #[derive(Debug, Clone, Deref, PartialEq)]
         pub struct #name(pub Vec<#item>);
 
+        impl ConstructMarker for #name {
+            fn item(&self, arg: &mut ParseArgs, l: usize) -> Result<ConstructItem, Diag> {
+                Ok(ConstructItem::#name(#name::recog(arg, l)))
+            }
+        }
+
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;
         }

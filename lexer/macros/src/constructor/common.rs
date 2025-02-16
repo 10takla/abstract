@@ -14,10 +14,10 @@ pub fn common(errors: HashMap<Ident, Vec<Ident>>, all_items: [Vec<Ident>; 4]) ->
     let construct_parse = [init_item, enum_name, cons_name]
         .into_iter()
         .flatten()
-        .map(|tmp| {
+        .map(|v| {
             quote! {
-                Construct::#tmp => {
-                    #tmp::recog(arg, l).map(ConstructItem::#tmp)
+                Construct::#v => {
+                    #v::recog(arg, l).map(ConstructItem::#v)
                 }
             }
         })
@@ -27,7 +27,8 @@ pub fn common(errors: HashMap<Ident, Vec<Ident>>, all_items: [Vec<Ident>; 4]) ->
                     Ok(ConstructItem::#items(#items::recog(arg, l)))
                 }
             }
-        }));
+        }))
+        .collect::<Vec<_>>();
 
     let errors = [init_item, cons_name, items]
         .into_iter()

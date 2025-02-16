@@ -97,6 +97,12 @@ pub fn enum_tokens(name: &Ident, items: &Vec<Ident>, items2: &Vec<Ident>) -> Tok
             #( #items(#items) ),*
         }
 
+        impl ConstructMarker for #name {
+            fn item(&self, arg: &mut ParseArgs, l: usize) -> Result<ConstructItem, Diag> {
+                #name::recog(arg, l).map(ConstructItem::#name)
+            }
+        }
+
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;
         }

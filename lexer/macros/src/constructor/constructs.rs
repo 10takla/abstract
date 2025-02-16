@@ -329,6 +329,13 @@ pub fn construct_tokens(
     quote! {
         #[derive(Clone, Debug, PartialEq)]
         pub struct #name(#( pub #cons_item ),*);
+        
+        impl ConstructMarker for #name {
+            fn item(&self, arg: &mut ParseArgs, l: usize) -> Result<ConstructItem, Diag> {
+                #name::recog(arg, l).map(ConstructItem::#name)
+            }
+        }
+        
         impl CommonTypes for #name {
             const CONST: Construct = Construct::#name;
         }

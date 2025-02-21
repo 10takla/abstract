@@ -16,8 +16,14 @@
 #![feature(negative_impls)]
 #![feature(specialization)]
 #![feature(min_specialization)]
+#![feature(marker_trait_attr)]
+#![feature(adt_const_params)]
+#![feature(array_try_map)]
+#![feature(trait_upcasting)]
+#![feature(negative_bounds)]
 
 pub mod lexer2;
+pub mod lexer3;
 
 use lexer2::{cache_and_diags::diag::Diag, Items, SequenceRecog, ParseArgs};
 

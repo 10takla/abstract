@@ -21,6 +21,8 @@
 #![feature(array_try_map)]
 #![feature(trait_upcasting)]
 #![feature(negative_bounds)]
+#![feature(generic_const_exprs)]
+#![feature(min_const_generics)]
 
 pub mod lexer2;
 pub mod lexer3;

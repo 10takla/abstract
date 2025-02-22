@@ -40,17 +40,15 @@ pub enum Item {
 
 impl EnumRecog for Item {
     type Output = Self;
-    fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<&'static str>> {
-        let mut errs = vec![];
-        Token::<Ident>::cursor_aware_recog(code)
-            .map(Self::Ident)
-            .map_err(|e| errs.push(e))
-            .or_else(|_| {
-                Token::<String>::cursor_aware_recog(code)
-                    .map(Self::String)
-                    .map_err(|e| errs.push(e))
-            })
-            .map_err(|_| errs)
+    const N: usize = 2;
+    
+    fn structure_assembling<'a>(
+        code: &'a Code,
+    ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N] {
+        [
+            Box::new(|| Token::<Ident>::recog(code).map(Self::Ident)),
+            Box::new(|| Token::<String>::recog(code).map(Self::String)),
+        ]
     }
 }
 

@@ -261,12 +261,28 @@ mod enum_ {
     use super::*;
     use crate::tuple_impl;
 
-    pub trait EnumRecog: Sized {
+    pub trait EnumRecog {
         type Output;
-        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<&'static str>>;
+        const N: usize;
+        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<&'static str>>
+        where
+            [(); Self::N]: Sized,
+        {
+            let mut errs = vec![];
+            Self::structure_assembling(code)
+                .into_iter()
+                .find_map(|v| v().map_err(|e| errs.push(e)).ok())
+                .ok_or(errs)
+        }
+        fn structure_assembling<'a>(
+            code: &'a Code,
+        ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N];
     }
 
-    impl<T: EnumRecog> CommonRecog for Enum<T::Output, T> {
+    impl<T: EnumRecog> CommonRecog for Enum<T::Output, T>
+    where
+        [(); T::N]: Sized,
+    {
         fn recog(code: &Code) -> Result<Self, &'static str>
         where
             Self: Sized,
@@ -284,12 +300,14 @@ mod enum_ {
             Self(inner, PhantomData)
         }
     }
-    trait CommonRecog2 {
-        type Output;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str>
-        where
-            Self: Sized;
-    }
+
+    /// ниже диначиеское представление
+    // trait CommonRecog2 {
+    //     type Output;
+    //     fn recog(code: &Code) -> Result<Self::Output, &'static str>
+    //     where
+    //         Self: Sized;
+    // }
 
     // impl<T: EnumRecog> CommonRecog2 for Enum<T> {
     //     type Output = T::Output;
@@ -332,7 +350,6 @@ mod enum_ {
     // }
 
     // tuple_impl!(impl_enum_seq!);
-
     use super::{items::*, *};
     #[test]
     fn test() {

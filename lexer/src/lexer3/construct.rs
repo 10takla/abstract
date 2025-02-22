@@ -2,88 +2,80 @@ use super::*;
 use lexer3_macros::Spanable;
 use std::str::CharIndices;
 
-mod tokens {
-    use super::*;
+macro_rules! fast {
+    () => {};
+    ($a:ident $reg:literal $($t:tt)*) => {
+        paste!{
+            pub struct [<$a Marker>];
 
-    #[derive(Debug, PartialEq)]
-    pub struct Ident;
-
-    impl RegularToken for Ident {
-        const REG_EXPR: &'static str = r"\b[_a-zA-Z][_a-zA-Z0-9]*\b";
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub struct String;
-
-    impl TokenRecog for Token<String> {
-        type Output = String;
-        fn start_string_aware_recog(code: &str) -> Result<Slice, &'static str> {
-            let mut iter = code.char_indices();
-
-            let (i, char) = iter.next().ok_or("LineOver")?;
-            let start = (char == '"').then_some(i).ok_or("StartsWithQuote")?;
-
-            for (i, char) in iter.clone() {
-                if char == '"' {
-                    return Ok(start..i + 1);
-                }
+            impl RegularToken for [<$a Marker>] {
+                const REG_EXPR: &'static str = $reg;
             }
 
-            let tmp = iter.last().unwrap().0;
-
-            Err("EndsWithQuote")
+            pub type $a = Token<[<$a Marker>]>;
         }
-    }
-}
-pub use tokens::*;
-
-mod enums {
-    use super::*;
-
-    #[derive(Debug, PartialEq, Spanable)]
-    pub enum Item {
-        Ident(Token<Ident>),
-        String(Token<String>),
-    }
-
-    impl EnumRecog for Item {
-        type Output = Self;
-        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<&'static str>> {
-            let mut errs = vec![];
-            Token::<Ident>::cursor_aware_recog(code)
-                .map(Self::Ident)
-                .map_err(|e| errs.push(e))
-                .or_else(|_| {
-                    Token::<String>::cursor_aware_recog(code)
-                        .map(Self::String)
-                        .map_err(|e| errs.push(e))
-                })
-                .map_err(|_| errs)
+        fast!($($t)*);
+    };
+    ($name:ident { $( $a:ident )|+ } $($t:tt)*) => {
+        pub enum $name {
+            $($a($a)),+
         }
-    }
-}
-pub use enums::*;
 
-mod sequences {
-    use super::*;
+        impl EnumRecog for $name {
+            type Output = Self;
+            const N: usize = ${count($a)};
 
-    #[derive(Debug, PartialEq, Spanable)]
-    pub struct IdentString(pub Token<Ident>, pub Token<String>, pub Token<Ident>);
-
-    impl SequenceRecog for IdentString {
-        fn structure_assembling(code: &mut Code) -> Result<Self, &'static str> {
-            Ok(Self(
-                Self::promotion::<Token<Ident>>(code)?,
-                Self::promotion::<Token<String>>(code)?,
-                Self::promotion::<Token<Ident>>(code)?,
-            ))
+            fn structure_assembling<'a>(
+                code: &'a Code,
+            ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N] {
+                [
+                    $(
+                        Box::new(|| $a::recog(code).map(Self::$a))
+                    ),+
+                ]
+            }
         }
-    }
-
-    pub struct IdentStringMarker;
-
-    impl MarkerConversion for IdentStringMarker {
-        type Output = IdentString;
-    }
+        fast!($($t)*);
+    };
+    ($name:ident ( $( $a:ident )+ ) $($t:tt)*) => {
+        pub type $name = ( $($a),+ );
+        fast!($($t)*);
+    };
+    ($name:ident $item:ident $ignore:ident $break:ident $($t:tt)*) => {
+        fast!($($t)*);
+    };
 }
-pub use sequences::*;
+
+fast!(
+    ImplItemsI ImplItemsV Ignore CloseFigureBracket
+    Op { Add | Sub | Mul | Div }
+        Add r#"\+"#
+        Sub r#"-"#
+        Mul r"\*"
+        Div r#"/"#
+    // keywords
+    Fn "fn"
+    Const "const"
+    Struct "struct"
+    Trait "trait"
+    Let "let"
+    Impl "impl"
+    Crate "crate"
+    For "for"
+    SelfT "self"
+    Super "super"
+
+    // other
+    Number r"\b\d+\b"
+
+    Distribution r#"\.\."#
+    NameSpace "::"
+    OpenFigureBracket r#"\{"#
+    CloseFigureBracket r#"}"#
+    OpenRoundBracket r#"\("#
+    CloseRoundBracket r#"\)"#
+    Eq r#"="#
+
+    Comma ","
+    Colon ":"
+);

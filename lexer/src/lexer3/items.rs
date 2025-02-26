@@ -13,7 +13,7 @@ impl RegularToken for Ident {
 pub struct String;
 
 impl TokenRecog for Token<String> {
-    type Output = String;
+    type Inner = String;
     fn start_string_aware_recog(code: &str) -> Result<Slice, &'static str> {
         let mut iter = code.char_indices();
 
@@ -56,7 +56,8 @@ impl EnumRecog for Item {
 pub struct IdentString(pub Token<Ident>, pub Token<String>, pub Token<Ident>);
 
 impl SequenceRecog for IdentString {
-    fn structure_assembling(code: &mut Code) -> Result<Self, &'static str> {
+    type Output = Self;
+    fn structure_assembling(code: &mut Code) -> Result<Self::Output, &'static str> {
         Ok(Self(
             Self::promotion::<Token<Ident>>(code)?,
             Self::promotion::<Token<String>>(code)?,
@@ -65,8 +66,8 @@ impl SequenceRecog for IdentString {
     }
 }
 
-pub struct IdentStringMarker;
+// pub struct IdentStringMarker;
 
-impl MarkerConversion for IdentStringMarker {
-    type Output = IdentString;
-}
+// impl MarkerConversion for IdentStringMarker {
+//     type Output = IdentString;
+// }

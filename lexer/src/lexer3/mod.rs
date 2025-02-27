@@ -17,16 +17,6 @@ mod wrapper {
         fn recog(code: &Code) -> Result<Self::Output, &'static str>;
     }
 
-    impl<T: EnumRecog> WrappedRecog for Enum<T::Output, T>
-    where
-        [(); T::N]: Sized,
-    {
-        type Output = T::Output;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str> {
-            T::cursor_aware_recog(code).map_err(|v| v[0])
-        }
-    }
-
     impl<T: EnumRecog> WrappedRecog for T
     where
         [(); T::N]: Sized,
@@ -71,21 +61,13 @@ mod wrapper {
         }
     }
 
-    pub struct Repetiotion<T>(T);
-
-    impl<T: RepetitionRecog> WrappedRecog for Repetiotion<T> {
-        type Output = T::Output;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str> {
-            Ok(T::cursor_aware_recog(code))
-        }
-    }
     impl<T> WrappedRecog for Vec<T>
     where
         Vec<T>: RepetitionRecog,
     {
         type Output = <Vec<T> as RepetitionRecog>::Output;
         fn recog(code: &Code) -> Result<Self::Output, &'static str> {
-            Ok(<Vec<T>>::cursor_aware_recog(code))
+            Ok(Self::cursor_aware_recog(code))
         }
     }
 }
@@ -278,14 +260,6 @@ mod enum_ {
         ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N];
     }
 
-    #[derive(Debug, PartialEq)]
-    pub struct Enum<Output, T = Output>(Output, PhantomData<T>);
-    impl<Output, T> Enum<Output, T> {
-        pub const fn new(inner: Output) -> Self {
-            Self(inner, PhantomData)
-        }
-    }
-
     /// ниже диначиеское представление
     // trait CommonRecog2 {
     //     type Output;
@@ -348,7 +322,7 @@ mod enum_ {
         );
 
         assert_eq!(
-            Enum::<Item>::recog(&r#""n""#.into()).unwrap(),
+            Item::recog(&r#""n""#.into()).unwrap(),
             Item::String(Token::new(0..3))
         );
     }
@@ -398,14 +372,14 @@ mod repetiotion {
     #[test]
     fn test() {
         assert_eq!(
-            Vec::<Enum<Item>>::cursor_aware_recog(&r#""n""n""#.into()),
+            Vec::<Item>::cursor_aware_recog(&r#""n""n""#.into()),
             vec![
                 Item::String(Token::new(0..3)),
                 Item::String(Token::new(3..6))
             ]
         );
         assert_eq!(
-            Repetiotion::<Vec::<Token<String>>>::recog(&r#""n""n""#.into()).unwrap(),
+            <Vec::<Token<String>>>::recog(&r#""n""n""#.into()).unwrap(),
             vec![Token::new(0..3), Token::new(3..6)]
         );
     }

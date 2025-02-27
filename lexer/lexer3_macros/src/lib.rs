@@ -222,12 +222,6 @@ pub fn constructor(input: TokenStream) -> TokenStream {
     }
 
     let get_type = |v| {
-        if names.enums.contains(&v) {
-            quote! {Enum::<#v>}
-        } else
-        if names.items.contains(&v) {
-            quote! {Repetiotion::<#v>}
-        } else 
         if names.seqences.contains(&v) {
             quote! {Seq::<#v>}
         } else {

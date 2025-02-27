@@ -4,29 +4,29 @@ use std::str::CharIndices;
 
 constructor!(
     Item { FnC | StructC | TraitC | ImplV | AnyBlock | ConstC | AssignExpr | Literal | Ident }
-            TraitC (Trait Ident MethodsC)
-                MethodsC (OpenFigureBracket MethodsI CloseFigureBracket)
+            TraitC (Trait Ident MethodsC) { join Ignore }
+                MethodsC (OpenFigureBracket MethodsI CloseFigureBracket) { join Ignore }
                     MethodsI <FnHead> { break CloseFigureBracket }
             ImplV { ImplFor | ImplC }
-                ImplFor (Impl Ident For Ident ImplItemsC)
-                ImplC (Impl Ident ImplItemsC)
-                    ImplItemsC (OpenFigureBracket ImplItemsI CloseFigureBracket)
+                ImplFor (Impl Ident For Ident ImplItemsC) { join Ignore }
+                ImplC (Impl Ident ImplItemsC) { join Ignore }
+                    ImplItemsC (OpenFigureBracket ImplItemsI CloseFigureBracket) { join Ignore }
                         ImplItemsI <ImplItemsV> { break CloseFigureBracket }
                             ImplItemsV { ConstC | FnC }
-            StructC (Struct Ident Args)
-            FnC (FnHead Block)
-                FnHead (Fn Ident Args)
+            StructC (Struct Ident Args) { join Ignore }
+            FnC (FnHead Block) { join Ignore }
+                FnHead (Fn Ident Args) { join Ignore }
             AnyBlock { NamedDistrBlock | DistrBlock | NamedBlock | Block }
-                NamedDistrBlock (NamedBlock Distribution)
-                DistrBlock (Path Distribution)
-                NamedBlock (Ident Block)
-                Block (OpenFigureBracket BlockItems CloseFigureBracket)
+                NamedDistrBlock (NamedBlock Distribution) { join Ignore }
+                DistrBlock (Path Distribution) { join Ignore }
+                NamedBlock (Ident Block) { join Ignore }
+                Block (OpenFigureBracket BlockItems CloseFigureBracket) { join Ignore }
                     BlockItems <Item> { break CloseFigureBracket }
-            ConstC (Const Assign)
+            ConstC (Const Assign) { join Ignore }
             AssignExpr { AssignAnd | Assign }
-                AssignAnd (IdentAndType OpEq Literal)
-                    OpEq (Op Eq)
-                Assign (IdentAndType Eq Literal)
+                AssignAnd (IdentAndType OpEq Literal) { join Ignore }
+                    OpEq (Op Eq) { join Ignore }
+                Assign (IdentAndType Eq Literal) { join Ignore }
             Literal { String | Number }
         Args { StructArgsC | TupleType }
             StructArgsC (OpenFigureBracket StructArgsI CloseFigureBracket)
@@ -42,30 +42,30 @@ constructor!(
             Mul r"\*"
             Div r#"/"#
         IdentAndType { IdentAndTypeC | Ident }
-            IdentAndTypeC (Ident Colon Type)
+            IdentAndTypeC (Ident Colon Type) { join Ignore }
         Type { TupleType | BaseType }
-            TupleType (OpenRoundBracket TupleTypeI CloseRoundBracket)
+            TupleType (OpenRoundBracket TupleTypeI CloseRoundBracket) { join Ignore }
                 TupleTypeI <Type> { break CloseRoundBracket }
             BaseType { AnnotededTypeC | Ident }
-                AnnotededTypeC (Ident OpenAngleBracket AnnotededTypeI CloseAngleBracket)
+                AnnotededTypeC (Ident OpenAngleBracket AnnotededTypeI CloseAngleBracket) { join Ignore }
                     OpenAngleBracket "<"
                     CloseAngleBracket ">"
                     AnnotededTypeI <AnnotededType> { break CloseAngleBracket }
                         AnnotededType { EqType | Ident }
-                            EqType (Ident Eq Type)
+                            EqType (Ident Eq Type) { join Ignore }
         Path { CurrenPath | EndPath | Ident }
-            CurrenPath (CurrentPathV EndPath)
+            CurrenPath (CurrentPathV EndPath) { join Ignore }
                 CurrentPathV { Self_ | Super | Crate | Ident }
                 EndPath { WithItemsEnd | IdentPath }
-                    IdentPath <PathEl> {}
-                            PathEl (NameSpace Ident)
-                    WithItemsEnd (IdentPath NameSpace PathItemEnd)
+                    WithItemsEnd (IdentPath NameSpace PathItemEnd) { join Ignore }
                         PathItemEnd { GlobImport | PathItemsC }
-                            PathItemsC (OpenFigureBracket PathItemsI CloseFigureBracket)
-                                PathItemsI <PathItemC> { break CloseFigureBracket }
+                            PathItemsC (OpenFigureBracket PathItemsI CloseFigureBracket) { join Ignore }
+                                PathItemsI <PathItemC> { break CloseFigureBracket join Ignore }
                                     PathItemC (PathItemV Comma)
                                         PathItemV { Self_ | Super | GlobImport | Ident }
                                             GlobImport r#"\*"#
+                    IdentPath <PathEl> {}
+                        PathEl (NameSpace Ident) { join Ignore }
     // keywords
     Fn "fn"
     Const "const"
@@ -159,3 +159,86 @@ mod tokens {
     }
 }
 use tokens::*;
+
+mod items {
+    use super::*;
+    use crate::lexer2::NameSpace;
+    use macros::parse_test;
+
+    #[test]
+    fn path() {
+        macro_rules! check {
+            ($l:literal, $($type_:tt)*) => {
+                assert!(
+                    match dbg!(Path::recog(&$l.into())) {
+                        $($type_)* => true,
+                        _ => false,
+                    }
+                );
+            };
+        }
+
+        check!(
+            "crate::sdfsdf::sdfsdf",
+            Ok(Path::CurrenPath((CurrentPathV::Crate(_), ..)))
+        );
+        check!(
+            "self::sdfsdf::sdfsdf",
+            Ok(Path::CurrenPath((CurrentPathV::Self_(_), ..)))
+        );
+        check!(
+            "super::sdfsdf::sdfsdf",
+            Ok(Path::CurrenPath((CurrentPathV::Super(_), ..)))
+        );
+        check!(
+            "sdfsdf::sdfsdf::sdfsfdf",
+            Ok(Path::CurrenPath((CurrentPathV::Ident(_), ..)))
+        );
+        check!("::sdfsdf::sdfsdf", Ok(Path::EndPath(_)));
+
+        check!(
+            "sdfsdf::sdfsdf::*",
+            Ok(Path::CurrenPath((
+                _,
+                _,
+                EndPath::WithItemsEnd((_, _, _, _, PathItemEnd::GlobImport(_)))
+            )))
+        );
+
+        check!(
+            "sdfsdf::sdfsdf::{ *, }",
+            Ok(Path::CurrenPath(
+                (_, _, EndPath::WithItemsEnd((
+                        _,
+                        _,
+                        _,
+                        _,
+                        PathItemEnd::PathItemsC((_, _, (vec), _, _))
+                    )
+                ))
+            )) if let (PathItemV::GlobImport(_), ..) = vec[0]
+        );
+        check!(
+            "sdfsdf::sdfsdf::{ self, }",
+            Ok(Path::CurrenPath(
+                (_, _,EndPath::WithItemsEnd((
+                        _,_,
+                        _,_,
+                        PathItemEnd::PathItemsC((_, _,(vec),_, _))
+                    )
+                ))
+            )) if let (PathItemV::Self_(_), ..) = vec[0]
+        );
+        check!(
+            "sdfsdf::sdfsdf::{ sdfsdf, }",
+            Ok(Path::CurrenPath(
+                (_, _,EndPath::WithItemsEnd((
+                        _,_,
+                        _,_,
+                        PathItemEnd::PathItemsC((_,_, (vec),_, _))
+                    )
+                ))
+            )) if let (PathItemV::Ident(_), ..) = vec[0]
+        );
+    }
+}

@@ -94,7 +94,7 @@ mod token {
     pub trait RegularToken {
         const REG_EXPR: &'static str;
     }
-    
+
     pub trait TokenRecog {
         type Inner;
         // распознавание относительно курсора, то есть с учетом смещения строки, без продвижения
@@ -147,7 +147,7 @@ mod sequence {
             T::Output: Spanable,
         {
             T::recog(code).map(|v| {
-                code.cursor = v.span().end;
+                code.cursor += v.span().len();
                 v
             })
         }
@@ -156,7 +156,7 @@ mod sequence {
     #[macro_export]
     macro_rules! tuple_impl {
         ($macros:ident! $(@$key:ident)?) => {
-            tuple_impl!(@recursive $macros! $(@$key)? T T T T T T T T);
+            tuple_impl!(@recursive $macros! $(@$key)? T T T T T T T T T T T T T T T T T T);
         };
         (@recursive $macros:ident! $(@$key:ident)? $a:ident) => {};
         (@recursive $macros:ident! $(@$key:ident)? $a:ident $($other:ident)+) => {
@@ -184,7 +184,7 @@ mod sequence {
                 }
             }
         };
-        (@spanable $a:ident $($other:ident)+ ) => {
+        (@spanable $a:ident $($other:ident)+) => {
             impl<$a: Spanable, $($other: Spanable),+> Spanable for ($a, $($other),+) {
                 fn span(&self) -> Slice {
                     self.0.span().start..self.${count($other)}.span().end
@@ -332,6 +332,7 @@ use enum_::*;
 mod repetiotion {
     use super::*;
     use items::*;
+    use std::fmt::Debug;
 
     type Items = Vec<Item>;
 

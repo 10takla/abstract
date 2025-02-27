@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 #![allow(unused)]
 
 use std::{collections::HashSet, default};
@@ -135,7 +137,10 @@ impl Parse for EnumInput {
     }
 }
 
-struct SeqInput(Vec<Type>);
+struct SeqInput{
+    items: Vec<Ident>, 
+    join: Option<Ident>
+}
 impl Parse for SeqInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content;
@@ -143,7 +148,7 @@ impl Parse for SeqInput {
 
         let mut vec = vec![];
         loop {
-            if let Ok(v) = Type::parse(&content) {
+            if let Ok(v) = Parse::parse(&content) {
                 vec.push(v);
             } else {
                 break;
@@ -151,7 +156,22 @@ impl Parse for SeqInput {
         }
 
         (!vec.is_empty())
-            .then_some(Self(vec))
+            .then_some(Self{
+                items: vec,
+                join: {
+                    let mut join = None;
+                    if input.peek(Brace) {
+                        let content;
+                        syn::braced!(content in input);
+                        for _ in 0..1 {
+                            if let Ok(v) = Ident::parse(&content) && v == "join" {
+                                join = Parse::parse(&content)?;
+                            }
+                        }
+                    }
+                    join
+                }
+            })
             .ok_or(input.error("No separator expected"))
     }
 }
@@ -181,7 +201,7 @@ impl Parse for ItemsInput {
                 if Break::parse(&content).is_ok() {
                     break_ = Parse::parse(&content)?;
                 }
-                if Break::parse(&content).is_ok() {
+                if let Ok(v) = Ident::parse(&content) && v == "join" {
                     join = Parse::parse(&content)?;
                 }
             }
@@ -253,7 +273,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                     // let impl_ = impl_enum(name, c,  n);
 
                     quote! {
-                        #[derive(Spanable)]
+                        #[derive(Spanable, Debug, PartialEq)]
                         pub enum #name {
                             #(#b(#b)),*
                         }
@@ -282,6 +302,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                 ItemType::Token(TokenInput(reg)) => {
                     quote! {
                         paste!{
+                            #[derive(Debug, PartialEq)]
                             #[allow(non_camel_case_types)]
                             pub struct [<#name Marker>];
                             
@@ -293,8 +314,24 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                         }
                     }
                 },
-                ItemType::Seq(SeqInput(v)) => {
-                    let item_names = v.iter().map(Type::name);
+                ItemType::Seq(SeqInput {items, join}) => {
+                    let item_names = 
+                        {
+                            if let Some(v1) = join {
+                                items.iter().enumerate()
+                                    .map(|(i, v)| {
+                                        if i == items.len() - 1 {
+                                            vec![quote!{#v}]
+                                        } else {
+                                            vec![quote!{#v}, quote!{#v1}]
+                                        }
+                                    })
+                                    .flatten()
+                                    .collect::<Vec<_>>()
+                            } else {
+                                items.iter().map(|v| quote!{#v}).collect::<Vec<_>>()
+                            }
+                        };
                     quote! {
                         pub type #name = ( #(#item_names),* );
                     }

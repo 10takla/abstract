@@ -1,6 +1,7 @@
+use colored::Colorize;
 use paste::paste;
 use regex::Regex;
-use std::{any::Any, cell::RefCell, marker::PhantomData, ops::Range};
+use std::{any::Any, cell::RefCell, fmt::Arguments, marker::PhantomData, ops::Range};
 
 type Slice = Range<usize>;
 
@@ -14,22 +15,22 @@ struct Ctxt<'a> {
 }
 
 mod cache {
-    use super::{wrapper::WrappedRecog, *};
+    use super::{wrapper::CommonRecog, *};
     use std::{
         any::{Any, TypeId},
         collections::{HashMap, HashSet},
     };
 
-    pub trait CacheRecog: WrappedRecog + Sized + 'static {
+    pub trait CacheRecog: CommonRecog + Sized + 'static {
         fn cache_recog(
             ctxt: Ctxt,
             cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
-        ) -> Result<<Self as WrappedRecog>::Output, &'static str>
+        ) -> Result<<Self as CommonRecog>::Output, CommonError>
         where
-            <Self as WrappedRecog>::Output: Clone,
+            <Self as CommonRecog>::Output: Clone,
         {
             if let Some(v) = Self::check_cache(ctxt.code, cache)
-                .and_then(|v| v.downcast_ref::<<Self as WrappedRecog>::Output>())
+                .and_then(|v| v.downcast_ref::<<Self as CommonRecog>::Output>())
             {
                 Ok((*v).clone())
             } else {
@@ -48,7 +49,7 @@ mod cache {
         }
 
         fn set_cache(
-            v: <Self as WrappedRecog>::Output,
+            v: <Self as CommonRecog>::Output,
             code: &Code,
             cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
         ) {
@@ -56,43 +57,51 @@ mod cache {
         }
     }
 
-    impl<T: WrappedRecog + Clone + 'static> CacheRecog for T {}
+    impl<T: CommonRecog + Clone + 'static> CacheRecog for T {}
 }
 use cache::*;
 
 mod wrapper {
     use super::*;
     use crate::tuple_impl;
+    use std::fmt::Display;
 
-    pub trait WrappedRecog {
-        type Output;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str>;
+    #[derive(Debug, Clone)]
+    pub enum CommonError {
+        Token(TokenError),
+        Enum(Vec<CommonError>),
+        Seq(Box<CommonError>),
     }
 
-    impl<T: EnumRecog> WrappedRecog for T {
+    pub trait CommonRecog {
+        type Output;
+        fn recog(code: &Code) -> Result<Self::Output, CommonError>;
+    }
+
+    impl<T: EnumRecog> CommonRecog for T {
         type Output = T::Output;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str> {
-            T::cursor_aware_recog(code).map_err(|v| v[0])
+        fn recog(code: &Code) -> Result<Self::Output, CommonError> {
+            T::cursor_aware_recog(code).map_err(CommonError::Enum)
         }
     }
 
     #[derive(Debug, PartialEq)]
     pub struct Seq<T>(pub T);
 
-    impl<T: SequenceRecog> WrappedRecog for Seq<T> {
+    impl<T: SequenceRecog> CommonRecog for Seq<T> {
         type Output = T::Output;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str> {
-            T::cursor_aware_recog(code)
+        fn recog(code: &Code) -> Result<Self::Output, CommonError> {
+            T::cursor_aware_recog(code).map_err(|v| CommonError::Seq(Box::new(v)))
         }
     }
     macro_rules! seq_impl {
         ($($a:ident)+) => {
-            impl<$($a),+> WrappedRecog for ($($a),+)
+            impl<$($a),+> CommonRecog for ($($a),+)
             where
                 ($($a),+): SequenceRecog
             {
                 type Output = <($($a),+) as SequenceRecog>::Output;
-                fn recog(code: &Code) -> Result<Self::Output, &'static str> {
+                fn recog(code: &Code) -> Result<Self::Output, CommonError> {
                     <($($a),+)>::cursor_aware_recog(code)
                 }
             }
@@ -100,22 +109,22 @@ mod wrapper {
     }
     tuple_impl!(seq_impl!);
 
-    impl<T> WrappedRecog for Token<T>
+    impl<T> CommonRecog for Token<T>
     where
         Token<T>: TokenRecog<Inner = T>,
     {
         type Output = Self;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str> {
-            Self::cursor_aware_recog(code)
+        fn recog(code: &Code) -> Result<Self::Output, CommonError> {
+            Self::cursor_aware_recog(code).map_err(CommonError::Token)
         }
     }
 
-    impl<T> WrappedRecog for Vec<T>
+    impl<T> CommonRecog for Vec<T>
     where
         Vec<T>: RepetitionRecog,
     {
         type Output = <Vec<T> as RepetitionRecog>::Output;
-        fn recog(code: &Code) -> Result<Self::Output, &'static str> {
+        fn recog(code: &Code) -> Result<Self::Output, CommonError> {
             Ok(Self::cursor_aware_recog(code))
         }
     }
@@ -124,6 +133,7 @@ use wrapper::*;
 
 mod token {
     use super::*;
+    use core::prelude::v1;
 
     #[derive(Debug, PartialEq, Clone)]
     pub struct Token<T> {
@@ -144,28 +154,58 @@ mod token {
         const REG_EXPR: &'static str;
     }
 
+    #[derive(Debug, Clone)]
+    pub enum TokenError {
+        CommonTokenError(Slice, CommonTokenError),
+        LineOver,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum CommonTokenError {
+        CurrentErrors(&'static str),
+        RegularToken(&'static str),
+    }
+
     pub trait TokenRecog {
         type Inner;
         // распознавание относительно курсора, то есть с учетом смещения строки, без продвижения
-        fn cursor_aware_recog(code: &Code) -> Result<Token<Self::Inner>, &'static str> {
-            Self::start_string_aware_recog(&code.source[code.cursor..]).map(|span| Token {
-                _marker: PhantomData,
-                span: code.cursor + span.start..code.cursor + span.end,
-            })
+        fn cursor_aware_recog(code: &Code) -> Result<Token<Self::Inner>, TokenError> {
+            Self::start_string_aware_recog(&code.source[code.cursor..])
+                .map(|span| Token {
+                    _marker: PhantomData,
+                    span: code.cursor + span.start..code.cursor + span.end,
+                })
+                .map_err(|v1| match v1 {
+                    TokenError::CommonTokenError(span, v) => TokenError::CommonTokenError(
+                        code.cursor + span.start..code.cursor + span.end,
+                        v,
+                    ),
+                    _ => v1,
+                })
         }
 
         // расознавания происходит относительно строки, без каких либо смещений по курсору
-        fn start_string_aware_recog(code: &str) -> Result<Slice, &'static str>;
+        fn start_string_aware_recog(code: &str) -> Result<Slice, TokenError>;
     }
 
     impl<T: RegularToken> TokenRecog for Token<T> {
         type Inner = T;
-        fn start_string_aware_recog(code: &str) -> Result<Slice, &'static str> {
+        fn start_string_aware_recog(code: &str) -> Result<Slice, TokenError> {
+            if code.is_empty() {
+                return Err(TokenError::LineOver);
+            }
+
             Regex::new(&format!("^{}", T::REG_EXPR))
                 .unwrap()
                 .find(code)
                 .map(|mat| mat.range())
-                .ok_or("Не совпала с регуляркой")
+                .ok_or(TokenError::CommonTokenError(
+                    {
+                        let (i, ch) = code.char_indices().next().unwrap();
+                        i..i + ch.len_utf8()
+                    },
+                    CommonTokenError::RegularToken(T::REG_EXPR),
+                ))
         }
     }
 
@@ -175,7 +215,6 @@ mod token {
         }
     }
 }
-
 use token::*;
 
 mod sequence {
@@ -185,13 +224,13 @@ mod sequence {
     pub trait SequenceRecog {
         type Output;
         // распознавнаие с продвижением курсора
-        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, &'static str> {
+        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, CommonError> {
             Self::structure_assembling(&mut code.clone())
         }
 
-        fn structure_assembling(code: &mut Code) -> Result<Self::Output, &'static str>;
+        fn structure_assembling(code: &mut Code) -> Result<Self::Output, CommonError>;
 
-        fn promotion<T: WrappedRecog>(code: &mut Code) -> Result<T::Output, &'static str>
+        fn promotion<T: CommonRecog>(code: &mut Code) -> Result<T::Output, CommonError>
         where
             T::Output: Spanable,
         {
@@ -223,12 +262,12 @@ mod sequence {
     macro_rules! impl_seq {
         (@impl $($a:ident)+) => {
             impl_seq!(@spanable $($a)+);
-            impl<$($a: WrappedRecog),+> SequenceRecog for ($($a),+)
+            impl<$($a: CommonRecog),+> SequenceRecog for ($($a),+)
             where
                 $($a::Output: Spanable),+
             {
                 type Output = ($($a::Output),+);
-                fn structure_assembling(code: &mut Code) -> Result<Self::Output , &'static str> {
+                fn structure_assembling(code: &mut Code) -> Result<Self::Output, CommonError> {
                     Ok(($(Self::promotion::<$a>(code)?),+))
                 }
             }
@@ -293,7 +332,7 @@ mod enum_ {
 
     pub trait EnumRecog {
         type Output;
-        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<&'static str>> {
+        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<CommonError>> {
             let mut errs = vec![];
             Self::structure_assembling(code)
                 .into_iter()
@@ -302,7 +341,7 @@ mod enum_ {
         }
         fn structure_assembling<'a>(
             code: &'a Code,
-        ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>>;
+        ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, CommonError> + 'a>>;
     }
 
     /// ниже диначиеское представление
@@ -382,12 +421,12 @@ mod repetiotion {
     type Items = Vec<Item>;
 
     pub trait RepetitionRecog {
-        type Item: WrappedRecog;
-        type Output = Vec<<Self::Item as WrappedRecog>::Output>;
+        type Item: CommonRecog;
+        type Output = Vec<<Self::Item as CommonRecog>::Output>;
         fn cursor_aware_recog(code: &Code) -> Self::Output;
     }
 
-    impl<T: WrappedRecog> RepetitionRecog for Vec<T>
+    impl<T: CommonRecog> RepetitionRecog for Vec<T>
     where
         T::Output: Spanable,
     {
@@ -396,7 +435,7 @@ mod repetiotion {
             let mut vec = vec![];
             let mut code = code.clone();
             loop {
-                let Ok(item) = Self::Item::recog(&code) else {
+                let Ok(item) = Self::Item::recog(dbg!(&code)) else {
                     break;
                 };
                 code.cursor = item.span().end;
@@ -432,10 +471,110 @@ mod repetiotion {
 }
 use repetiotion::*;
 
-mod args;
-use args::*;
+mod error {
+    use super::*;
+    impl CommonError {
+        pub fn diag_display(&self, slice: Slice, source: &str) -> String {
+            match self {
+                CommonError::Token(b) => b.tmp(source),
+                CommonError::Enum(v) => v
+                    .into_iter()
+                    .map(|v| v.diag_display(slice.clone(), source).to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                CommonError::Seq(v) => v.diag_display(slice.clone(), source),
+            }
+        }
+    }
 
+    impl TokenError {
+        pub fn tmp(&self, source2: &str) -> String {
+            let (slice2, m) = match self {
+                TokenError::CommonTokenError(slice, m) => (slice.clone(), m),
+                TokenError::LineOver => return format!("LineOver"),
+            };
+
+            let slice = {
+                let v = source2[..slice2.start].chars().count();
+                v..v + source2[slice2.clone()].chars().count() + 1
+            };
+
+            let mut iter = source2.split_inclusive('\n').enumerate();
+            let mut get_line = |pos| {
+                let mut acc = 0;
+                iter.find_map(|(i, str)| {
+                    acc += str.chars().count();
+                    (pos < acc).then_some(i + 1)
+                })
+                .unwrap_or_default()
+            };
+
+            let f = |v: &[char]| v.iter().collect::<std::string::String>();
+
+            let source = source2.chars().collect::<Vec<_>>();
+
+            let (l, b, [min, max]) = ("|".blue(), "...", [0, 4]);
+
+            let [distr_after, distr_before] = [
+                slice.start > min,
+                source.len().saturating_sub(slice.end - 1) != 0
+                    && source.len() - 1 - slice.end - 1 >= max,
+            ]
+            .map(|cond| cond.then_some(b).unwrap_or_default());
+
+            let code = format!(
+                "{}{}{}",
+                f(&source
+                    .get({
+                        let i = slice.start;
+                        let r = if i < min { 0 } else { i - min };
+                        r..i
+                    })
+                    .unwrap_or_default()),
+                f(&source
+                    .get(slice.clone())
+                    .unwrap_or(&[*source.last().unwrap()]))
+                .underline()
+                .red(),
+                f(&source
+                    .get({
+                        let i = slice.end - 1;
+                        if source.len().saturating_sub(i) == 0 {
+                            i..source.len()
+                        } else {
+                            i + 1..if source.len() - 1 - i < max {
+                                source.len()
+                            } else {
+                                i + max
+                            }
+                        }
+                    })
+                    .unwrap_or_default())
+            );
+
+            let front_p = 3;
+            let f = " ".repeat(front_p);
+
+            format!(
+                "
+    {f}{l}
+    {}{l} {}{code}{}
+    {f}{l} {}{}
+    ",
+                format!("{:width$} ", get_line(slice.end - 1), width = front_p - 1),
+                distr_after.blue(),
+                distr_before.blue(),
+                " ".repeat(min + distr_after.chars().count()),
+                format!("{}-Ожидается {self:?}", "^".repeat(slice2.len())).red()
+            )
+        }
+    }
+}
+use error::*;
+
+mod args;
 use crate::lexer2::print::Print;
+use args::*;
 
 mod items;
 

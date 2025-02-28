@@ -282,7 +282,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                             type Output = Self;
                             fn structure_assembling<'a>(
                                 code: &'a Code,
-                            ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>> {
+                            ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, CommonError> + 'a>> {
                                 vec![
                                     #(
                                         Box::new(|| #c::recog(code).map(Self::#b))
@@ -376,7 +376,7 @@ pub fn enum_recog(input: TokenStream) -> TokenStream {
             type Output = Self;
             fn structure_assembling<'a>(
                 code: &'a Code,
-            ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>> {
+            ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, CommonError> + 'a>> {
                 vec![
                     #(
                         Box::new(|| <#b>::recog(code).map(Self::#a))

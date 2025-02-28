@@ -14,11 +14,16 @@ pub struct String;
 
 impl TokenRecog for Token<String> {
     type Inner = String;
-    fn start_string_aware_recog(code: &str) -> Result<Slice, &'static str> {
+    fn start_string_aware_recog(code: &str) -> Result<Slice, TokenError> {
         let mut iter = code.char_indices();
 
-        let (i, char) = iter.next().ok_or("LineOver")?;
-        let start = (char == '"').then_some(i).ok_or("StartsWithQuote")?;
+        let (i, char) = iter.next().ok_or(TokenError::LineOver)?;
+        let start = (char == '"')
+            .then_some(i)
+            .ok_or(TokenError::CommonTokenError(
+                0..1,
+                CommonTokenError::CurrentErrors("StartsWithQuote"),
+            ))?;
 
         for (i, char) in iter.clone() {
             if char == '"' {
@@ -28,7 +33,10 @@ impl TokenRecog for Token<String> {
 
         let tmp = iter.last().unwrap().0;
 
-        Err("EndsWithQuote")
+        Err(TokenError::CommonTokenError(
+            tmp..tmp + 1,
+            CommonTokenError::CurrentErrors("EndsWithQuote"),
+        ))
     }
 }
 
@@ -42,10 +50,10 @@ impl EnumRecog for Item {
     type Output = Self;
     fn structure_assembling<'a>(
         code: &'a Code,
-    ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>> {
+    ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, CommonError> + 'a>> {
         vec![
-            Box::new(|| Token::<Ident>::recog(code).map(Self::Ident)),
-            Box::new(|| Token::<String>::recog(code).map(Self::String)),
+            Box::new(|| <Token<Ident>>::recog(code).map(Self::Ident)),
+            Box::new(|| <Token<String>>::recog(code).map(Self::String)),
         ]
     }
 }
@@ -55,7 +63,7 @@ pub struct IdentString(pub Token<Ident>, pub Token<String>, pub Token<Ident>);
 
 impl SequenceRecog for IdentString {
     type Output = Self;
-    fn structure_assembling(code: &mut Code) -> Result<Self::Output, &'static str> {
+    fn structure_assembling(code: &mut Code) -> Result<Self::Output, CommonError> {
         Ok(Self(
             Self::promotion::<Token<Ident>>(code)?,
             Self::promotion::<Token<String>>(code)?,

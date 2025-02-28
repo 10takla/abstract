@@ -102,10 +102,10 @@ mod tokens {
 
     impl TokenRecog for Ident {
         type Inner = IdentMarker;
-        fn start_string_aware_recog(code: &str) -> Result<Slice, &'static str> {
+        fn start_string_aware_recog(code: &str) -> Result<Slice, TokenError> {
             let mut iter = code.char_indices();
 
-            let (i, char) = iter.next().ok_or("LineOver")?;
+            let (i, char) = iter.next().ok_or(TokenError::LineOver)?;
 
             let start_rule = |char: char| char.is_alphabetic() || char == '_';
             if let Some(start) = start_rule(char).then_some(i) {
@@ -121,14 +121,20 @@ mod tokens {
                 }
             } else {
                 if i == code.len() - 1 {
-                    Err("StartsWithAlphabetic")
+                    Err(TokenError::CommonTokenError(
+                        i..i + 1,
+                        CommonTokenError::CurrentErrors("StartsWithAlphabetic"),
+                    ))
                 } else {
                     let end = iter
                         .find_map(|(i, char)| {
                             (!(start_rule(char) || char.is_digit(10))).then_some(i - 1)
                         })
                         .unwrap_or_else(|| code.len() - 1);
-                    Err("Alphabetic")
+                    Err(TokenError::CommonTokenError(
+                        i..end + 1,
+                        CommonTokenError::CurrentErrors("Alphabetic"),
+                    ))
                 }
             }
         }
@@ -138,13 +144,24 @@ mod tokens {
     pub struct StringMarker;
     pub type String = Token<StringMarker>;
 
+    enum StringError {
+        LineOver,
+        StartsWithQuote,
+        EndsWithQuote,
+    }
+
     impl TokenRecog for String {
         type Inner = StringMarker;
-        fn start_string_aware_recog(code: &str) -> Result<Slice, &'static str> {
+        fn start_string_aware_recog(code: &str) -> Result<Slice, TokenError> {
             let mut iter = code.char_indices();
 
-            let (i, char) = iter.next().ok_or("LineOver")?;
-            let start = (char == '"').then_some(i).ok_or("StartsWithQuote")?;
+            let (i, ch) = iter.next().ok_or(TokenError::LineOver)?;
+            let start = (ch == '"')
+                .then_some(i)
+                .ok_or(TokenError::CommonTokenError(
+                    i..i + ch.len_utf8(),
+                    CommonTokenError::CurrentErrors("StartsWithQuote"),
+                ))?;
 
             for (i, char) in iter.clone() {
                 if char == '"' {
@@ -152,9 +169,11 @@ mod tokens {
                 }
             }
 
-            let tmp = iter.last().unwrap().0;
-
-            Err("EndsWithQuote")
+            let (i, ch) = iter.last().unwrap();
+            Err(TokenError::CommonTokenError(
+                i..i + ch.len_utf8(),
+                CommonTokenError::CurrentErrors("EndsWithQuote"),
+            ))
         }
     }
 }

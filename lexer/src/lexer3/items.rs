@@ -1,6 +1,6 @@
 use super::*;
 use lexer3_macros::Spanable;
-use std::str::CharIndices;
+use std::{any::TypeId, str::CharIndices};
 
 #[derive(Debug, PartialEq)]
 pub struct Ident;
@@ -40,12 +40,10 @@ pub enum Item {
 
 impl EnumRecog for Item {
     type Output = Self;
-    const N: usize = 2;
-    
     fn structure_assembling<'a>(
         code: &'a Code,
-    ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N] {
-        [
+    ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>> {
+        vec![
             Box::new(|| Token::<Ident>::recog(code).map(Self::Ident)),
             Box::new(|| Token::<String>::recog(code).map(Self::String)),
         ]
@@ -70,4 +68,16 @@ impl SequenceRecog for IdentString {
 
 // impl MarkerConversion for IdentStringMarker {
 //     type Output = IdentString;
+// }
+
+struct IdentCache;
+
+// impl Cachable for Token<Ident> {
+//     fn get_cache(&self) {
+
+//     }
+// }
+
+// fn tmp() {
+//     <Token<Ident>>::check_cache(&"".into(), &vec![TypeId::of::<Token<Ident>>()]);
 // }

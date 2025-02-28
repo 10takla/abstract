@@ -280,12 +280,10 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                         
                         impl EnumRecog for #name {
                             type Output = Self;
-                            const N: usize = #n;
-            
                             fn structure_assembling<'a>(
                                 code: &'a Code,
-                            ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N] {
-                                [
+                            ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>> {
+                                vec![
                                     #(
                                         Box::new(|| #c::recog(code).map(Self::#b))
                                     ),*
@@ -376,12 +374,10 @@ pub fn enum_recog(input: TokenStream) -> TokenStream {
     quote! {
         impl EnumRecog for #ident {
             type Output = Self;
-            const N: usize = #count;
-
             fn structure_assembling<'a>(
                 code: &'a Code,
-            ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N] {
-                [
+            ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>> {
+                vec![
                     #(
                         Box::new(|| <#b>::recog(code).map(Self::#a))
                     ),*
@@ -397,12 +393,10 @@ fn impl_enum(name: Ident, variants: impl Iterator<Item = Type> + Clone, count: u
     quote! {
         impl EnumRecog for #name {
             type Output = Self;
-            const N: usize = #count;
-
             fn structure_assembling<'a>(
                 code: &'a Code,
-            ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N] {
-                [
+            ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>> {
+                vec![
                     #(
                         Box::new(|| <#variants>::recog(code).map(Self::#a))
                     ),*

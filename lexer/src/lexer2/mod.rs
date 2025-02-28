@@ -28,7 +28,7 @@ pub mod code;
 mod constructor;
 pub use constructor::*;
 
-mod print;
+pub mod print;
 mod tests;
 
 use cache_and_diags::{diag::Diag, Cache, CacheAndDiags, PassList};

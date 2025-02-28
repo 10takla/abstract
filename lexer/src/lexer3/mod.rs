@@ -1,12 +1,64 @@
 use paste::paste;
 use regex::Regex;
-use std::{any::Any, marker::PhantomData, ops::Range};
+use std::{any::Any, cell::RefCell, marker::PhantomData, ops::Range};
 
 type Slice = Range<usize>;
 
 pub trait Spanable {
     fn span(&self) -> Slice;
 }
+
+struct Ctxt<'a> {
+    code: &'a Code<'a>,
+    logger: (Print, RefCell<usize>),
+}
+
+mod cache {
+    use super::{wrapper::WrappedRecog, *};
+    use std::{
+        any::{Any, TypeId},
+        collections::{HashMap, HashSet},
+    };
+
+    pub trait CacheRecog: WrappedRecog + Sized + 'static {
+        fn cache_recog(
+            ctxt: Ctxt,
+            cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
+        ) -> Result<<Self as WrappedRecog>::Output, &'static str>
+        where
+            <Self as WrappedRecog>::Output: Clone,
+        {
+            if let Some(v) = Self::check_cache(ctxt.code, cache)
+                .and_then(|v| v.downcast_ref::<<Self as WrappedRecog>::Output>())
+            {
+                Ok((*v).clone())
+            } else {
+                Self::recog(ctxt.code).map(|v| {
+                    Self::set_cache(v.clone(), ctxt.code, cache);
+                    v
+                })
+            }
+        }
+
+        fn check_cache<'a>(
+            code: &Code,
+            cache: &'a HashMap<(usize, TypeId), Box<dyn Any>>,
+        ) -> Option<&'a Box<dyn Any>> {
+            cache.get(&(code.cursor, TypeId::of::<Self>()))
+        }
+
+        fn set_cache(
+            v: <Self as WrappedRecog>::Output,
+            code: &Code,
+            cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
+        ) {
+            cache.insert((code.cursor, TypeId::of::<Self>()), Box::new(v));
+        }
+    }
+
+    impl<T: WrappedRecog + Clone + 'static> CacheRecog for T {}
+}
+use cache::*;
 
 mod wrapper {
     use super::*;
@@ -17,10 +69,7 @@ mod wrapper {
         fn recog(code: &Code) -> Result<Self::Output, &'static str>;
     }
 
-    impl<T: EnumRecog> WrappedRecog for T
-    where
-        [(); T::N]: Sized,
-    {
+    impl<T: EnumRecog> WrappedRecog for T {
         type Output = T::Output;
         fn recog(code: &Code) -> Result<Self::Output, &'static str> {
             T::cursor_aware_recog(code).map_err(|v| v[0])
@@ -244,11 +293,7 @@ mod enum_ {
 
     pub trait EnumRecog {
         type Output;
-        const N: usize;
-        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<&'static str>>
-        where
-            [(); Self::N]: Sized,
-        {
+        fn cursor_aware_recog(code: &Code) -> Result<Self::Output, Vec<&'static str>> {
             let mut errs = vec![];
             Self::structure_assembling(code)
                 .into_iter()
@@ -257,7 +302,7 @@ mod enum_ {
         }
         fn structure_assembling<'a>(
             code: &'a Code,
-        ) -> [Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>; Self::N];
+        ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, &'static str> + 'a>>;
     }
 
     /// ниже диначиеское представление
@@ -389,6 +434,8 @@ use repetiotion::*;
 
 mod args;
 use args::*;
+
+use crate::lexer2::print::Print;
 
 mod items;
 

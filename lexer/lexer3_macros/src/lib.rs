@@ -293,8 +293,13 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                     }
                 },
                 ItemType::Items(ItemsInput {item, break_, join}) => {
+                    let v = if let Some(v) = break_ {
+                        quote! {BreakRepetition<#item, #v>}
+                    }else {
+                        quote! {Vec<#item>}
+                    };
                     quote! {
-                        type #name = Vec<#item>;
+                        type #name = #v;
                     }
                 },
                 ItemType::Token(TokenInput(reg)) => {
@@ -331,7 +336,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                             }
                         };
                     quote! {
-                        pub type #name = ( #(#item_names),* );
+                        pub type #name = ( #(<#item_names as CommonRecog>::Output),* );
                     }
                 },
             }

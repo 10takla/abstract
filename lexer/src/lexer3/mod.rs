@@ -123,7 +123,17 @@ mod wrapper {
     where
         Vec<T>: RepetitionRecog,
     {
-        type Output = <Vec<T> as RepetitionRecog>::Output;
+        type Output = Vec<<<Vec<T> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        fn recog(code: &Code) -> Result<Self::Output, CommonError> {
+            Ok(Self::cursor_aware_recog(code))
+        }
+    }
+    impl<T, B> CommonRecog for BreakRepetition<T, B>
+    where
+        BreakRepetition<T, B>: RepetitionRecog,
+    {
+        type Output =
+            Vec<<<BreakRepetition<T, B> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(code: &Code) -> Result<Self::Output, CommonError> {
             Ok(Self::cursor_aware_recog(code))
         }
@@ -416,26 +426,25 @@ use enum_::*;
 mod repetiotion {
     use super::*;
     use items::*;
-    use std::fmt::Debug;
+    use std::{fmt::Debug, ops::ControlFlow};
 
     type Items = Vec<Item>;
 
-    pub trait RepetitionRecog {
-        type Item: CommonRecog;
-        type Output = Vec<<Self::Item as CommonRecog>::Output>;
-        fn cursor_aware_recog(code: &Code) -> Self::Output;
+    impl CommonRecog for () {
+        type Output = ();
+        fn recog(code: &Code) -> Result<Self::Output, CommonError> {
+            Err(CommonError::Token(TokenError::LineOver))
+        }
     }
 
-    impl<T: CommonRecog> RepetitionRecog for Vec<T>
-    where
-        T::Output: Spanable,
-    {
-        type Item = T;
-        fn cursor_aware_recog(code: &Code) -> Self::Output {
+    pub trait RepetitionRecog {
+        type Item: CommonRecog<Output: Spanable>;
+
+        fn cursor_aware_recog(code: &Code) -> Vec<<Self::Item as CommonRecog>::Output> {
             let mut vec = vec![];
             let mut code = code.clone();
             loop {
-                let Ok(item) = Self::Item::recog(dbg!(&code)) else {
+                let Ok(item) = Self::Item::recog(&code) else {
                     break;
                 };
                 code.cursor = item.span().end;
@@ -443,6 +452,42 @@ mod repetiotion {
             }
             vec
         }
+    }
+
+    pub struct BreakRepetition<T, B> {
+        inner: Vec<T>,
+        break_: PhantomData<B>,
+    }
+
+    impl<T: CommonRecog<Output: Spanable>, B: CommonRecog> RepetitionRecog for BreakRepetition<T, B> {
+        type Item = T;
+        fn cursor_aware_recog(code: &Code) -> Vec<<Self::Item as CommonRecog>::Output> {
+            let mut vec = vec![];
+            let mut code = code.clone();
+            loop {
+                if let Ok(v) = B::recog(&code) {
+                    break;
+                }
+
+                if let Ok(item) = Self::Item::recog(&code) {
+                    code.cursor = item.span().end;
+                    vec.push(item);
+                } else {
+                    break;
+                }
+            }
+            vec
+        }
+    }
+
+    impl<T: Spanable, B> Spanable for BreakRepetition<T, B> {
+        fn span(&self) -> Slice {
+            self.inner.span()
+        }
+    }
+
+    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for Vec<T> {
+        type Item = T;
     }
 
     impl<T: Spanable> Spanable for Vec<T> {

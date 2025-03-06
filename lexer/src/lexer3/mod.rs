@@ -461,11 +461,7 @@ mod repetiotion {
         fn promotion(
             ctxt: &mut Ctxt,
             vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
-        ) -> Result<(), ControlFlow<()>>
-        where
-            <<Self as repetiotion::RepetitionRecog>::Item as wrapper::CommonRecog>::Output:
-                std::fmt::Debug,
-        {
+        ) -> Result<(), ControlFlow<()>> {
             Self::Item::recog(&ctxt)
                 .map(|item| {
                     ctxt.code.cursor = item.span().end;
@@ -497,10 +493,7 @@ mod repetiotion {
         inner: Vec<T>,
     }
 
-    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for ErrorBreakRepetition<T>
-    where
-        <T as CommonRecog>::Output: std::fmt::Debug,
-    {
+    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for ErrorBreakRepetition<T> {
         type Item = T;
         fn iter(
             ctxt: &mut Ctxt,
@@ -525,10 +518,7 @@ mod repetiotion {
         break_: PhantomData<B>,
     }
 
-    impl<T: CommonRecog<Output: Spanable>, B: CommonRecog> RepetitionRecog for BreakRepetition<T, B>
-    where
-        <T as CommonRecog>::Output: std::fmt::Debug,
-    {
+    impl<T: CommonRecog<Output: Spanable>, B: CommonRecog> RepetitionRecog for BreakRepetition<T, B> {
         type Item = T;
         fn iter(
             ctxt: &mut Ctxt,
@@ -550,11 +540,7 @@ mod repetiotion {
         }
     }
 
-    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for Vec<T>
-    where
-        Vec<<T as CommonRecog>::Output>: std::fmt::Debug,
-        <T as CommonRecog>::Output: std::fmt::Debug,
-    {
+    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for Vec<T> {
         type Item = T;
         fn iter(
             ctxt: &mut Ctxt,

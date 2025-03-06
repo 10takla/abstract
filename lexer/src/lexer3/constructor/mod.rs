@@ -1,8 +1,17 @@
 use super::*;
-use lexer3_macros::{constructor, EnumRecog, Spanable};
+use lexer3_macros::{constructor, peg_grammar, EnumRecog, Spanable};
 use std::str::CharIndices;
 
-constructor!(
+mod tmp {
+    use super::*;
+    use lexer3_macros::RegularToken;
+
+    peg_grammar! {
+        Op <- (r#"1"# / r#"2"#)* / r#"3"#;
+    }
+}
+
+constructor! {
     Item { FnC | StructC | TraitC | ImplV | AnyBlock | ConstC | AssignExpr | Literal | Ident }
             TraitC (Trait Ident MethodsC) { join Ignore }
                 MethodsC (OpenFigureBracket MethodsI CloseFigureBracket) { join Ignore }
@@ -91,7 +100,7 @@ constructor!(
 
     Comma ","
     Colon ":"
-);
+}
 
 mod tokens {
     use super::*;

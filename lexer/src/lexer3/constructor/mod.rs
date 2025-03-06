@@ -31,7 +31,7 @@ constructor!(
         Args { StructArgsC | TupleType }
             StructArgsC (OpenFigureBracket StructArgsI CloseFigureBracket)
                 StructArgsI <IdentAndTypeC> {break CloseFigureBracket}
-        Ignore <IgnoreV> {}
+        Ignore <IgnoreV> { break_on_error }
             IgnoreV { WhiteSpace | NextLine | Tab }
                 WhiteSpace r" +"
                 NextLine r"\n"
@@ -64,7 +64,7 @@ constructor!(
                                     PathItemC (PathItemV Comma)
                                         PathItemV { Self_ | Super | GlobImport | Ident }
                                             GlobImport r#"\*"#
-                    IdentPath <PathEl> {}
+                    IdentPath <PathEl> { break_on_error }
                         PathEl (NameSpace Ident) { join Ignore }
     // keywords
     Fn "fn"
@@ -96,7 +96,7 @@ constructor!(
 mod tokens {
     use super::*;
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     pub struct IdentMarker;
     pub type Ident = Token<IdentMarker>;
 
@@ -140,7 +140,7 @@ mod tokens {
         }
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     pub struct StringMarker;
     pub type String = Token<StringMarker>;
 
@@ -183,6 +183,7 @@ mod items {
     use super::*;
     use crate::lexer2::NameSpace;
     use macros::parse_test;
+    use std::vec;
 
     #[test]
     fn path() {

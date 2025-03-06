@@ -179,6 +179,7 @@ struct ItemsInput {
     item: Ident,
     break_: Option<Ident>,
     join: Option<Ident>,
+    break_on_error: bool
 }
 
 impl Parse for ItemsInput {
@@ -192,22 +193,27 @@ impl Parse for ItemsInput {
         
         let mut break_ = None;
         let mut join = None;
+        let mut break_on_error = false;
 
         if input.peek(Brace) {
             let content;
             syn::braced!(content in input);
     
-            for _ in 0..2 {
+            for _ in 0..3 {
                 if Break::parse(&content).is_ok() {
                     break_ = Parse::parse(&content)?;
-                }
-                if let Ok(v) = Ident::parse(&content) && v == "join" {
-                    join = Parse::parse(&content)?;
+                } else if let Ok(v) = Ident::parse(&content)  {
+                    if v == "join" {
+                        join = Parse::parse(&content)?;
+                    }
+                    if v == "break_on_error" {
+                        break_on_error = true;    
+                    }
                 }
             }
         }
 
-        Ok(Self { item, break_, join })
+        Ok(Self { item, break_, join, break_on_error })
     }
 }
 
@@ -243,7 +249,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
 
     let get_type = |v| {
         if names.seqences.contains(&v) {
-            quote! {Seq::<#v>}
+            quote! {<Seq<#v>>}
         } else {
             quote! {#v}
         }
@@ -275,28 +281,32 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                     quote! {
                         #[derive(Spanable, Debug, PartialEq)]
                         pub enum #name {
-                            #(#b(#b)),*
+                            #(#b(<#b as CommonRecog>::Output)),*
                         }
                         
                         impl EnumRecog for #name {
                             type Output = Self;
                             fn structure_assembling<'a>(
-                                code: &'a Code,
+                                ctxt: &'a Ctxt,
                             ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, CommonError> + 'a>> {
                                 vec![
                                     #(
-                                        Box::new(|| #c::recog(code).map(Self::#b))
+                                        Box::new(|| #c::recog(ctxt).map(Self::#b))
                                     ),*
                                 ]
                             }
                         }
                     }
                 },
-                ItemType::Items(ItemsInput {item, break_, join}) => {
-                    let v = if let Some(v) = break_ {
-                        quote! {BreakRepetition<#item, #v>}
-                    }else {
-                        quote! {Vec<#item>}
+                ItemType::Items(ItemsInput {item, break_, join, break_on_error}) => {
+                    let v = if break_on_error {
+                        quote! {ErrorBreakRepetition<#item>}
+                    } else {
+                        if let Some(v) = break_ {
+                            quote! {BreakRepetition<#item, #v>}
+                        }else {
+                            quote! {Vec<#item>}
+                        }
                     };
                     quote! {
                         type #name = #v;
@@ -312,7 +322,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                             impl RegularToken for [<#name Marker>] {
                                 const REG_EXPR: &'static str = #reg;
                             }
-                
+                            
                             pub type #name = Token<[<#name Marker>]>;
                         }
                     }
@@ -336,7 +346,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                             }
                         };
                     quote! {
-                        pub type #name = ( #(<#item_names as CommonRecog>::Output),* );
+                        pub type #name = ( #(#item_names),* );
                     }
                 },
             }
@@ -380,11 +390,11 @@ pub fn enum_recog(input: TokenStream) -> TokenStream {
         impl EnumRecog for #ident {
             type Output = Self;
             fn structure_assembling<'a>(
-                code: &'a Code,
+                ctxt: &'a Ctxt,
             ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, CommonError> + 'a>> {
                 vec![
                     #(
-                        Box::new(|| <#b>::recog(code).map(Self::#a))
+                        Box::new(|| <#b>::recog(ctxt).map(Self::#a))
                     ),*
                 ]
             }

@@ -7,8 +7,22 @@ mod tmp {
     use lexer3_macros::RegularToken;
 
     peg_grammar! {
-        Op <- (r#"1"# / r#"2"#)* / r#"3"#;
+        Op <- "sdf" ("sdf") / ("sdf" / "sdf") &"sdf" !"sdf" "sdf"? "sdf"+ "sdf"* ("sdf")* (&"sdf")+ (!"sdf")+ ("sdf"?)+;
     }
+}
+
+#[test]
+fn not_predicate() {
+    <NotPredicate<Ident>>::recog(&"".into()).unwrap();
+
+    assert_eq!(
+        <(String, NotPredicate<Ident>)>::recog(&r#""sdf""#.into()).unwrap(),
+        (String::new(0..5), ())
+    );
+    assert_eq!(
+        <(String, NotPredicate<Ident>)>::recog(&r#""sdf"sdfsdf"#.into()).unwrap_err(),
+        CommonError::NotPredicate(5..11)
+    );
 }
 
 constructor! {

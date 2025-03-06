@@ -60,13 +60,18 @@ mod wrapper {
     use super::*;
     use crate::tuple_impl;
     use lexer3_macros::Spanable;
-    use std::fmt::Display;
+    use std::{
+        fmt::{Debug, Display},
+        rc::Rc,
+    };
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum CommonError {
         Token(TokenError),
         Enum(Vec<CommonError>),
         Seq(Box<CommonError>),
+        NotPredicate(Slice),
+        OneOrMore(usize),
     }
 
     pub trait CommonRecog {
@@ -121,7 +126,7 @@ mod wrapper {
     {
         type Output = Vec<<<Vec<T> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Ok(Self::cursor_aware_recog(ctxt))
+            Self::cursor_aware_recog(ctxt)
         }
     }
     impl<T, B> CommonRecog for BreakRepetition<T, B>
@@ -131,7 +136,7 @@ mod wrapper {
         type Output =
             Vec<<<BreakRepetition<T, B> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Ok(Self::cursor_aware_recog(ctxt))
+            Self::cursor_aware_recog(ctxt)
         }
     }
     impl<T> CommonRecog for ErrorBreakRepetition<T>
@@ -141,7 +146,63 @@ mod wrapper {
         type Output =
             Vec<<<ErrorBreakRepetition<T> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Ok(Self::cursor_aware_recog(ctxt))
+            Self::cursor_aware_recog(ctxt)
+        }
+    }
+    impl<T> CommonRecog for OneOrMore<T>
+    where
+        OneOrMore<T>: RepetitionRecog,
+    {
+        type Output = Vec<<<OneOrMore<T> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            Self::cursor_aware_recog(ctxt)
+        }
+    }
+
+    pub struct AndPredicate<T: CommonRecog>(T::Output, PhantomData<T>);
+
+    impl<T: CommonRecog<Output: Spanable>> CommonRecog for AndPredicate<T> {
+        type Output = AndPredicate<T>;
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            T::recog(ctxt).map(|v| AndPredicate(v, PhantomData))
+        }
+    }
+
+    impl<T: CommonRecog + Spanable> Spanable for AndPredicate<T> {
+        fn span(&self) -> Slice {
+            0..0
+        }
+    }
+
+    pub struct NotPredicate<T>(PhantomData<T>);
+
+    impl<T: CommonRecog<Output: Spanable>> CommonRecog for NotPredicate<T> {
+        type Output = ();
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            if let Ok(v) = T::recog(ctxt) {
+                Err(CommonError::NotPredicate(v.span()))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    impl Spanable for () {
+        fn span(&self) -> Slice {
+            0..0
+        }
+    }
+
+    impl<T: CommonRecog> CommonRecog for Option<T> {
+        type Output = Option<T::Output>;
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            Ok(T::recog(ctxt).ok())
+        }
+    }
+
+    impl<T: Spanable> Spanable for Option<T> {
+        fn span(&self) -> Slice {
+            self.as_ref().map(|v| v.span()).unwrap_or_default()
         }
     }
 }
@@ -170,13 +231,13 @@ mod token {
         const REG_EXPR: &'static str;
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum TokenError {
         CommonTokenError(Slice, CommonTokenError),
         LineOver,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum CommonTokenError {
         CurrentErrors(&'static str),
         RegularToken(&'static str),
@@ -445,12 +506,14 @@ mod repetiotion {
 
     pub trait RepetitionRecog {
         type Item: CommonRecog<Output: Spanable>;
-        fn cursor_aware_recog(ctxt: &Ctxt) -> Vec<<Self::Item as CommonRecog>::Output> {
+        fn cursor_aware_recog(
+            ctxt: &Ctxt,
+        ) -> Result<Vec<<Self::Item as CommonRecog>::Output>, CommonError> {
             let mut vec = vec![];
             let mut ctxt = ctxt.clone();
 
             (0..).try_for_each(|_| Self::iter(&mut ctxt, &mut vec));
-            vec
+            Ok(vec)
         }
 
         fn iter(
@@ -476,6 +539,8 @@ mod repetiotion {
                                 TokenError::CommonTokenError(s, _) => Ok(s.end),
                                 TokenError::LineOver => Err(()),
                             },
+                            CommonError::NotPredicate(v) => Ok(v.end),
+                            CommonError::OneOrMore(v) => Ok(*v),
                         }
                     }
                     ctxt.code.cursor = if let Ok(v) = tmp(&e) {
@@ -489,9 +554,7 @@ mod repetiotion {
         }
     }
 
-    pub struct ErrorBreakRepetition<T> {
-        inner: Vec<T>,
-    }
+    pub struct ErrorBreakRepetition<T>(PhantomData<T>);
 
     impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for ErrorBreakRepetition<T> {
         type Item = T;
@@ -507,14 +570,37 @@ mod repetiotion {
         }
     }
 
-    impl<T: Spanable> Spanable for ErrorBreakRepetition<T> {
-        fn span(&self) -> Slice {
-            self.inner.span()
+    pub struct OneOrMore<T>(PhantomData<T>);
+
+    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for OneOrMore<T> {
+        type Item = T;
+        fn cursor_aware_recog(
+            ctxt: &Ctxt,
+        ) -> Result<Vec<<Self::Item as CommonRecog>::Output>, CommonError> {
+            let mut vec = vec![];
+            let mut ctxt = ctxt.clone();
+
+            (0..).try_for_each(|_| Self::iter(&mut ctxt, &mut vec));
+
+            if vec.is_empty() {
+                return Err(CommonError::OneOrMore(ctxt.code.cursor));
+            }
+            Ok(vec)
+        }
+
+        fn iter(
+            ctxt: &mut Ctxt,
+            vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
+        ) -> ControlFlow<()> {
+            if let Err(ControlFlow::Break(())) = Self::promotion(ctxt, vec) {
+                return ControlFlow::Break(());
+            }
+            ControlFlow::Continue(())
         }
     }
 
     pub struct BreakRepetition<T, B> {
-        inner: Vec<T>,
+        inner: PhantomData<T>,
         break_: PhantomData<B>,
     }
 
@@ -531,12 +617,6 @@ mod repetiotion {
                 return ControlFlow::Break(());
             }
             ControlFlow::Continue(())
-        }
-    }
-
-    impl<T: Spanable, B> Spanable for BreakRepetition<T, B> {
-        fn span(&self) -> Slice {
-            self.inner.span()
         }
     }
 
@@ -566,7 +646,7 @@ mod repetiotion {
     #[test]
     fn test() {
         assert_eq!(
-            Vec::<Item>::cursor_aware_recog(&r#""n""n""#.into()),
+            Vec::<Item>::cursor_aware_recog(&r#""n""n""#.into()).unwrap(),
             vec![
                 Item::String(Token::new(0..3)),
                 Item::String(Token::new(3..6))
@@ -582,6 +662,7 @@ use repetiotion::*;
 
 mod error {
     use super::*;
+    use std::fmt::Display;
     impl CommonError {
         pub fn diag_display(&self, slice: Slice, source: &str) -> String {
             match self {
@@ -592,6 +673,8 @@ mod error {
                     .collect::<Vec<_>>()
                     .join("\n"),
                 CommonError::Seq(v) => v.diag_display(slice.clone(), source),
+                CommonError::NotPredicate(v) => tmp(v.clone(), source, "NotPredicate"),
+                CommonError::OneOrMore(v) => tmp(*v..*v + 1, source, "OneOrMore"),
             }
         }
     }
@@ -602,81 +685,84 @@ mod error {
                 TokenError::CommonTokenError(slice, m) => (slice.clone(), m),
                 TokenError::LineOver => return format!("LineOver"),
             };
-
-            let slice = {
-                let v = source2[..slice2.start].chars().count();
-                v..v + source2[slice2.clone()].chars().count() + 1
-            };
-
-            let mut iter = source2.split_inclusive('\n').enumerate();
-            let mut get_line = |pos| {
-                let mut acc = 0;
-                iter.find_map(|(i, str)| {
-                    acc += str.chars().count();
-                    (pos < acc).then_some(i + 1)
-                })
-                .unwrap_or_default()
-            };
-
-            let f = |v: &[char]| v.iter().collect::<std::string::String>();
-
-            let source = source2.chars().collect::<Vec<_>>();
-
-            let (l, b, [min, max]) = ("|".blue(), "...", [0, 4]);
-
-            let [distr_after, distr_before] = [
-                slice.start > min,
-                source.len().saturating_sub(slice.end - 1) != 0
-                    && source.len() - 1 - slice.end - 1 >= max,
-            ]
-            .map(|cond| cond.then_some(b).unwrap_or_default());
-
-            let code = format!(
-                "{}{}{}",
-                f(&source
-                    .get({
-                        let i = slice.start;
-                        let r = if i < min { 0 } else { i - min };
-                        r..i
-                    })
-                    .unwrap_or_default()),
-                f(&source
-                    .get(slice.clone())
-                    .unwrap_or(&[*source.last().unwrap()]))
-                .underline()
-                .red(),
-                f(&source
-                    .get({
-                        let i = slice.end - 1;
-                        if source.len().saturating_sub(i) == 0 {
-                            i..source.len()
-                        } else {
-                            i + 1..if source.len() - 1 - i < max {
-                                source.len()
-                            } else {
-                                i + max
-                            }
-                        }
-                    })
-                    .unwrap_or_default())
-            );
-
-            let front_p = 3;
-            let f = " ".repeat(front_p);
-
-            format!(
-                "
-    {f}{l}
-    {}{l} {}{code}{}
-    {f}{l} {}{}
-    ",
-                format!("{:width$} ", get_line(slice.end - 1), width = front_p - 1),
-                distr_after.blue(),
-                distr_before.blue(),
-                " ".repeat(min + distr_after.chars().count()),
-                format!("{}-Ожидается {self:?}", "^".repeat(slice2.len())).red()
-            )
+            tmp(slice2, source2, format!("{m:?}"))
         }
+    }
+
+    fn tmp(slice2: Slice, source2: &str, m: impl Display) -> String {
+        let slice = {
+            let v = source2[..slice2.start].chars().count();
+            v..v + source2[slice2.clone()].chars().count() + 1
+        };
+
+        let mut iter = source2.split_inclusive('\n').enumerate();
+        let mut get_line = |pos| {
+            let mut acc = 0;
+            iter.find_map(|(i, str)| {
+                acc += str.chars().count();
+                (pos < acc).then_some(i + 1)
+            })
+            .unwrap_or_default()
+        };
+
+        let f = |v: &[char]| v.iter().collect::<std::string::String>();
+
+        let source = source2.chars().collect::<Vec<_>>();
+
+        let (l, b, [min, max]) = ("|".blue(), "...", [0, 4]);
+
+        let [distr_after, distr_before] = [
+            slice.start > min,
+            source.len().saturating_sub(slice.end - 1) != 0
+                && source.len() - 1 - slice.end - 1 >= max,
+        ]
+        .map(|cond| cond.then_some(b).unwrap_or_default());
+
+        let code = format!(
+            "{}{}{}",
+            f(&source
+                .get({
+                    let i = slice.start;
+                    let r = if i < min { 0 } else { i - min };
+                    r..i
+                })
+                .unwrap_or_default()),
+            f(&source
+                .get(slice.clone())
+                .unwrap_or(&[*source.last().unwrap()]))
+            .underline()
+            .red(),
+            f(&source
+                .get({
+                    let i = slice.end - 1;
+                    if source.len().saturating_sub(i) == 0 {
+                        i..source.len()
+                    } else {
+                        i + 1..if source.len() - 1 - i < max {
+                            source.len()
+                        } else {
+                            i + max
+                        }
+                    }
+                })
+                .unwrap_or_default())
+        );
+
+        let front_p = 3;
+        let f = " ".repeat(front_p);
+
+        format!(
+            "
+{f}{l}
+{}{l} {}{code}{}
+{f}{l} {}{}
+",
+            format!("{:width$} ", get_line(slice.end - 1), width = front_p - 1),
+            distr_after.blue(),
+            distr_before.blue(),
+            " ".repeat(min + distr_after.chars().count()),
+            format!("{}-Ожидается {m}", "^".repeat(slice2.len())).red()
+        )
     }
 }
 use error::*;

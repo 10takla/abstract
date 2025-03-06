@@ -45,17 +45,46 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                         exprs(v, output, [token_count, enum_count, reps_count, seq_count])
                     }
                 };
+                let ident = Ident::new(&format!("Rep{tmp_reps_count}"), Span::call_site());
                 match v {
-                    ExprOther::ZeroOrMore(v) => {
-                        let ident = Ident::new(&format!("Rep{tmp_reps_count}"), Span::call_site());
-                        let v = expr_token(v);
+                    ExprOther::ExprToken(v) => expr_token(v),
+                    _ => {
+                        let v = match v {
+                            ExprOther::ZeroOrMore(v) => {
+                                let v = expr_token(
+                                    *v,
+                                    // output,
+                                    // [token_count, enum_count, reps_count, seq_count],
+                                );
+                                quote! {ErrorBreakRepetition<#v>}
+                            }
+                            ExprOther::OneOrMore(v) => {
+                                let v = expr_token(
+                                    *v,
+                                    // output,
+                                    // [token_count, enum_count, reps_count, seq_count],
+                                );
+                                quote! {OneOrMore<#v>}
+                            }
+                            ExprOther::NotPredicate(v) => {
+                                let v = expr_token(v);
+                                quote! {NotPredicate<#v>}
+                            }
+                            ExprOther::Optional(v) => {
+                                let v = expr_token(v);
+                                quote! {Optional<#v>}
+                            }
+                            ExprOther::AndPredicate(v) => {
+                                let v = expr_token(v);
+                                quote! {AndPredicate<#v>}
+                            }
+                            ExprOther::ExprToken(..) => unreachable!(),
+                        };
                         output.extend(quote! {
-                            type #ident = ErrorBreakRepetition<#v>;
+                            type #ident = #v;
                         });
                         ident
                     }
-                    ExprOther::ExprToken(v) => expr_token(v),
-                    _ => unreachable!(),
                 }
             };
 
@@ -65,7 +94,8 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                         .clone()
                         .into_iter()
                         .enumerate()
-                        .map(|(i, _)| Literal::usize_unsuffixed(i)).collect::<Vec<_>>();
+                        .map(|(i, _)| Literal::usize_unsuffixed(i))
+                        .collect::<Vec<_>>();
                     let v = v.into_iter().map(expr_other).collect::<Vec<_>>();
 
                     let enum_ident =
@@ -75,9 +105,9 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                             paste! {
                                 #[derive(Spanable, EnumRecog)]
                                 enum #enum_ident {
-                                    #( 
-                                        #[ty(#v)] 
-                                        [<V #i>] ( <#v as CommonRecog>::Output ) 
+                                    #(
+                                        #[ty(#v)]
+                                        [<V #i>] ( <#v as CommonRecog>::Output )
                                     ),*
                                 }
                             }
@@ -191,9 +221,9 @@ impl Parse for Expr {
 #[derive(Clone, Debug)]
 enum ExprOther {
     /// Zero-or-more: e*
-    ZeroOrMore(ExprToken),
+    ZeroOrMore(Box<ExprToken>),
     /// One-or-more: e+
-    OneOrMore(ExprToken),
+    OneOrMore(Box<ExprToken>),
     /// Optional: e?
     Optional(ExprToken),
     /// And-predicate: &e
@@ -207,7 +237,7 @@ impl Parse for ExprOther {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         (|| {
             let lookahead_input = input.fork();
-            if let Ok(expr_token) = ExprToken::parse(&lookahead_input) {
+            if let Ok(expr_token) = Parse::parse(&lookahead_input) {
                 if lookahead_input.peek(Token![*]) {
                     input.advance_to(&lookahead_input);
                     input.parse::<Token![*]>().unwrap();
@@ -218,7 +248,7 @@ impl Parse for ExprOther {
         })()
         .or_else(|_| {
             let lookahead_input = input.fork();
-            if let Ok(expr_token) = ExprToken::parse(&lookahead_input) {
+            if let Ok(expr_token) = Parse::parse(&lookahead_input) {
                 if lookahead_input.peek(Token![+]) {
                     input.advance_to(&lookahead_input);
                     input.parse::<Token![+]>().unwrap();
@@ -229,7 +259,7 @@ impl Parse for ExprOther {
         })
         .or_else(|_| {
             let lookahead_input = input.fork();
-            if let Ok(expr_token) = ExprToken::parse(&lookahead_input) {
+            if let Ok(expr_token) = Parse::parse(&lookahead_input) {
                 if lookahead_input.peek(Token![?]) {
                     input.advance_to(&lookahead_input);
                     input.parse::<Token![?]>().unwrap();
@@ -246,7 +276,7 @@ impl Parse for ExprOther {
             <Token![!]>::parse(input)?;
             Parse::parse(input).map(Self::NotPredicate)
         })
-        .or_else(|_| ExprToken::parse(input).map(Self::ExprToken))
+        .or_else(|_| Parse::parse(input).map(Self::ExprToken))
     }
 }
 

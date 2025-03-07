@@ -7,7 +7,7 @@ mod tmp {
     use lexer3_macros::RegularToken;
 
     peg_grammar! {
-        Op <- "sdf" ("sdf") / ("sdf" / "sdf") &"sdf" !"sdf" "sdf"? "sdf"+ "sdf"* ("sdf")* (&"sdf")+ (!"sdf")+ ("sdf"?)+;
+        Op <- "a" @("a" "a") / ("a" / "a") &"a" !"a" "a"? "a"+ "a"* ("a" "a")* (&"a")+ (!"a")+ ("a"?)+;
     }
 }
 

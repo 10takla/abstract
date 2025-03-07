@@ -33,7 +33,7 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                         output.extend(quote! {
                             paste! {
                                 type #ident = Token<[<#ident Marker>]>;
-                                #[derive(RegularToken)]
+                                #[derive(RegularToken, Clone, Debug, PartialEq)]
                                 #[reg_expr = #reg]
                                 struct [<#ident Marker>];
                             }
@@ -78,6 +78,10 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                                 let v = expr_token(v);
                                 quote! {AndPredicate<#v>}
                             }
+                            ExprOther::Cachable(v) => {
+                                let v = expr_token(v);
+                                quote! {Cachable<#v>}
+                            }
                             ExprOther::ExprToken(..) => unreachable!(),
                         };
                         output.extend(quote! {
@@ -103,7 +107,7 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                     {
                         let v = quote! {
                             paste! {
-                                #[derive(Spanable, EnumRecog)]
+                                #[derive(Spanable, EnumRecog, Clone, Debug, PartialEq)]
                                 enum #enum_ident {
                                     #(
                                         #[ty(#v)]
@@ -230,6 +234,8 @@ enum ExprOther {
     AndPredicate(ExprToken),
     /// Not-predicate: !e
     NotPredicate(ExprToken),
+    /// @
+    Cachable(ExprToken),
     ExprToken(ExprToken),
 }
 
@@ -276,6 +282,10 @@ impl Parse for ExprOther {
             <Token![!]>::parse(input)?;
             Parse::parse(input).map(Self::NotPredicate)
         })
+        .or_else(|_| {
+            <Token![@]>::parse(input)?;
+            Parse::parse(input).map(Self::Cachable)
+        })
         .or_else(|_| Parse::parse(input).map(Self::ExprToken))
     }
 }
@@ -293,7 +303,14 @@ impl Parse for ExprToken {
         if input.peek(Paren) {
             let content;
             syn::parenthesized!(content in input);
-            Parse::parse(&content).map(Self::Group)
+            Parse::parse(&content)
+                .and_then(|v: Exprs| { 
+                    if let Exprs::Expr(v) = v.clone() && let Expr::ExprOther(ExprOther::ExprToken(..)) = *v {
+                        Err(input.error("Expect none-single items"))
+                    } else {
+                        Ok(Self::Group(v))
+                    }
+                })
         } else {
             Parse::parse(input)
                 .map(Self::Ident)

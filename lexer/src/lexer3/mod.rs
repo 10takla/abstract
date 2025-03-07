@@ -18,7 +18,7 @@ mod cache {
         rc::Rc,
     };
 
-    struct Cachable<T>(PhantomData<T>);
+    pub struct Cachable<T>(PhantomData<T>);
 
     impl<T: CommonRecog<Output: Clone + 'static>> CommonRecog for Cachable<T> {
         type Output = T::Output;

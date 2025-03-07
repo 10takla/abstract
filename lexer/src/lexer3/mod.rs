@@ -14,45 +14,86 @@ mod cache {
     use std::{
         any::{Any, TypeId},
         collections::{HashMap, HashSet},
+        ops::{Deref, DerefMut},
+        rc::Rc,
     };
 
-    pub trait CacheRecog: CommonRecog + Sized + 'static {
+    struct Cachable<T>(PhantomData<T>);
+
+    impl<T: CommonRecog<Output: Clone + 'static>> CommonRecog for Cachable<T> {
+        type Output = T::Output;
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            if let Some(v) = Self::check_cache(ctxt.cache.borrow().deref(), ctxt.code.cursor) {
+                Ok(v.clone())
+            } else {
+                T::recog(ctxt).map(|v| {
+                    Self::set_cache(
+                        ctxt.cache.borrow_mut().deref_mut(),
+                        ctxt.code.cursor,
+                        v.clone(),
+                    );
+                    v
+                })
+            }
+        }
+    }
+
+    impl<T: CommonRecog<Output: 'static>> Cachable<T> {
+        fn check_cache<'a>(
+            cache: &'a HashMap<(usize, TypeId), Box<dyn Any>>,
+            cursor: usize,
+        ) -> Option<&'a T::Output> {
+            cache
+                .get(&(cursor, TypeId::of::<T::Output>()))
+                .and_then(|v| v.downcast_ref())
+        }
+
+        fn set_cache(
+            cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
+            cursor: usize,
+            v: T::Output,
+        ) {
+            cache.insert((cursor, TypeId::of::<T::Output>()), Box::new(v));
+        }
+    }
+
+    pub trait CacheRecog: CommonRecog<Output: 'static> {
         fn cache_recog(
             ctxt: &Ctxt,
             cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
-        ) -> Result<<Self as CommonRecog>::Output, CommonError>
+        ) -> Result<Self::Output, CommonError>
         where
-            <Self as CommonRecog>::Output: Clone,
+            Self::Output: Clone,
         {
-            if let Some(v) = Self::check_cache(ctxt.code.cursor, cache)
-                .and_then(|v| v.downcast_ref::<<Self as CommonRecog>::Output>())
-            {
-                Ok((*v).clone())
+            if let Some(v) = Self::check_cache(cache, ctxt.code.cursor) {
+                Ok(v.clone())
             } else {
                 Self::recog(ctxt).map(|v| {
-                    Self::set_cache(v.clone(), ctxt.code.cursor, cache);
+                    Self::set_cache(cache, ctxt.code.cursor, v.clone());
                     v
                 })
             }
         }
 
         fn check_cache<'a>(
-            cursor: usize,
             cache: &'a HashMap<(usize, TypeId), Box<dyn Any>>,
-        ) -> Option<&'a Box<dyn Any>> {
-            cache.get(&(cursor, TypeId::of::<Self>()))
+            cursor: usize,
+        ) -> Option<&'a Self::Output> {
+            cache
+                .get(&(cursor, TypeId::of::<Self::Output>()))
+                .and_then(|v| v.downcast_ref())
         }
 
         fn set_cache(
-            v: <Self as CommonRecog>::Output,
-            cursor: usize,
             cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
+            cursor: usize,
+            v: Self::Output,
         ) {
-            cache.insert((cursor, TypeId::of::<Self>()), Box::new(v));
+            cache.insert((cursor, TypeId::of::<Self::Output>()), Box::new(v));
         }
     }
 
-    impl<T: CommonRecog + Clone + 'static> CacheRecog for T {}
+    impl<T: CommonRecog<Output: 'static>> CacheRecog for T {}
 }
 use cache::*;
 

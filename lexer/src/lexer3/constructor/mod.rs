@@ -7,7 +7,17 @@ mod tmp {
     use lexer3_macros::RegularToken;
 
     peg_grammar! {
-        Op <- "a" @("a" "a") / ("a" / "a") &"a" !"a" "a"? "a"+ "a"* ("a" "a")* (&"a")+ (!"a")+ ("a"?)+;
+        Op ::= "a" @("a" "a") / ("a" / "a") &"a" !"a" "a"? "a"+ "a"* ("a" "a")* (&"a")+ (!"a")+ ("a"?)+;
+    }
+
+    #[test]
+    fn cachable() {
+        peg_grammar! {
+            Op ::= S / D;
+                S ::= D "a";
+                @D ::= "n"
+        }
+        Op::recog(&"n".into()).unwrap();
     }
 }
 

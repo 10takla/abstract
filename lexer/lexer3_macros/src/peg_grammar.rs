@@ -140,10 +140,21 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
     }
 
     let [a, b, c, d] = [&mut 0, &mut 0, &mut 0, &mut 0];
-    for Formula(ident, v) in items.0 {
+    for Formula {
+        is_cachable,
+        name,
+        exprs: v,
+    } in items.0
+    {
         let v = exprs(v, &mut output, [a, b, c, d]);
-        output.extend(quote! {
-            type #ident = #v;
+        output.extend(if is_cachable {
+            quote! {
+                type #name = Cachable<#v>;
+            }
+        } else {
+            quote! {
+                type #name = #v;
+            }
         });
     }
     // panic!("{}", output.to_string());
@@ -160,17 +171,26 @@ impl Parse for Formulas {
 }
 
 #[derive(Clone, Debug)]
-struct Formula(Ident, Exprs);
+struct Formula {
+    is_cachable: bool,
+    name: Ident,
+    exprs: Exprs,
+}
 
 /// Sequence: e1 e2
 // Sequence(Vec<Expr>)
 impl Parse for Formula {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        Ok(Self(Parse::parse(input)?, {
-            <Token![<]>::parse(input)?;
-            <Token![-]>::parse(input)?;
-            Parse::parse(input)?
-        }))
+        Ok(Self {
+            is_cachable: <Token![@]>::parse(input).is_ok(),
+            name: Parse::parse(input)?,
+            exprs: {
+                <Token![:]>::parse(input)?;
+                <Token![:]>::parse(input)?;
+                <Token![=]>::parse(input)?;
+                Parse::parse(input)?
+            },
+        })
     }
 }
 
@@ -303,14 +323,15 @@ impl Parse for ExprToken {
         if input.peek(Paren) {
             let content;
             syn::parenthesized!(content in input);
-            Parse::parse(&content)
-                .and_then(|v: Exprs| { 
-                    if let Exprs::Expr(v) = v.clone() && let Expr::ExprOther(ExprOther::ExprToken(..)) = *v {
-                        Err(input.error("Expect none-single items"))
-                    } else {
-                        Ok(Self::Group(v))
-                    }
-                })
+            Parse::parse(&content).and_then(|v: Exprs| {
+                if let Exprs::Expr(v) = v.clone()
+                    && let Expr::ExprOther(ExprOther::ExprToken(..)) = *v
+                {
+                    Err(input.error("Expect none-single items"))
+                } else {
+                    Ok(Self::Group(v))
+                }
+            })
         } else {
             Parse::parse(input)
                 .map(Self::Ident)

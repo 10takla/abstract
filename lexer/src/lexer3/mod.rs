@@ -23,15 +23,12 @@ mod cache {
     impl<T: CommonRecog<Output: Clone + 'static>> CommonRecog for Cachable<T> {
         type Output = T::Output;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            if let Some(v) = Self::check_cache(ctxt.cache.borrow().deref(), ctxt.code.cursor) {
+            let mut cache = ctxt.cache.borrow_mut();
+            if let Some(v) = Self::check_cache(cache.deref(), ctxt.code.cursor) {
                 Ok(v.clone())
             } else {
                 T::recog(ctxt).map(|v| {
-                    Self::set_cache(
-                        ctxt.cache.borrow_mut().deref_mut(),
-                        ctxt.code.cursor,
-                        v.clone(),
-                    );
+                    Self::set_cache(cache.deref_mut(), ctxt.code.cursor, v.clone());
                     v
                 })
             }

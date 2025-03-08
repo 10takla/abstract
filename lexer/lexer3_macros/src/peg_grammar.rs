@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Literal, Span};
 use quote::quote;
+use std::collections::HashMap;
 use syn::{
     parse::{discouraged::Speculative, Parse},
     parse_macro_input,
@@ -9,26 +10,28 @@ use syn::{
     Token,
 };
 
-pub fn peg_grammar(input: TokenStream) -> TokenStream {
-    let items: Formulas = parse_macro_input!(input);
+fn exprs(
+    v: Exprs,
+    output: &mut proc_macro2::TokenStream,
+    [token_count, enum_count, reps_count, seq_count]: [&mut i32; 4],
+    maps: &mut (
+        HashMap<String, Ident>,
+        HashMap<Vec<String>, Ident>,
+        HashMap<Vec<String>, Ident>,
+        HashMap<String, Ident>,
+    ),
+) -> Ident {
+    let mut expr = |v| {
+        let tmp_enum_count = *enum_count;
+        *enum_count += 1;
 
-    let mut output = proc_macro2::TokenStream::new();
-
-    fn exprs(
-        v: Exprs,
-        output: &mut proc_macro2::TokenStream,
-        [token_count, enum_count, reps_count, seq_count]: [&mut i32; 4],
-    ) -> Ident {
-        let mut expr = |v| {
-            let tmp_enum_count = *enum_count;
-            *enum_count += 1;
-
-            let mut expr_other = |v| {
-                let tmp_reps_count = *reps_count;
-                *reps_count += 1;
-                let mut expr_token = |v| match v {
-                    ExprToken::Ident(v) => v,
-                    ExprToken::Literal(reg) => {
+        let mut expr_other = |v| {
+            let tmp_reps_count = *reps_count;
+            *reps_count += 1;
+            let mut expr_token = |v| match v {
+                ExprToken::Ident(v) => v,
+                ExprToken::Literal(reg) => {
+                    maps.0.get(&reg.to_string()).cloned().unwrap_or_else(|| {
                         let ident = Ident::new(&format!("Token{token_count}"), Span::call_site());
                         output.extend(quote! {
                             paste! {
@@ -39,76 +42,80 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                             }
                         });
                         *token_count += 1;
+                        maps.0.insert(reg.to_string(), ident.clone());
                         ident
-                    }
-                    ExprToken::Group(v) => {
-                        exprs(v, output, [token_count, enum_count, reps_count, seq_count])
-                    }
-                };
-                let ident = Ident::new(&format!("Rep{tmp_reps_count}"), Span::call_site());
-                match v {
-                    ExprOther::ExprToken(v) => expr_token(v),
-                    _ => {
-                        let v = match v {
-                            ExprOther::ZeroOrMore(v) => {
-                                let v = expr_token(
-                                    *v,
-                                    // output,
-                                    // [token_count, enum_count, reps_count, seq_count],
-                                );
-                                quote! {ErrorBreakRepetition<#v>}
-                            }
-                            ExprOther::OneOrMore(v) => {
-                                let v = expr_token(
-                                    *v,
-                                    // output,
-                                    // [token_count, enum_count, reps_count, seq_count],
-                                );
-                                quote! {OneOrMore<#v>}
-                            }
-                            ExprOther::NotPredicate(v) => {
-                                let v = expr_token(v);
-                                quote! {NotPredicate<#v>}
-                            }
-                            ExprOther::Optional(v) => {
-                                let v = expr_token(v);
-                                quote! {Optional<#v>}
-                            }
-                            ExprOther::AndPredicate(v) => {
-                                let v = expr_token(v);
-                                quote! {AndPredicate<#v>}
-                            }
-                            ExprOther::Cachable(v) => {
-                                let v = expr_token(v);
-                                quote! {Cachable<#v>}
-                            }
-                            ExprOther::ExprToken(..) => unreachable!(),
-                        };
+                    })
+                }
+                ExprToken::Group(v) => exprs(
+                    v,
+                    output,
+                    [token_count, enum_count, reps_count, seq_count],
+                    maps,
+                ),
+            };
+            match v {
+                ExprOther::ExprToken(v) => expr_token(v),
+                _ => {
+                    let v = match v {
+                        ExprOther::ZeroOrMore(v) => {
+                            let v = expr_token(*v);
+                            quote! {ErrorBreakRepetition<#v>}
+                        }
+                        ExprOther::OneOrMore(v) => {
+                            let v = expr_token(*v);
+                            quote! {OneOrMore<#v>}
+                        }
+                        ExprOther::NotPredicate(v) => {
+                            let v = expr_token(v);
+                            quote! {NotPredicate<#v>}
+                        }
+                        ExprOther::Optional(v) => {
+                            let v = expr_token(v);
+                            quote! {Optional<#v>}
+                        }
+                        ExprOther::AndPredicate(v) => {
+                            let v = expr_token(v);
+                            quote! {AndPredicate<#v>}
+                        }
+                        ExprOther::Cachable(v) => {
+                            let v = expr_token(v);
+                            quote! {Cachable<#v>}
+                        }
+                        ExprOther::ExprToken(..) => unreachable!(),
+                    };
+
+                    let key = v.to_string();
+                    maps.3.get(&key).cloned().unwrap_or_else(|| {
+                        let ident = Ident::new(&format!("Rep{tmp_reps_count}"), Span::call_site());
+                        maps.3.insert(key, ident.clone());
                         output.extend(quote! {
                             type #ident = #v;
                         });
                         ident
-                    }
+                    })
                 }
-            };
+            }
+        };
 
-            match v {
-                Expr::OrderingChoice(v) => {
-                    let i = v
-                        .clone()
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, _)| Literal::usize_unsuffixed(i))
-                        .collect::<Vec<_>>();
-                    let v = v.into_iter().map(expr_other).collect::<Vec<_>>();
+        match v {
+            Expr::OrderingChoice(v) => {
+                let i = v
+                    .clone()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, _)| Literal::usize_unsuffixed(i))
+                    .collect::<Vec<_>>();
+                let v = v.into_iter().map(expr_other).collect::<Vec<_>>();
 
-                    let enum_ident =
-                        Ident::new(&format!("Enum{tmp_enum_count}"), Span::call_site());
+                let key = v.iter().map(ToString::to_string).collect();
+                maps.1.get(&key).cloned().unwrap_or_else(|| {
+                    let ident = Ident::new(&format!("Enum{tmp_enum_count}"), Span::call_site());
+                    maps.1.insert(key, ident.clone());
                     {
                         let v = quote! {
                             paste! {
                                 #[derive(Spanable, EnumRecog, Clone, Debug, PartialEq)]
-                                enum #enum_ident {
+                                enum #ident {
                                     #(
                                         #[ty(#v)]
                                         [<V #i>] ( <#v as CommonRecog>::Output )
@@ -118,35 +125,45 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
                         };
                         output.extend(v);
                     }
-
-                    enum_ident
-                }
-                Expr::ExprOther(v) => expr_other(v),
+                    ident
+                })
             }
-        };
+            Expr::ExprOther(v) => expr_other(v),
+        }
+    };
 
-        match v {
-            Exprs::Sequence(v) => {
-                let v = v.into_iter().map(|v| expr(v)).collect::<Vec<_>>();
+    match v {
+        Exprs::Sequence(v) => {
+            let v = v.into_iter().map(|v| expr(v)).collect::<Vec<_>>();
+            let key = v.iter().map(ToString::to_string).collect();
+            maps.1.get(&key).cloned().unwrap_or_else(|| {
                 let ident = Ident::new(&format!("Seq{seq_count}"), Span::call_site());
+                maps.1.insert(key, ident.clone());
                 output.extend(quote! {
                     type #ident = (#(#v),*);
                 });
                 *seq_count += 1;
                 ident
-            }
-            Exprs::Expr(v) => expr(*v),
+            })
         }
+        Exprs::Expr(v) => expr(*v),
     }
+}
+
+pub fn peg_grammar(input: TokenStream) -> TokenStream {
+    let items: Formulas = parse_macro_input!(input);
+
+    let mut output = proc_macro2::TokenStream::new();
 
     let [a, b, c, d] = [&mut 0, &mut 0, &mut 0, &mut 0];
+    let map = &mut Default::default();
     for Formula {
         is_cachable,
         name,
         exprs: v,
     } in items.0
     {
-        let v = exprs(v, &mut output, [a, b, c, d]);
+        let v = exprs(v, &mut output, [a, b, c, d], map);
         output.extend(if is_cachable {
             quote! {
                 type #name = Cachable<#v>;

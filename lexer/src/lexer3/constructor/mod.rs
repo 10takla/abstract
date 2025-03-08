@@ -8,6 +8,8 @@ mod tmp {
 
     peg_grammar! {
         Op ::= "a" @("a" "a") / ("a" / "a") &"a" !"a" "a"? "a"+ "a"* ("a" "a")* (&"a")+ (!"a")+ ("a"?)+
+        P ::= "a"* "c"
+        S ::= "a"*
     }
 
     #[test]

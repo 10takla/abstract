@@ -161,12 +161,34 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
     output.into()
 }
 
+struct LeftArrow;
+impl Parse for LeftArrow {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        <Token![:]>::parse(input)?;
+        <Token![:]>::parse(input)?;
+        <Token![=]>::parse(input)?;
+        Ok(Self)
+    }
+}
+
 #[derive(Clone, Debug)]
-struct Formulas(Punctuated<Formula, Token![;]>);
+struct Formulas(Vec<Formula>);
 
 impl Parse for Formulas {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        <Punctuated<Formula, Token![;]>>::parse_terminated(input).map(Self)
+        let mut vec = vec![];
+        loop {
+            if let Ok(v) = Formula::parse(input) {
+                vec.push(v);
+            } else {
+                break;
+            }
+        }
+        if vec.is_empty() {
+            Err(input.error("Expect more 0 items"))
+        } else {
+            Ok(Self(vec))
+        }
     }
 }
 
@@ -185,15 +207,14 @@ impl Parse for Formula {
             is_cachable: <Token![@]>::parse(input).is_ok(),
             name: Parse::parse(input)?,
             exprs: {
-                <Token![:]>::parse(input)?;
-                <Token![:]>::parse(input)?;
-                <Token![=]>::parse(input)?;
+                LeftArrow::parse(input)?;
                 Parse::parse(input)?
             },
         })
     }
 }
 
+/// https://en.wikipedia.org/wiki/Parsing_expression_grammar#Composite_parsing_expressions
 #[derive(Clone, Debug)]
 enum Exprs {
     /// Sequence: e1 e2
@@ -207,6 +228,14 @@ impl Parse for Exprs {
         loop {
             if let Ok(v) = Expr::parse(input) {
                 vec.push(v);
+                let lookahead = input.fork();
+                <Token![@]>::parse(&lookahead);
+                if Ident::parse(&lookahead)
+                    .and_then(|_| LeftArrow::parse(&lookahead))
+                    .is_ok()
+                {
+                    break;
+                }
             } else {
                 break;
             }
@@ -221,7 +250,6 @@ impl Parse for Exprs {
     }
 }
 
-/// https://en.wikipedia.org/wiki/Parsing_expression_grammar#Composite_parsing_expressions
 #[derive(Clone, Debug)]
 enum Expr {
     /// Ordered choice: e1 / e2

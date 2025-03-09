@@ -71,7 +71,7 @@ fn exprs(
                         }
                         ExprOther::Optional(v) => {
                             let v = expr_token(v);
-                            quote! {Optional<#v>}
+                            quote! {Option<#v>}
                         }
                         ExprOther::AndPredicate(v) => {
                             let v = expr_token(v);
@@ -334,7 +334,7 @@ impl Parse for ExprOther {
                 if lookahead_input.peek(Token![?]) {
                     input.advance_to(&lookahead_input);
                     input.parse::<Token![?]>().unwrap();
-                    return Ok(Self::ZeroOrMore(expr_token));
+                    return Ok(Self::Optional(expr_token));
                 }
             }
             Err(())

@@ -9,6 +9,11 @@ type Slice = Range<usize>;
 
 pub trait Spanable {
     fn span(&self) -> Slice;
+
+    fn span_by_cursor(&self, cursor: usize) -> Slice {
+        let v = self.span();
+        cursor + v.start..cursor + v.end
+    }
 }
 
 mod cache {
@@ -225,7 +230,9 @@ mod wrapper {
         type Output = ();
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
             if let Ok(v) = T::recog(ctxt) {
-                Err(CommonError::NotPredicate(v.span()))
+                Err(CommonError::NotPredicate(
+                    v.span(),
+                ))
             } else {
                 Ok(())
             }
@@ -247,7 +254,7 @@ mod wrapper {
 
     impl<T: Spanable> Spanable for Option<T> {
         fn span(&self) -> Slice {
-            self.as_ref().map(|v| v.span()).unwrap_or_default()
+            self.as_ref().map(Spanable::span).unwrap_or_default()
         }
     }
 }
@@ -335,12 +342,16 @@ mod token {
         fn span(&self) -> Slice {
             self.span.clone()
         }
+        fn span_by_cursor(&self, cursor: usize) -> Slice {
+            self.span()
+        }
     }
 }
 use token::*;
 
 mod sequence {
     use super::*;
+    use lexer3_macros::spanable;
     use std::process::Output;
 
     pub trait SequenceRecog {
@@ -373,7 +384,6 @@ mod sequence {
             tuple_impl!(@recursive $macros! $(@$key)? $($other)+);
             tuple_impl!(@named $macros! $(@$key)? $a $($other)+);
         };
-
         (@named $macros:ident! $(@$key:ident)? $($a:ident)+) => {
             paste!(
                 $macros!($(@$key)? $([<$a ${index()}>])+);
@@ -383,7 +393,7 @@ mod sequence {
 
     macro_rules! impl_seq {
         (@impl $($a:ident)+) => {
-            impl_seq!(@spanable $($a)+);
+            // impl_seq!(@spanable $($a)+);
             impl<$($a: CommonRecog),+> SequenceRecog for ($($a),+)
             where
                 $($a::Output: Spanable),+
@@ -403,6 +413,7 @@ mod sequence {
         };
     }
     tuple_impl!(impl_seq! @impl);
+    spanable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15 T16 T17);
 
     use items::*;
     #[test]
@@ -551,6 +562,7 @@ mod repetiotion {
 
     pub trait RepetitionRecog {
         type Item: CommonRecog<Output: Spanable>;
+
         fn cursor_aware_recog(
             ctxt: &Ctxt,
         ) -> Result<Vec<<Self::Item as CommonRecog>::Output>, CommonError> {
@@ -681,9 +693,20 @@ mod repetiotion {
 
     impl<T: Spanable> Spanable for Vec<T> {
         fn span(&self) -> Slice {
+            let v = |v: &T| {
+                let v = v.span();
+                (!(v.start == 0 && v.end == 0)).then_some(v)
+            };
+            self.iter()
+                .find_map(v)
+                .zip(self.iter().rev().find_map(v))
+                .map(|v| v.0.start..v.1.end)
+                .unwrap_or_default()
+        }
+        fn span_by_cursor(&self, cursor: usize) -> Slice {
             self.first()
                 .zip(self.last())
-                .map(|v| v.0.span().start..v.1.span().end)
+                .map(|v| v.0.span_by_cursor(cursor).start..v.1.span_by_cursor(cursor).end)
                 .unwrap_or_default()
         }
     }

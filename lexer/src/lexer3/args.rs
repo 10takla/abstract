@@ -13,8 +13,10 @@ pub struct Ctxt<'a> {
     pub code: Code<'a>,
     pub logger: Box<(Print, RefCell<usize>)>,
     pub errors: RefCell<Vec<CommonError>>,
-    pub cache: Rc<RefCell<HashMap<(usize, TypeId), Box<dyn Any>>>>,
+    pub cache: Rc<RefCell<Cache>>,
 }
+
+pub type Cache = HashMap<(usize, TypeId), Box<dyn Any>>;
 
 impl<'a> From<&'a str> for Ctxt<'a> {
     fn from(source: &'a str) -> Self {

@@ -27,82 +27,50 @@ mod cache {
 
     pub struct Cachable<T>(PhantomData<T>);
 
-    impl<T: CommonRecog<Output: Clone + 'static>> CommonRecog for Cachable<T> {
+    impl<T: CommonRecog<Output: Clone> + 'static> CommonRecog for Cachable<T> {
         type Output = T::Output;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
             // `{...}` becouse to shorten the lifetime of cache borrowing
             {
                 if let Some(v) = Self::check_cache(ctxt.cache.borrow().deref(), ctxt.code.cursor) {
-                    return Ok(v.clone());
+                    return v.clone();
                 }
             }
-            T::recog(ctxt).map(|v| {
-                Self::set_cache(
-                    ctxt.cache.borrow_mut().deref_mut(),
-                    ctxt.code.cursor,
-                    v.clone(),
-                );
-                v
-            })
+            let v = T::recog(ctxt);
+            Self::set_cache(
+                ctxt.cache.borrow_mut().deref_mut(),
+                ctxt.code.cursor,
+                v.clone(),
+            );
+            v
         }
     }
 
-    impl<T: CommonRecog<Output: 'static>> Cachable<T> {
+    impl<T: CommonRecog + 'static> Cachable<T> {
         fn check_cache<'a>(
-            cache: &'a HashMap<(usize, TypeId), Box<dyn Any>>,
+            cache: &'a Cache,
             cursor: usize,
-        ) -> Option<&'a T::Output> {
+        ) -> Option<&'a Result<T::Output, CommonError>> {
             cache
-                .get(&(cursor, TypeId::of::<T::Output>()))
+                .get(&(cursor, TypeId::of::<T>()))
                 .and_then(|v| v.downcast_ref())
         }
 
-        fn set_cache(
-            cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
-            cursor: usize,
-            v: T::Output,
-        ) {
-            cache.insert((cursor, TypeId::of::<T::Output>()), Box::new(v));
+        fn set_cache(cache: &mut Cache, cursor: usize, v: Result<T::Output, CommonError>) {
+            cache.insert((cursor, TypeId::of::<T>()), Box::new(v));
         }
     }
 
-    pub trait CacheRecog: CommonRecog<Output: 'static> {
-        fn cache_recog(
-            ctxt: &Ctxt,
-            cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
-        ) -> Result<Self::Output, CommonError>
+    pub trait CacheRecog {
+        fn cache_recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError>
         where
-            Self::Output: Clone,
+            Self: CommonRecog<Output: Clone> + 'static + Sized,
         {
-            if let Some(v) = Self::check_cache(cache, ctxt.code.cursor) {
-                Ok(v.clone())
-            } else {
-                Self::recog(ctxt).map(|v| {
-                    Self::set_cache(cache, ctxt.code.cursor, v.clone());
-                    v
-                })
-            }
-        }
-
-        fn check_cache<'a>(
-            cache: &'a HashMap<(usize, TypeId), Box<dyn Any>>,
-            cursor: usize,
-        ) -> Option<&'a Self::Output> {
-            cache
-                .get(&(cursor, TypeId::of::<Self::Output>()))
-                .and_then(|v| v.downcast_ref())
-        }
-
-        fn set_cache(
-            cache: &mut HashMap<(usize, TypeId), Box<dyn Any>>,
-            cursor: usize,
-            v: Self::Output,
-        ) {
-            cache.insert((cursor, TypeId::of::<Self::Output>()), Box::new(v));
+            <Cachable<Self>>::recog(ctxt)
         }
     }
 
-    impl<T: CommonRecog<Output: 'static>> CacheRecog for T {}
+    impl<T: CommonRecog> CacheRecog for T {}
 }
 use cache::*;
 
@@ -230,9 +198,7 @@ mod wrapper {
         type Output = ();
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
             if let Ok(v) = T::recog(ctxt) {
-                Err(CommonError::NotPredicate(
-                    v.span(),
-                ))
+                Err(CommonError::NotPredicate(v.span()))
             } else {
                 Ok(())
             }

@@ -1,7 +1,7 @@
 mod distruct;
 
 use distruct::distruct_items;
-use lexer::{
+use parser::{
     lexer2::{
         cache_and_diags::diag::Diag, code::Source, AnyBlock, Args, AssignExpr, Block, ErrorType,
         FnC, Ident, IdentError, Item, Items, Literal, NamedBlock, NamedDistrBlock, Slicable, Slice,

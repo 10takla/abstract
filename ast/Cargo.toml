@@ -3,4 +3,4 @@ name = "ast"
 edition = "2021"
 
 [dependencies]
-lexer = { workspace = true }
+parser = { workspace = true }

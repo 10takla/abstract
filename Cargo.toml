@@ -3,13 +3,13 @@ name = "abstract"
 edition = "2021"
 
 [dependencies]
-lexer = { workspace = true }
+parser = { workspace = true }
 ast = { workspace = true }
 
 [workspace]
-members = ["lexer", "ast", "lsp-server"]
-default-members = ["lexer", "./"]
+members = ["parser", "ast", "lsp-server"]
+default-members = ["parser", "./"]
 
 [workspace.dependencies]
-lexer = { path = "lexer" }
+parser = { path = "parser" }
 ast = { path = "ast" }

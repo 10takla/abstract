@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-lexer = { workspace = true }
+parser = { workspace = true }
 tokio = { version = "1.41.1", features = ["full"] }
 tower-lsp = "0.20.0"

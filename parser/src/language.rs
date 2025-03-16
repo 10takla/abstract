@@ -74,7 +74,7 @@ mod tmp {
     use super::*;
 
     peg_grammar! {
-        Tmp4 ::= ("a" ("b"*)* "c")+
+        Tmp4 ::= ("a" "bb" "c")[* "23"] "23"
         Tmp ::= Tok1[+ Tok3] (Tok3 Tok1[+ Tok3])+
             Tok1 ::= "a"
             Tok3 ::= ";"
@@ -82,7 +82,7 @@ mod tmp {
 
     #[test]
     fn tmp4() {
-        let s = r#"abc"#;
+        let s = r#"abbcabcabbc23"#;
         let v = Ctxt::from(s);
         let b = Tmp4::recog(&v);
 

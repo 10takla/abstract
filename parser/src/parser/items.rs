@@ -63,7 +63,10 @@ pub struct IdentString(pub Token<Ident>, pub Token<String>, pub Token<Ident>);
 
 impl SequenceRecog for IdentString {
     type Output = Self;
-    fn structure_assembling(ctxt: &mut Ctxt) -> Result<Self::Output, CommonError> {
+    fn structure_assembling(
+        ctxt: &mut Ctxt,
+        recognized: &mut Recognized,
+    ) -> Result<Self::Output, CommonError> {
         Ok(Self(
             Self::promotion::<Token<Ident>>(ctxt)?,
             Self::promotion::<Token<String>>(ctxt)?,

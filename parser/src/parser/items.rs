@@ -2,14 +2,14 @@ use super::*;
 use macros::Spanable;
 use std::{any::TypeId, str::CharIndices};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Ident;
 
 impl RegularToken for Ident {
     const REG_EXPR: &'static str = r"\b[_a-zA-Z][_a-zA-Z0-9]*\b";
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct String;
 
 impl TokenRecog for Token<String> {
@@ -40,7 +40,7 @@ impl TokenRecog for Token<String> {
     }
 }
 
-#[derive(Debug, PartialEq, Spanable)]
+#[derive(Debug, PartialEq, Spanable, Clone)]
 pub enum Item {
     Ident(Token<Ident>),
     String(Token<String>),
@@ -58,7 +58,7 @@ impl EnumRecog for Item {
     }
 }
 
-#[derive(Debug, PartialEq, Spanable)]
+#[derive(Debug, PartialEq, Spanable, Clone)]
 pub struct IdentString(pub Token<Ident>, pub Token<String>, pub Token<Ident>);
 
 impl SequenceRecog for IdentString {

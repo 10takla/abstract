@@ -59,7 +59,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                     // let impl_ = impl_enum(name, c,  n);
 
                     quote! {
-                        #[derive(Spanable, Debug, PartialEq)]
+                        #[derive(Spanable, Debug, PartialEq, Clone)]
                         pub enum #name {
                             #(#b(<#b as CommonRecog>::Output)),*
                         }
@@ -80,12 +80,12 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                 },
                 ItemType::Items(ItemsInput {item, break_, join, break_on_error}) => {
                     let v = if break_on_error {
-                        quote! {ErrorBreakRepetition<#item>}
+                        quote! {ZeroOrMore<#item, ErrorBreak>}
                     } else {
                         if let Some(v) = break_ {
-                            quote! {BreakRepetition<#item, #v>}
+                            quote! {ZeroOrMore<#item, BreakWhile<#v>>}
                         }else {
-                            quote! {Vec<#item>}
+                            quote! {ZeroOrMore<#item>}
                         }
                     };
                     quote! {
@@ -95,7 +95,7 @@ pub fn constructor(input: TokenStream) -> TokenStream {
                 ItemType::Token(TokenInput(reg)) => {
                     quote! {
                         paste!{
-                            #[derive(Debug, PartialEq)]
+                            #[derive(Debug, PartialEq, Clone)]
                             #[allow(non_camel_case_types)]
                             pub struct [<#name Marker>];
                             

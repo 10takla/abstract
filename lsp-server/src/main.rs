@@ -1,22 +1,23 @@
-mod distruct;
+#![feature(type_alias_impl_trait)]
 
 use distruct::distruct_items;
 use parser::{
-    lexer2::{
-        cache_and_diags::diag::Diag, code::Source, AnyBlock, Args, AssignExpr, Block, ErrorType,
-        FnC, Ident, IdentError, Item, Items, Literal, NamedBlock, NamedDistrBlock, Slicable, Slice,
-    },
+    language::Items,
     parse,
+    parser::{CommonRecog, Slice},
 };
 use std::{
     fmt::Debug,
-    iter::{empty, once, Peekable},
+    iter::Peekable,
+    ops::Range,
     sync::{
         atomic::{AtomicUsize, Ordering},
         LazyLock, RwLock,
     },
 };
 use tower_lsp::{jsonrpc::Result, lsp_types::*, Client, LanguageServer, LspService, Server};
+
+mod distruct;
 
 #[tokio::main]
 async fn main() {
@@ -181,21 +182,22 @@ impl Backend {
                     diags
                         .iter()
                         .cloned()
-                        .map(|diag| {
-                            let [[start, start_line], [end, end_line]] =
-                                diag_split(diag.slice.clone(), iter);
-                            Diagnostic {
-                                range: Range {
-                                    start: Position::new(start_line as u32, start as u32),
-                                    // +1, так как в vscode decrement
-                                    end: Position::new(end_line as u32, end as u32 + 1),
-                                },
-                                severity: Some(DiagnosticSeverity::ERROR),
-                                code: None,
-                                source: Some("abstract".to_string()),
-                                message: format!("Ошибка парсера: {diag}"),
-                                ..Default::default()
-                            }
+                        .map(|diag| Diagnostic {
+                            range: {
+                                let slice = diag_split(diag.span(&code).clone(), iter);
+                                tower_lsp::lsp_types::Range {
+                                    start: Position::new(
+                                        slice.start[1] as u32,
+                                        slice.start[0] as u32,
+                                    ),
+                                    end: Position::new(slice.end[1] as u32, slice.end[0] as u32),
+                                }
+                            },
+                            severity: Some(DiagnosticSeverity::ERROR),
+                            code: None,
+                            source: Some("abstract".to_string()),
+                            message: format!("Ошибка парсера: {}", diag.diag_display(&code)),
+                            ..Default::default()
                         })
                         .collect()
                 },
@@ -213,85 +215,80 @@ impl Backend {
 
 fn diag_split(
     diag_slice: Slice,
-    iter: &mut Peekable<impl Iterator<Item = (usize, [usize; 2])>>,
-) -> [[usize; 2]; 2] {
-    let [item_start, item_end] = [*diag_slice.start(), *diag_slice.end()];
+    iter: &mut Peekable<impl Iterator<Item = Item>>,
+) -> Range<[usize; 2]> {
+    let [item_start, item_end] = [diag_slice.start, diag_slice.end];
     let mut acc = [0, 0];
-    while let Some(&(i, [line_start, line_end])) = dbg!(iter.peek()) {
-        acc = [line_start, i];
+    while let Some((i, line)) = iter.peek().cloned() {
+        acc = [line.start, i];
         // если начало находится на линии
-        if item_start <= line_end {
-            let [start_char_index, start_line_index] = [item_start - line_start, i];
+        if item_start < line.end {
+            let [start_char_index, start_line_index] = [item_start - line.start, i];
             // если конец находится на линии
-            if item_end <= line_end {
-                return [
-                    [start_char_index, start_line_index],
-                    [item_end - line_start, i],
-                ];
+            if item_end < line.end {
+                return [start_char_index, start_line_index]..[item_end - line.start, i];
             } else {
                 iter.next().unwrap();
-
                 let mut acc = [0, 0];
                 // иначе продолжить проход по линиям пока не будет найден конец
-                while let Some(&(i, [line_start, line_end])) = iter.peek() {
+                while let Some(&(
+                    i,
+                    Range {
+                        start: line_start,
+                        end: line_end,
+                    },
+                )) = iter.peek()
+                {
                     acc = [line_start, i];
                     // если конец находится на линии
-                    if item_end <= line_end {
+                    if item_end < line_end {
                         // то перейти к следующему элементу
-                        return [
-                            [start_char_index, start_line_index],
-                            [item_end - line_start, i],
-                        ];
+                        return [start_char_index, start_line_index]..[item_end - line_start, i];
                     } else {
                         iter.next().unwrap();
                     }
                 }
-                return [
-                    [start_char_index, start_line_index],
-                    [item_end - dbg!(acc)[0], acc[1]],
-                ];
+                return [start_char_index, start_line_index]..[item_end - acc[0], acc[1]];
             }
         } else {
             iter.next().unwrap();
         }
     }
-    [[item_start - acc[0], acc[1]], [item_end - acc[0], acc[1]]]
+    [item_start - acc[0], acc[1]]..[item_end - acc[0], acc[1]]
 }
 
 #[test]
 fn diag_split_() {
-    let check = |(source, slice), b: [[usize; 2]; 2]| {
-        assert_eq!(diag_split(slice, &mut get_iter(source)), b)
-    };
+    let check = |(source, slice), b| assert_eq!(diag_split(slice, &mut get_iter(source)), b);
 
     // выход диганостики за гранцицу кода
-    check(("{", 1..=1), [[1, 0], [1, 0]]);
-    check(("{", 0..=1), [[0, 0], [1, 0]]);
-    check(("  \n{", 0..=4), [[0, 0], [1, 1]]);
-    check(("  \n\n\n{", 0..=6), [[0, 0], [1, 3]]);
+    check(("{", 1..2), [1, 0]..[2, 0]);
+    check(("{", 0..2), [0, 0]..[2, 0]);
+    check(("  \n{", 0..5), [0, 0]..[2, 1]);
+    check(("  \n\n\n{", 0..7), [0, 0]..[2, 3]);
 }
 
 #[test]
 fn diag() {
-    let check = |source, b: Vec<[[usize; 2]; 2]>| {
+    let check = |source, b| {
         assert_eq!(
             parse(source)
                 .1
                 .into_iter()
-                .map(|v| diag_split(v.slice.clone(), &mut get_iter(source)))
+                .map(|v| diag_split(dbg!(v).span(source).clone(), &mut get_iter(source)))
                 .collect::<Vec<_>>(),
             b
         );
     };
-    check("22dd", vec![[[0, 0], [3, 0]]]);
+    check("22dd", vec![[0, 0]..[4, 0]]);
     check(
         "
 22dd
         ",
-        vec![[[0, 1], [3, 1]]],
+        vec![[0, 1]..[4, 1]],
     );
 
-    check(r#"22dd 22dd  "#, vec![[[0, 0], [3, 0]], [[5, 0], [8, 0]]]);
+    check(r#"22dd 22dd  "#, vec![[0, 0]..[4, 0], [5, 0]..[9, 0]]);
 
     check(
         r#"22dd 22dd  
@@ -299,11 +296,11 @@ fn diag() {
 
    2hg"#,
         vec![
-            [[0, 0], [3, 0]],
-            [[5, 0], [8, 0]],
-            [[0, 1], [2, 1]],
-            [[4, 1], [8, 1]],
-            [[3, 3], [5, 3]],
+            [0, 0]..[4, 0],
+            [5, 0]..[9, 0],
+            [0, 1]..[3, 1],
+            [4, 1]..[9, 1],
+            [3, 3]..[6, 3],
         ],
     );
     check(
@@ -311,12 +308,12 @@ fn diag() {
 "sdfsfdsf 22dsf  
 
    2hg"#,
-        vec![[[0, 0], [3, 0]], [[5, 0], [8, 0]], [[5, 3], [5, 3]]],
+        vec![[0, 0]..[3, 0], [5, 0]..[8, 0], [5, 3]..[5, 3]],
     );
-    check(r#"{"#, vec![[[1, 0], [1, 0]]]);
+    check(r#"{"#, vec![[1, 0]..[1, 0]]);
 }
 
-fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
+fn tokenize(items: &Vec<parser::language::Item>, code: &str) -> Vec<SemanticToken> {
     let items = &mut distruct_items(items);
 
     let iter = &mut get_iter(code).peekable();
@@ -344,12 +341,19 @@ fn tokenize(items: &Items, code: &str) -> Vec<SemanticToken> {
 
 fn item_split(
     [item_start, item_end]: [usize; 2],
-    iter: &mut Peekable<impl Iterator<Item = (usize, [usize; 2])>>,
+    iter: &mut Peekable<impl Iterator<Item = Item>>,
     last_start: &mut Option<usize>,
     last_line: &mut usize,
     mut push_token: impl FnMut(usize, usize, usize),
 ) {
-    while let Some(&(i, [line_start, line_end])) = iter.peek() {
+    while let Some(&(
+        i,
+        Range {
+            start: line_start,
+            end: line_end,
+        },
+    )) = iter.peek()
+    {
         // если начало элемента находится на линии
         if item_start <= line_end {
             let delta_start = item_start - last_start.unwrap_or(line_start);
@@ -367,7 +371,14 @@ fn item_split(
                 iter.next().unwrap();
 
                 // иначе продолжить проход по линиям пока не будет найден конец элемента
-                while let Some(&(i, [line_start, line_end])) = iter.peek() {
+                while let Some(&(
+                    i,
+                    Range {
+                        start: line_start,
+                        end: line_end,
+                    },
+                )) = iter.peek()
+                {
                     // если конец элемента находится на линии
                     if item_end <= line_end {
                         // то перейти к следующему элементу
@@ -391,19 +402,22 @@ fn item_split(
     unreachable!();
 }
 
-fn get_iter<'a>(code: &'a str) -> Peekable<impl Iterator<Item = (usize, [usize; 2])> + 'a> {
+type Item = (usize, Range<usize>);
+
+fn get_iter<'a>(code: &'a str) -> Peekable<impl Iterator<Item = Item> + 'a> {
     let mut acc = 0;
     code.split_inclusive('\n')
         .enumerate()
-        .peekable()
         .map(move |(i, line)| {
-            let start = acc;
-            let len = line.chars().count();
-            if len > 0 {
-                acc += len;
-            }
-            let end = if acc != 0 { acc - 1 } else { 0 };
-            (i, [start, end])
+            (
+                i,
+                acc..{
+                    if !line.is_empty() {
+                        acc += line.chars().count();
+                    }
+                    acc
+                },
+            )
         })
         .peekable()
 }
@@ -420,7 +434,7 @@ fn token_type(t: SemanticTokenType) -> u32 {
 #[cfg(test)]
 mod tests {
     use crate::{tokenize, BLOCK, TOKENS};
-    use lexer::parse;
+    use parser::parse;
     use tower_lsp::lsp_types::{SemanticToken, SemanticTokenType};
 
     fn sem_token(

@@ -24,6 +24,7 @@ mod cache {
         rc::Rc,
     };
 
+    #[derive(Debug, Clone)]
     pub struct Cachable<T>(PhantomData<T>);
 
     impl<T: CommonRecog<Output: Clone> + 'static> CommonRecog for Cachable<T> {
@@ -60,7 +61,7 @@ mod cache {
         }
     }
 
-    pub trait CacheRecog {
+    pub trait CacheRecog: CommonTrait {
         fn cache_recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError>
         where
             Self: CommonRecog<Output: Clone> + 'static + Sized,
@@ -88,11 +89,58 @@ mod wrapper {
         Enum(Vec<CommonError>),
         Seq(Box<CommonError>),
         NotPredicate(Slice),
-        OneOrMore(usize),
+        OneOrMore(usize, Vec<Result<String, CommonError>>),
     }
 
-    pub trait CommonRecog {
-        type Output;
+    impl CommonError {
+        pub fn start(&self) -> Result<usize, ()> {
+            match self {
+                CommonError::Enum(v) => v.iter().map(Self::start).max().unwrap(),
+                CommonError::Seq(v) => v.start(),
+                CommonError::Token(v) => match v {
+                    TokenError::CommonTokenError(s, _) => Ok(s.start),
+                    TokenError::LineOver => Err(()),
+                },
+                CommonError::NotPredicate(v) => Ok(v.start),
+                CommonError::OneOrMore(v, ..) => Ok(*v),
+            }
+        }
+        pub fn end(&self) -> Result<usize, ()> {
+            match self {
+                CommonError::Enum(v) => v.iter().map(Self::end).max().unwrap(),
+                CommonError::Seq(v) => v.end(),
+                CommonError::Token(v) => match v {
+                    TokenError::CommonTokenError(s, _) => Ok(s.end),
+                    TokenError::LineOver => Err(()),
+                },
+                CommonError::NotPredicate(v) => Ok(v.end),
+                CommonError::OneOrMore(v, ..) => Ok(*v + 1),
+            }
+        }
+
+        pub fn span(&self, source: &str) -> Slice {
+            match self {
+                CommonError::Enum(v) => v
+                    .iter()
+                    .map(|v| v.span(source))
+                    .max_by(|a, b| a.end.cmp(&b.end))
+                    .unwrap(),
+                CommonError::Seq(v) => v.span(source),
+                CommonError::Token(v) => match v {
+                    TokenError::CommonTokenError(s, _) => s.clone(),
+                    TokenError::LineOver => source.len()..source.len(),
+                },
+                CommonError::NotPredicate(v) => v.clone(),
+                CommonError::OneOrMore(v, ..) => *v..*v + 1,
+            }
+        }
+    }
+
+    pub trait CommonTrait: std::fmt::Debug + Clone {}
+    impl<T: std::fmt::Debug + Clone> CommonTrait for T {}
+
+    pub trait CommonRecog: CommonTrait {
+        type Output: CommonTrait;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError>;
     }
 
@@ -103,7 +151,7 @@ mod wrapper {
         }
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     pub struct Seq<T>(pub T);
 
     impl<T: SequenceRecog> CommonRecog for Seq<T> {
@@ -129,7 +177,7 @@ mod wrapper {
 
     impl<T> CommonRecog for Token<T>
     where
-        Token<T>: TokenRecog<Inner = T>,
+        Self: TokenRecog<Inner = T>,
     {
         type Output = Self;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
@@ -137,45 +185,28 @@ mod wrapper {
         }
     }
 
-    impl<T> CommonRecog for Vec<T>
+    impl<T: CommonTrait, I: IterRepetition> CommonRecog for ZeroOrMore<T, I>
     where
-        Vec<T>: RepetitionRecog,
+        Self: RepetitionRecog,
     {
-        type Output = Vec<<<Vec<T> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        type Output = RepOk<<<ZeroOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Self::cursor_aware_recog(ctxt)
+            let (a, b) = Self::cursor_aware_recog(ctxt);
+            a.map(|a| (a, b))
         }
     }
-    impl<T, B> CommonRecog for BreakRepetition<T, B>
+    impl<T: CommonTrait, I: IterRepetition> CommonRecog for OneOrMore<T, I>
     where
-        BreakRepetition<T, B>: RepetitionRecog,
+        OneOrMore<T, I>: RepetitionRecog,
     {
-        type Output =
-            Vec<<<BreakRepetition<T, B> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        type Output = RepOk<<<OneOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Self::cursor_aware_recog(ctxt)
-        }
-    }
-    impl<T> CommonRecog for ErrorBreakRepetition<T>
-    where
-        ErrorBreakRepetition<T>: RepetitionRecog,
-    {
-        type Output =
-            Vec<<<ErrorBreakRepetition<T> as RepetitionRecog>::Item as CommonRecog>::Output>;
-        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Self::cursor_aware_recog(ctxt)
-        }
-    }
-    impl<T> CommonRecog for OneOrMore<T>
-    where
-        OneOrMore<T>: RepetitionRecog,
-    {
-        type Output = Vec<<<OneOrMore<T> as RepetitionRecog>::Item as CommonRecog>::Output>;
-        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Self::cursor_aware_recog(ctxt)
+            let (a, b) = Self::cursor_aware_recog(ctxt);
+            a.map(|a| (a, b))
         }
     }
 
+    #[derive(Debug, Clone)]
     pub struct AndPredicate<T: CommonRecog>(T::Output, PhantomData<T>);
 
     impl<T: CommonRecog<Output: Spanable>> CommonRecog for AndPredicate<T> {
@@ -191,6 +222,7 @@ mod wrapper {
         }
     }
 
+    #[derive(Debug, Clone)]
     pub struct NotPredicate<T>(PhantomData<T>);
 
     impl<T: CommonRecog<Output: Spanable>> CommonRecog for NotPredicate<T> {
@@ -244,7 +276,7 @@ mod token {
         }
     }
 
-    pub trait RegularToken {
+    pub trait RegularToken: CommonTrait {
         const REG_EXPR: &'static str;
     }
 
@@ -260,7 +292,7 @@ mod token {
         RegularToken(&'static str),
     }
 
-    pub trait TokenRecog {
+    pub trait TokenRecog: CommonTrait {
         type Inner;
         // распознавание относительно курсора, то есть с учетом смещения строки, без продвижения
         fn cursor_aware_recog(code: &Code) -> Result<Token<Self::Inner>, TokenError> {
@@ -288,7 +320,6 @@ mod token {
             if code.is_empty() {
                 return Err(TokenError::LineOver);
             }
-
             Regex::new(&format!("^{}", T::REG_EXPR))
                 .unwrap()
                 .find(code)
@@ -319,8 +350,8 @@ mod sequence {
     use macros::spanable;
     use std::process::Output;
 
-    pub trait SequenceRecog {
-        type Output;
+    pub trait SequenceRecog: CommonTrait {
+        type Output: CommonTrait;
         // распознавнаие с продвижением курсора
         fn cursor_aware_recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
             Self::structure_assembling(&mut ctxt.clone())
@@ -361,6 +392,8 @@ mod sequence {
             // impl_seq!(@spanable $($a)+);
             impl<$($a: CommonRecog),+> SequenceRecog for ($($a),+)
             where
+                ($($a),+): CommonTrait,
+                ($($a::Output),+): CommonTrait,
                 $($a::Output: Spanable),+
             {
                 type Output = ($($a::Output),+);
@@ -384,11 +417,11 @@ mod sequence {
     #[test]
     fn test() {
         assert_eq!(
-            Seq::<(Token<Ident>, Token<String>)>::recog(&r#"tmp"n"tmp"n""#.into()).unwrap(),
+            <Seq<(Token<Ident>, Token<String>)>>::recog(&r#"tmp"n"tmp"n""#.into()).unwrap(),
             (Token::new(0..3), Token::new(3..6),)
         );
         assert_eq!(
-            Seq::<(Seq<(Token<Ident>, Token<String>)>, Token<Ident>)>::recog(
+            <Seq<(Seq<(Token<Ident>, Token<String>)>, Token<Ident>)>>::recog(
                 &r#"tmp"n"tmp"n""#.into()
             )
             .unwrap(),
@@ -428,8 +461,8 @@ mod enum_ {
     use super::*;
     use crate::tuple_impl;
 
-    pub trait EnumRecog {
-        type Output;
+    pub trait EnumRecog: CommonTrait {
+        type Output: CommonTrait;
         fn cursor_aware_recog(ctxt: &Ctxt) -> Result<Self::Output, Vec<CommonError>> {
             let mut errs = vec![];
             Self::structure_assembling(ctxt)
@@ -514,9 +547,7 @@ pub use enum_::*;
 mod repetiotion {
     use super::*;
     use items::*;
-    use std::{fmt::Debug, ops::ControlFlow};
-
-    type Items = Vec<Item>;
+    use std::{default, fmt::Debug, iter, ops::ControlFlow};
 
     impl CommonRecog for () {
         type Output = ();
@@ -525,66 +556,87 @@ mod repetiotion {
         }
     }
 
+    pub type RepOk<T> = (Vec<T>, Vec<Result<T, CommonError>>);
+    pub type RepOutput<T> = (Result<Vec<T>, CommonError>, (Vec<Result<T, CommonError>>));
+
     pub trait RepetitionRecog {
         type Item: CommonRecog<Output: Spanable>;
-
-        fn cursor_aware_recog(
-            ctxt: &Ctxt,
-        ) -> Result<Vec<<Self::Item as CommonRecog>::Output>, CommonError> {
-            let mut vec = vec![];
-            let mut ctxt = ctxt.clone();
-
-            (0..).try_for_each(|_| Self::iter(&mut ctxt, &mut vec));
-            Ok(vec)
-        }
-
+        fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output>;
+    }
+    pub trait IterRepetition: CommonTrait {
         fn iter(
-            ctxt: &mut Ctxt,
-            vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
+            ctxt: &Ctxt,
+            result: impl FnMut() -> Result<(), ControlFlow<()>>,
         ) -> ControlFlow<()>;
+    }
 
-        fn promotion(
-            ctxt: &mut Ctxt,
-            vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
-        ) -> Result<(), ControlFlow<()>> {
-            Self::Item::recog(&ctxt)
-                .map(|item| {
-                    ctxt.code.cursor = item.span().end;
-                    vec.push(item);
-                })
-                .map_err(|e| {
-                    fn tmp(e: &CommonError) -> Result<usize, ()> {
-                        match e {
-                            CommonError::Enum(v) => v.into_iter().map(tmp).max().unwrap(),
-                            CommonError::Seq(v) => tmp(v),
-                            CommonError::Token(v) => match v {
-                                TokenError::CommonTokenError(s, _) => Ok(s.end),
-                                TokenError::LineOver => Err(()),
-                            },
-                            CommonError::NotPredicate(v) => Ok(v.end),
-                            CommonError::OneOrMore(v) => Ok(*v),
-                        }
-                    }
-                    ctxt.code.cursor = if let Ok(v) = tmp(&e) {
-                        v
-                    } else {
-                        return ControlFlow::Break(());
-                    };
-                    ctxt.errors.borrow_mut().push(e);
-                    ControlFlow::Continue(())
-                })
+    #[derive(Debug, Clone)]
+    pub struct OneOrMore<T, I = ()>(PhantomData<T>, PhantomData<I>);
+
+    impl<T: CommonRecog<Output: Spanable>, I: IterRepetition> RepetitionRecog for OneOrMore<T, I>
+    where
+        ZeroOrMore<T, I>: RepetitionRecog<Item = T>,
+        
+    {
+        type Item = T;
+        fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output> {
+            let (vec, coll) = <ZeroOrMore<T, I>>::cursor_aware_recog(ctxt);
+            let vec = vec.unwrap();
+            if vec.is_empty() {
+                (Err(CommonError::OneOrMore(ctxt.code.cursor, coll.clone().into_iter().map(|v| v.map(|v| format!("{v:?}"))).collect())), coll)
+            } else {
+                (Ok(vec), coll)
+            }
         }
     }
 
-    pub struct ErrorBreakRepetition<T>(PhantomData<T>);
+    #[derive(Debug, Clone)]
+    pub struct ZeroOrMore<T, I = ()>(PhantomData<T>, PhantomData<I>);
 
-    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for ErrorBreakRepetition<T> {
+    impl<T: CommonRecog<Output: Spanable>, I: IterRepetition> RepetitionRecog for ZeroOrMore<T, I> {
         type Item = T;
+        fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output> {
+            let (mut pass, mut fail_collection) = (vec![], vec![]);
+            let mut ctxt2 = (*ctxt).clone();
+            (0..).try_for_each(|_| {
+                if ctxt2.code.cursor >= ctxt2.code.source.len() {
+                    return ControlFlow::Break(());
+                }
+                I::iter(&ctxt2.clone(), || {
+                    Self::Item::recog(&ctxt2)
+                        .map_err(|e| {
+                            if let Ok(v) = e.end() {
+                                ctxt2.code.cursor = v;
+                                fail_collection.push(Err(e));
+                                ControlFlow::Continue(())
+                            } else {
+                                ControlFlow::Break(())
+                            }
+                        })
+                        .and_then(|item| {
+                            if item.span().len() == 0 {
+                                return Err(ControlFlow::Break(()));
+                            }
+                            ctxt2.code.cursor += item.span().len();
+                            if fail_collection.is_empty() {
+                                pass.push(item);
+                            } else {
+                                fail_collection.push(Ok(item));
+                            }
+                            Ok(())
+                        })
+                })
+            });
+            (Ok(pass), fail_collection)
+        }
+    }
+
+    impl IterRepetition for () {
         fn iter(
-            ctxt: &mut Ctxt,
-            vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
+            ctxt: &Ctxt,
+            mut result: impl FnMut() -> Result<(), ControlFlow<()>>,
         ) -> ControlFlow<()> {
-            if Self::promotion(ctxt, vec).is_err() {
+            if let Err(ControlFlow::Break(())) = result() {
                 ControlFlow::Break(())
             } else {
                 ControlFlow::Continue(())
@@ -592,67 +644,45 @@ mod repetiotion {
         }
     }
 
-    pub struct OneOrMore<T>(PhantomData<T>);
+    #[derive(Debug, Clone)]
+    pub struct ErrorBreak;
 
-    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for OneOrMore<T> {
-        type Item = T;
-        fn cursor_aware_recog(
-            ctxt: &Ctxt,
-        ) -> Result<Vec<<Self::Item as CommonRecog>::Output>, CommonError> {
-            let mut vec = vec![];
-            let mut ctxt = ctxt.clone();
-
-            (0..).try_for_each(|_| Self::iter(&mut ctxt, &mut vec));
-
-            if vec.is_empty() {
-                return Err(CommonError::OneOrMore(ctxt.code.cursor));
-            }
-            Ok(vec)
-        }
-
+    impl IterRepetition for ErrorBreak {
         fn iter(
-            ctxt: &mut Ctxt,
-            vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
+            ctxt: &Ctxt,
+            mut result: impl FnMut() -> Result<(), ControlFlow<()>>,
         ) -> ControlFlow<()> {
-            if let Err(ControlFlow::Break(())) = Self::promotion(ctxt, vec) {
-                return ControlFlow::Break(());
+            if result().is_err() {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
-            ControlFlow::Continue(())
         }
     }
 
-    pub struct BreakRepetition<T, B> {
-        inner: PhantomData<T>,
+    #[derive(Debug, Clone)]
+    pub struct BreakWhile<B> {
         break_: PhantomData<B>,
     }
 
-    impl<T: CommonRecog<Output: Spanable>, B: CommonRecog> RepetitionRecog for BreakRepetition<T, B> {
-        type Item = T;
+    impl<B: CommonRecog> IterRepetition for BreakWhile<B> {
         fn iter(
-            ctxt: &mut Ctxt,
-            vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
+            ctxt: &Ctxt,
+            result: impl FnMut() -> Result<(), ControlFlow<()>>,
         ) -> ControlFlow<()> {
             if let Ok(v) = B::recog(&ctxt) {
                 return ControlFlow::Break(());
             }
-            if let Err(ControlFlow::Break(())) = Self::promotion(ctxt, vec) {
-                return ControlFlow::Break(());
-            }
-            ControlFlow::Continue(())
+            <()>::iter(ctxt, result)
         }
     }
 
-    impl<T: CommonRecog<Output: Spanable>> RepetitionRecog for Vec<T> {
-        type Item = T;
-        fn iter(
-            ctxt: &mut Ctxt,
-            vec: &mut Vec<<Self::Item as CommonRecog>::Output>,
-        ) -> ControlFlow<()> {
-            if let Err(ControlFlow::Break(())) = Self::promotion(ctxt, vec) {
-                ControlFlow::Break(())
-            } else {
-                ControlFlow::Continue(())
-            }
+    impl<T: Spanable> Spanable for RepOk<T> {
+        fn span(&self) -> Slice {
+            self.0.span()
+        }
+        fn span_by_cursor(&self, cursor: usize) -> Slice {
+            self.0.span_by_cursor(cursor)
         }
     }
 
@@ -676,18 +706,52 @@ mod repetiotion {
         }
     }
 
+    // impl<T: Spanable + Clone + std::fmt::Debug> Spanable for (Vec<T>, Vec<CommonError>) {
+    //     fn span(&self) -> Slice {
+    //         if let Some(error) = self.1.first()
+    //             && let Ok(error_start) = error.start()
+    //         {
+    //             self.0
+    //                 .clone()
+    //                 .into_iter()
+    //                 .take_while(|item| item.span().start < error_start)
+    //                 .collect::<Vec<_>>()
+    //         } else {
+    //             self.0.clone()
+    //         }
+    //         .span()
+    //     }
+    //     fn span_by_cursor(&self, cursor: usize) -> Slice {
+    //         if let Some(error) = self.1.first()
+    //             && let Ok(error_start) = error.start()
+    //         {
+    //             self.0
+    //                 .clone()
+    //                 .into_iter()
+    //                 .take_while(|item| item.span().start < error_start)
+    //                 .collect::<Vec<_>>()
+    //         } else {
+    //             self.0.clone()
+    //         }
+    //         .span_by_cursor(cursor)
+    //     }
+    // }
+
     #[test]
     fn test() {
         assert_eq!(
-            Vec::<Item>::cursor_aware_recog(&r#""n""n""#.into()).unwrap(),
-            vec![
-                Item::String(Token::new(0..3)),
-                Item::String(Token::new(3..6))
-            ]
+            <ZeroOrMore<Item>>::cursor_aware_recog(&r#""n""n""#.into()),
+            (
+                Ok(vec![
+                    Item::String(Token::new(0..3)),
+                    Item::String(Token::new(3..6))
+                ]),
+                vec![]
+            )
         );
         assert_eq!(
-            <Vec::<Token<String>>>::recog(&r#""n""n""#.into()).unwrap(),
-            vec![Token::new(0..3), Token::new(3..6)]
+            <ZeroOrMore<Token<String>>>::recog(&r#""n""n""#.into()).unwrap(),
+            (vec![Token::new(0..3), Token::new(3..6)], vec![])
         );
     }
 }
@@ -707,7 +771,7 @@ mod error {
                     .join("\n"),
                 CommonError::Seq(v) => v.diag_display(source),
                 CommonError::NotPredicate(v) => tmp(v.clone(), source, "NotPredicate"),
-                CommonError::OneOrMore(v) => tmp(*v..*v + 1, source, "OneOrMore"),
+                CommonError::OneOrMore(v, ..) => tmp(*v..*v + 1, source, "OneOrMore"),
             }
         }
     }
@@ -802,7 +866,7 @@ pub use error::*;
 
 mod items;
 
-mod constructor;
+pub mod constructor;
 
 mod tmp {
     use super::{items::*, *};
@@ -828,27 +892,28 @@ mod model {
     use super::*;
     use macros::{EnumRecog, RegularToken, Spanable};
 
-    #[derive(RegularToken, PartialEq, Debug)]
+    #[derive(RegularToken, PartialEq, Debug, Clone)]
     #[reg_expr = r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"]
     struct Ident;
 
-    #[derive(RegularToken, PartialEq, Debug)]
+    #[derive(RegularToken, PartialEq, Debug, Clone)]
     #[reg_expr = r#""[^"\\]*(?:\\.[^"\\]*)*""#]
     struct String;
 
-    #[derive(RegularToken, PartialEq, Debug)]
+    #[derive(RegularToken, PartialEq, Debug, Clone)]
     #[reg_expr = r"\b\d+\b"]
     struct Number;
 
-    #[derive(EnumRecog, Spanable, PartialEq, Debug)]
+    #[derive(EnumRecog, Spanable, PartialEq, Debug, Clone)]
     enum Literal {
         Number(Token<Number>),
         String(Token<String>),
     }
 
-    #[derive(EnumRecog, Spanable, PartialEq, Debug)]
+    #[derive(EnumRecog, Spanable, PartialEq, Debug, Clone)]
     enum Item {
-        LiteralIdent((Literal, Token<Ident>, Vec<Literal>)),
+        #[ty((Literal, Token<Ident>, ZeroOrMore<Literal>))]
+        LiteralIdent((Literal, Token<Ident>, RepOk<Literal>)),
         Literal(Literal),
         Ident(Token<Ident>),
     }
@@ -868,10 +933,13 @@ mod model {
             Item::LiteralIdent((
                 Literal::String(Token::new(0..6)),
                 Token::new(6..9),
-                vec![
-                    Literal::String(Token::new(9..15)),
-                    Literal::String(Token::new(15..21))
-                ]
+                (
+                    vec![
+                        Literal::String(Token::new(9..15)),
+                        Literal::String(Token::new(15..21))
+                    ],
+                    vec![]
+                )
             ))
         );
     }

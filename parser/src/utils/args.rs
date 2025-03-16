@@ -11,7 +11,7 @@ use std::{
 pub struct Ctxt<'a> {
     pub code: Code<'a>,
     // pub logger: Box<(Print, RefCell<usize>)>,
-    pub errors: RefCell<Vec<CommonError>>,
+    pub errors: Rc<Vec<Result<Box<dyn std::fmt::Debug>, CommonError>>>,
     pub cache: Rc<RefCell<Cache>>,
 }
 

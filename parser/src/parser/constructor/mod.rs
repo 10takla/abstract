@@ -212,7 +212,7 @@ mod tokens {
         }
     }
 }
-use tokens::*;
+pub use tokens::*;
 
 mod items {
     use super::*;
@@ -270,7 +270,7 @@ mod items {
                         PathItemEnd::PathItemsC((_, _, (vec), _, _))
                     )
                 ))
-            )) if let (PathItemV::GlobImport(_), ..) = vec[0]
+            )) if let (PathItemV::GlobImport(_), ..) = vec.0[0]
         );
         check!(
             "sdfsdf::sdfsdf::{ self, }",
@@ -281,7 +281,7 @@ mod items {
                         PathItemEnd::PathItemsC((_, _,(vec),_, _))
                     )
                 ))
-            )) if let (PathItemV::Self_(_), ..) = vec[0]
+            )) if let (PathItemV::Self_(_), ..) = vec.0[0]
         );
         check!(
             "sdfsdf::sdfsdf::{ sdfsdf, }",
@@ -292,7 +292,7 @@ mod items {
                         PathItemEnd::PathItemsC((_,_, (vec),_, _))
                     )
                 ))
-            )) if let (PathItemV::Ident(_), ..) = vec[0]
+            )) if let (PathItemV::Ident(_), ..) = vec.0[0]
         );
     }
 }

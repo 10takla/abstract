@@ -57,13 +57,29 @@ fn exprs(
                 ExprOther::ExprToken(v) => expr_token(v),
                 _ => {
                     let v = match v {
-                        ExprOther::ZeroOrMore(v) => {
+                        ExprOther::Reps(v, a) => {
                             let v = expr_token(*v);
-                            quote! {ErrorBreakRepetition<#v>}
-                        }
-                        ExprOther::OneOrMore(v) => {
-                            let v = expr_token(*v);
-                            quote! {OneOrMore<#v>}
+                            match a {
+                                RepsBehavior::Base(a) => match a {
+                                    Reps::ZeroOrMore => {
+                                        quote! {ZeroOrMore<#v>}
+                                    }
+                                    Reps::OneOrMore => {
+                                        quote! {OneOrMore<#v>}
+                                    }
+                                },
+                                RepsBehavior::BreakWhile(a, c) => {
+                                    let c = expr_token(c);
+                                    match a {
+                                        Reps::ZeroOrMore => {
+                                            quote! {ZeroOrMore<#v, BreakWhile<#c>>}
+                                        }
+                                        Reps::OneOrMore => {
+                                            quote! {OneOrMore<#v, BreakWhile<#c>>}
+                                        }
+                                    }
+                                }
+                            }
                         }
                         ExprOther::NotPredicate(v) => {
                             let v = expr_token(v);
@@ -165,13 +181,9 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
     {
         let v = exprs(v, &mut output, [a, b, c, d], map);
         output.extend(if is_cachable {
-            quote! {
-                pub type #name = Cachable<#v>;
-            }
+            quote! {pub type #name = Cachable<#v>;}
         } else {
-            quote! {
-                pub type #name = #v;
-            }
+            quote! {pub type #name = #v;}
         });
     }
     // panic!("{}", output.to_string());
@@ -289,10 +301,11 @@ impl Parse for Expr {
 
 #[derive(Clone, Debug)]
 enum ExprOther {
-    /// Zero-or-more: e*
-    ZeroOrMore(Box<ExprToken>),
-    /// One-or-more: e+
-    OneOrMore(Box<ExprToken>),
+    Reps(Box<ExprToken>, RepsBehavior),
+    // /// Zero-or-more: e*
+    // ZeroOrMore(Box<ExprToken>),
+    // /// One-or-more: e+
+    // OneOrMore(Box<ExprToken>),
     /// Optional: e?
     Optional(ExprToken),
     /// And-predicate: &e
@@ -306,28 +319,15 @@ enum ExprOther {
 
 impl Parse for ExprOther {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        (|| {
+        {
             let lookahead_input = input.fork();
-            if let Ok(expr_token) = Parse::parse(&lookahead_input) {
-                if lookahead_input.peek(Token![*]) {
+            Parse::parse(&lookahead_input).and_then(|a| {
+                Parse::parse(&lookahead_input).map(|b| {
                     input.advance_to(&lookahead_input);
-                    input.parse::<Token![*]>().unwrap();
-                    return Ok(Self::ZeroOrMore(expr_token));
-                }
-            }
-            Err(())
-        })()
-        .or_else(|_| {
-            let lookahead_input = input.fork();
-            if let Ok(expr_token) = Parse::parse(&lookahead_input) {
-                if lookahead_input.peek(Token![+]) {
-                    input.advance_to(&lookahead_input);
-                    input.parse::<Token![+]>().unwrap();
-                    return Ok(Self::OneOrMore(expr_token));
-                }
-            }
-            Err(())
-        })
+                    Self::Reps(a, b)
+                })
+            })
+        }
         .or_else(|_| {
             let lookahead_input = input.fork();
             if let Ok(expr_token) = Parse::parse(&lookahead_input) {
@@ -352,6 +352,43 @@ impl Parse for ExprOther {
             Parse::parse(input).map(Self::Cachable)
         })
         .or_else(|_| Parse::parse(input).map(Self::ExprToken))
+    }
+}
+#[derive(Clone, Debug)]
+enum RepsBehavior {
+    // + | *
+    Base(Reps),
+    // [+ T] | [* T]
+    BreakWhile(Reps, ExprToken),
+}
+
+impl Parse for RepsBehavior {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Parse::parse(input).map(Self::Base).or_else(|_| {
+            let lookahead_input = input.fork();
+            let content;
+            syn::bracketed!(content in lookahead_input);
+            Parse::parse(&content).and_then(|v| {
+                Parse::parse(&content).map(|n| {
+                    input.advance_to(&lookahead_input);
+                    Self::BreakWhile(v, n)
+                })
+            })
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+enum Reps {
+    ZeroOrMore,
+    OneOrMore,
+}
+
+impl Parse for Reps {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        <Token![*]>::parse(input)
+            .map(|_| Self::ZeroOrMore)
+            .or_else(|_| <Token![+]>::parse(input).map(|_| Self::OneOrMore))
     }
 }
 

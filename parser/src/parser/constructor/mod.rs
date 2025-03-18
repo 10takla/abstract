@@ -29,12 +29,14 @@ fn not_predicate() {
 
     assert_eq!(
         <(String, NotPredicate<Ident>)>::recog(&r#""sdf""#.into()).unwrap(),
-        (String::new(0..5), ())
+        (String::new(0..5), Empty(5))
     );
-    assert_eq!(
-        <(String, NotPredicate<Ident>)>::recog(&r#""sdf"sdfsdf"#.into()).unwrap_err(),
-        CommonError::NotPredicate(5..11)
-    );
+    let CommonError::Seq(SeqError { error, .. }) =
+        <(String, NotPredicate<Ident>)>::recog(&r#""sdf"sdfsdf"#.into()).unwrap_err()
+    else {
+        panic!()
+    };
+    assert_eq!(*error, CommonError::NotPredicate(5..11));
 }
 
 constructor! {
@@ -270,7 +272,7 @@ mod items {
                         PathItemEnd::PathItemsC((_, _, (vec), _, _))
                     )
                 ))
-            )) if let (PathItemV::GlobImport(_), ..) = vec.0[0]
+            )) if let (PathItemV::GlobImport(_), ..) = vec[0]
         );
         check!(
             "sdfsdf::sdfsdf::{ self, }",
@@ -281,7 +283,7 @@ mod items {
                         PathItemEnd::PathItemsC((_, _,(vec),_, _))
                     )
                 ))
-            )) if let (PathItemV::Self_(_), ..) = vec.0[0]
+            )) if let (PathItemV::Self_(_), ..) = vec[0]
         );
         check!(
             "sdfsdf::sdfsdf::{ sdfsdf, }",
@@ -292,7 +294,7 @@ mod items {
                         PathItemEnd::PathItemsC((_,_, (vec),_, _))
                     )
                 ))
-            )) if let (PathItemV::Ident(_), ..) = vec.0[0]
+            )) if let (PathItemV::Ident(_), ..) = vec[0]
         );
     }
 }

@@ -2,9 +2,9 @@
 
 use distruct::distruct_items;
 use parser::{
-    language::Items,
+    language::{ItemError, Items},
     parse,
-    parser::{CommonRecog, Slice},
+    parser::{CommonRecog, Slice, Spanable},
 };
 use std::{
     fmt::Debug,
@@ -174,36 +174,36 @@ impl Backend {
         let (items, diags) = parse(&code);
         let tokens = tokenize(&items, &code);
 
-        self.client
-            .publish_diagnostics(
-                uri,
-                {
-                    let iter = &mut get_iter(&code);
-                    diags
-                        .iter()
-                        .cloned()
-                        .map(|diag| Diagnostic {
-                            range: {
-                                let slice = diag_split(diag.span(&code).clone(), iter);
-                                tower_lsp::lsp_types::Range {
-                                    start: Position::new(
-                                        slice.start[1] as u32,
-                                        slice.start[0] as u32,
-                                    ),
-                                    end: Position::new(slice.end[1] as u32, slice.end[0] as u32),
-                                }
-                            },
-                            severity: Some(DiagnosticSeverity::ERROR),
-                            code: None,
-                            source: Some("abstract".to_string()),
-                            message: format!("Ошибка парсера: {}", diag.diag_display(&code)),
-                            ..Default::default()
-                        })
-                        .collect()
-                },
-                None,
-            )
-            .await;
+        // self.client
+        //     .publish_diagnostics(
+        //         uri,
+        //         {
+        //             let iter = &mut get_iter(&code);
+        //             diags
+        //                 .iter()
+        //                 .cloned()
+        //                 .map(|diag| Diagnostic {
+        //                     range: {
+        //                         let slice = diag_split(diag.span().clone(), iter);
+        //                         tower_lsp::lsp_types::Range {
+        //                             start: Position::new(
+        //                                 slice.start[1] as u32,
+        //                                 slice.start[0] as u32,
+        //                             ),
+        //                             end: Position::new(slice.end[1] as u32, slice.end[0] as u32),
+        //                         }
+        //                     },
+        //                     severity: Some(DiagnosticSeverity::ERROR),
+        //                     code: None,
+        //                     source: Some("abstract".to_string()),
+        //                     message: format!("Ошибка парсера: {}", diag.diag_display(&code)),
+        //                     ..Default::default()
+        //                 })
+        //                 .collect()
+        //         },
+        //         None,
+        //     )
+        //     .await;
         tokens
     }
 
@@ -275,7 +275,7 @@ fn diag() {
             parse(source)
                 .1
                 .into_iter()
-                .map(|v| diag_split(dbg!(v).span(source).clone(), &mut get_iter(source)))
+                .map(|v| diag_split(dbg!(v).span().clone(), &mut get_iter(source)))
                 .collect::<Vec<_>>(),
             b
         );

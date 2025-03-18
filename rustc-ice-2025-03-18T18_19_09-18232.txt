@@ -1,0 +1,74 @@
+thread 'rustc' panicked at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\compiler\rustc_query_system\src\query\plumbing.rs:734:9:
+Found unstable fingerprints for evaluate_obligation(6d78f5de9e90132-d14322f95b1606d5): Ok(EvaluatedToAmbig)
+stack backtrace:
+   0:     0x7ff8c143c3a3 - std::backtrace_rs::backtrace::dbghelp64::trace
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\..\..\backtrace\src\backtrace\dbghelp64.rs:91
+   1:     0x7ff8c143c3a3 - std::backtrace_rs::backtrace::trace_unsynchronized
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\..\..\backtrace\src\backtrace\mod.rs:66
+   2:     0x7ff8c143c3a3 - std::backtrace::Backtrace::create
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\backtrace.rs:331
+   3:     0x7ff8c143c2ea - std::backtrace::Backtrace::force_capture
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\backtrace.rs:312
+   4:     0x7ff8c2a9084d - memchr
+   5:     0x7ff8c1456f62 - alloc::boxed::impl$50::call
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/alloc\src\boxed.rs:2468
+   6:     0x7ff8c1456f62 - std::panicking::rust_panic_with_hook
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\panicking.rs:809
+   7:     0x7ff8c1456da9 - std::panicking::begin_panic_handler::closure$0
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\panicking.rs:674
+   8:     0x7ff8c14545ff - std::sys::backtrace::__rust_end_short_backtrace<std::panicking::begin_panic_handler::closure_env$0,never$>
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\sys\backtrace.rs:170
+   9:     0x7ff8c14569ae - std::panicking::begin_panic_handler
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\panicking.rs:665
+  10:     0x7ff8c449a141 - core::panicking::panic_fmt
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/core\src\panicking.rs:74
+  11:     0x7ff8c38aacfb - <rustc_ty_utils[7a78ef42655506d9]::opaque_types::OpaqueTypeCollector as rustc_type_ir[1227433f043048b9]::visit::TypeVisitor<rustc_middle[b6003dd1f8c91109]::ty::context::TyCtxt>>::visit_ty
+  12:     0x7ff8c218bd94 - rustc_ty_utils[7a78ef42655506d9]::ty::self_ty_of_trait_impl_enabling_order_dep_trait_object_hack
+  13:     0x7ff8c213d574 - rustc_ty_utils[7a78ef42655506d9]::ty::self_ty_of_trait_impl_enabling_order_dep_trait_object_hack
+  14:     0x7ff8c22510de - rustc_query_impl[e86ef98849ffe258]::plumbing::query_key_hash_verify_all
+  15:     0x7ff8c23aaaec - <rustc_trait_selection[7791e3ab2358cc63]::traits::fulfill::FulfillProcessor as rustc_data_structures[9ca6319950c0bb4b]::obligation_forest::ObligationProcessor>::process_obligation
+  16:     0x7ff8c22fe11d - rustc_symbol_mangling[4c9836d59e50495c]::symbol_name_provider
+  17:     0x7ff8c234e59a - <rustc_trait_selection[7791e3ab2358cc63]::traits::engine::ObligationCtxt<rustc_trait_selection[7791e3ab2358cc63]::traits::FulfillmentError>>::assumed_wf_types_and_report_errors
+  18:     0x7ff8c15d69f3 - <rustc_codegen_llvm[c1fafc1fc844eeb8]::builder::Builder as rustc_codegen_ssa[e90f2141e4a01537]::traits::builder::BuilderMethods>::load_operand
+  19:     0x7ff8c169137e - rustc_hir_typeck[c8b9c5668c223c99]::method::probe::method_autoderef_steps
+  20:     0x7ff8c168fa58 - rustc_hir_typeck[c8b9c5668c223c99]::method::probe::method_autoderef_steps
+  21:     0x7ff8c16fd6fc - rustc_hir_typeck[c8b9c5668c223c99]::typeck
+  22:     0x7ff8c162ce8b - <<rustc_hir_typeck[c8b9c5668c223c99]::fn_ctxt::FnCtxt>::deduce_closure_signature_from_predicates::MentionsTy as rustc_type_ir[1227433f043048b9]::visit::TypeVisitor<rustc_middle[b6003dd1f8c91109]::ty::context::TyCtxt>>::visit_ty
+  23:     0x7ff8c1608285 - <<rustc_hir_typeck[c8b9c5668c223c99]::fn_ctxt::FnCtxt>::deduce_closure_signature_from_predicates::MentionsTy as rustc_type_ir[1227433f043048b9]::visit::TypeVisitor<rustc_middle[b6003dd1f8c91109]::ty::context::TyCtxt>>::visit_ty
+  24:     0x7ff8c160993d - <<rustc_hir_typeck[c8b9c5668c223c99]::fn_ctxt::FnCtxt>::deduce_closure_signature_from_predicates::MentionsTy as rustc_type_ir[1227433f043048b9]::visit::TypeVisitor<rustc_middle[b6003dd1f8c91109]::ty::context::TyCtxt>>::visit_ty
+  25:     0x7ff8c166b268 - <<rustc_hir_typeck[c8b9c5668c223c99]::fn_ctxt::FnCtxt>::deduce_closure_signature_from_predicates::MentionsTy as rustc_type_ir[1227433f043048b9]::visit::TypeVisitor<rustc_middle[b6003dd1f8c91109]::ty::context::TyCtxt>>::visit_ty
+  26:     0x7ff8c166d29e - <<rustc_hir_typeck[c8b9c5668c223c99]::fn_ctxt::FnCtxt>::deduce_closure_signature_from_predicates::MentionsTy as rustc_type_ir[1227433f043048b9]::visit::TypeVisitor<rustc_middle[b6003dd1f8c91109]::ty::context::TyCtxt>>::visit_ty
+  27:     0x7ff8c160a3e2 - <<rustc_hir_typeck[c8b9c5668c223c99]::fn_ctxt::FnCtxt>::deduce_closure_signature_from_predicates::MentionsTy as rustc_type_ir[1227433f043048b9]::visit::TypeVisitor<rustc_middle[b6003dd1f8c91109]::ty::context::TyCtxt>>::visit_ty
+  28:     0x7ff8c16d4645 - rustc_hir_typeck[c8b9c5668c223c99]::typeck
+  29:     0x7ff8c16c2b30 - rustc_hir_typeck[c8b9c5668c223c99]::typeck
+  30:     0x7ff8c223febb - rustc_query_impl[e86ef98849ffe258]::plumbing::query_key_hash_verify_all
+  31:     0x7ff8c21812c8 - rustc_ty_utils[7a78ef42655506d9]::ty::self_ty_of_trait_impl_enabling_order_dep_trait_object_hack
+  32:     0x7ff8c2248524 - rustc_query_impl[e86ef98849ffe258]::plumbing::query_key_hash_verify_all
+  33:     0x7ff8c173d0a2 - <rustc_hir_typeck[c8b9c5668c223c99]::upvar::InferBorrowKind as rustc_hir_typeck[c8b9c5668c223c99]::expr_use_visitor::Delegate>::borrow
+  34:     0x7ff8c17b8ee0 - rustc_hir_analysis[fa781aba8a4fe60d]::check_crate
+  35:     0x7ff8c14cd2b1 - rustc_interface[3ad51052a965e06f]::passes::resolver_for_lowering_raw
+  36:     0x7ff8be4f7dde - rustc_interface[3ad51052a965e06f]::passes::analysis
+  37:     0x7ff8c10a12db - <dyn std[d097513b72711b35]::io::Write as nu_ansi_term[4989e15ed2f2cbf6]::write::AnyWrite>::write_str
+  38:     0x7ff8c0fbccda - rustc_ty_utils[7a78ef42655506d9]::ty::adt_sized_constraint
+  39:     0x7ff8c10a6ab3 - rustc_query_impl[e86ef98849ffe258]::query_system
+  40:     0x7ff8be4b2d70 - _rust_alloc_error_handler
+  41:     0x7ff8be4ae93f - _rust_alloc_error_handler
+  42:     0x7ff8be4b885f - _rust_alloc_error_handler
+  43:     0x7ff8c14687bd - alloc::boxed::impl$48::call_once
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/alloc\src\boxed.rs:2454
+  44:     0x7ff8c14687bd - alloc::boxed::impl$48::call_once
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/alloc\src\boxed.rs:2454
+  45:     0x7ff8c14687bd - std::sys::pal::windows::thread::impl$0::new::thread_start
+                               at /rustc/1bc403daadbebb553ccc211a0a8eebb73989665f\library/std\src\sys\pal\windows\thread.rs:55
+  46:     0x7ff9a7c7e8d7 - BaseThreadInitThunk
+  47:     0x7ff9a911bf6c - RtlUserThreadStart
+
+
+rustc version: 1.83.0-nightly (1bc403daa 2024-10-11)
+platform: x86_64-pc-windows-msvc
+
+query stack during panic:
+#0 [evaluate_obligation] evaluating trait selection obligation `parser::repetiotion::OneOrMore<(parser::token::Token<language::tmp::tmp1::Token1Marker>, parser::repetiotion::OneOrMore<parser::token::Token<language::tmp::tmp1::Token0Marker>>)>: parser::wrapper::CommonRecog`
+#1 [typeck] type-checking `language::tmp::tmp1::test`
+#2 [analysis] running analysis passes on this crate
+end of query stack

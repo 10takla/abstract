@@ -6,7 +6,12 @@ use proc_macro2::{Literal, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use std::{collections::HashSet, default};
 use syn::{
-    parse::{Parse, ParseBuffer, ParseStream}, parse_macro_input, punctuated::{IntoIter, Iter, Punctuated}, token::{Brace, Bracket, Break, Paren}, AngleBracketedGenericArguments, Attribute, Expr, Fields, FieldsUnnamed, Ident, ItemEnum, ItemFn, ItemStruct, Lit, Meta, MetaList, PathArguments, Token, Variant
+    parse::{Parse, ParseBuffer, ParseStream},
+    parse_macro_input,
+    punctuated::{IntoIter, Iter, Punctuated},
+    token::{Brace, Bracket, Break, Paren},
+    AngleBracketedGenericArguments, Attribute, Expr, Fields, FieldsUnnamed, Ident, ItemEnum,
+    ItemFn, ItemStruct, Lit, Meta, MetaList, PathArguments, Token, Variant,
 };
 
 #[proc_macro_attribute]
@@ -42,49 +47,6 @@ impl Parse for T {
     }
 }
 
-#[proc_macro]
-pub fn spanable(input: TokenStream) -> TokenStream {
-    let T(v) = parse_macro_input!(input);
-
-    let v = (2..=v.len()).map(|v| {
-        let k = (0..v);
-        let n = Literal::usize_unsuffixed(v - 1);
-        let a = k.clone().map(Literal::usize_unsuffixed).collect::<Vec<_>>();
-        let (first, other) = a.split_first().unwrap();
-        let b = k.rev().map(Literal::usize_unsuffixed).collect::<Vec<_>>();
-        let (first_b, other_b) = b.split_first().unwrap();
-
-        quote! {
-            paste! {
-                impl<#([<T #a>]: Spanable),*> Spanable for  (#([<T #a>]),*) {
-                    fn span(&self) -> Slice {
-                        let v = |v: Slice| (!(v.start == 0 && v.end == 0)).then_some(v);
-                        v(self.#first.span())
-                        #(
-                            .or_else(|| v(self.#other.span()))
-                        )*
-                        .zip(
-                            v(self.#first_b.span())
-                            #(
-                                .or_else(|| v(self.#other_b.span()))
-                            )*
-                        )
-                        .map(|v| {
-                            v.0.start..v.1.end
-                        })
-                        .unwrap_or_default()
-                    }
-                    fn span_by_cursor(&self, cursor: usize) -> Slice {
-                        self.0.span_by_cursor(cursor).start..self.#n.span_by_cursor(cursor).end
-                    }
-                }
-            }
-        }
-    });
-
-    quote! {#(#v)*}.into()
-}
-
 #[proc_macro_derive(Spanable)]
 pub fn spanable_derive(input: TokenStream) -> TokenStream {
     let (ident, body) = match parse_macro_input!(input) {
@@ -98,11 +60,6 @@ pub fn spanable_derive(input: TokenStream) -> TokenStream {
                     fn span(&self) -> Slice {
                         match self {
                             #( Self::#variants(v) => v.span() ),*
-                        }
-                    }
-                    fn span_by_cursor(&self, cursor: usize) -> Slice {
-                        match self {
-                            #( Self::#variants(v) => v.span_by_cursor(cursor) ),*
                         }
                     }
                 },
@@ -119,9 +76,6 @@ pub fn spanable_derive(input: TokenStream) -> TokenStream {
                 quote! {
                     fn span(&self) -> Slice {
                         self.#start.span().start..self.#end.span().end
-                    }
-                    fn span_by_cursor(&self, cursor: usize) -> Slice {
-                        self.#start.span_by_cursor(cursor).start..self.#end.span_by_cursor(cursor).end
                     }
                 },
             )

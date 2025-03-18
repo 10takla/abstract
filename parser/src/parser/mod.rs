@@ -3,17 +3,27 @@ use colored::Colorize;
 use paste::paste;
 use regex::Regex;
 use std::{any::Any, cell::RefCell, fmt::Arguments, marker::PhantomData, ops::Range};
+use std_reset::prelude::Deref;
 
 pub type Slice = Range<usize>;
 
 pub trait Spanable {
     fn span(&self) -> Slice;
+}
 
-    fn span_by_cursor(&self, cursor: usize) -> Slice {
-        let v = self.span();
-        cursor + v.start..cursor + v.end
+mod types {
+    use super::*;
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Empty(pub usize);
+
+    impl Spanable for Empty {
+        fn span(&self) -> Slice {
+            self.0..self.0
+        }
     }
 }
+pub use types::*;
 
 mod cache {
     use super::{wrapper::CommonRecog, *};
@@ -96,6 +106,7 @@ mod wrapper {
         Seq(SeqError),
         NotPredicate(Slice),
         OneOrMore(usize, Vec<Result<String, CommonError>>),
+        Coll(Slice),
     }
 
     impl CommonError {
@@ -109,6 +120,7 @@ mod wrapper {
                 },
                 CommonError::NotPredicate(v) => Ok(v.start),
                 CommonError::OneOrMore(v, ..) => Ok(*v),
+                CommonError::Coll(v) => Ok(v.start),
             }
         }
         pub fn end(&self) -> Result<usize, ()> {
@@ -121,6 +133,7 @@ mod wrapper {
                 },
                 CommonError::NotPredicate(v) => Ok(v.end),
                 CommonError::OneOrMore(v, ..) => Ok(*v + 1),
+                CommonError::Coll(v) => Ok(v.end),
             }
         }
 
@@ -138,6 +151,7 @@ mod wrapper {
                 },
                 CommonError::NotPredicate(v) => v.clone(),
                 CommonError::OneOrMore(v, ..) => *v..*v + 1,
+                CommonError::Coll(v) => v.clone(),
             }
         }
     }
@@ -196,20 +210,18 @@ mod wrapper {
     where
         Self: RepetitionRecog,
     {
-        type Output = RepOk<<<ZeroOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        type Output = Vec<<<ZeroOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            let (a, b) = Self::cursor_aware_recog(ctxt);
-            a.map(|a| (a, b))
+            Self::cursor_aware_recog(ctxt).map(|v| v.0)
         }
     }
     impl<T: CommonTrait, I: IterRepetition> CommonRecog for OneOrMore<T, I>
     where
         OneOrMore<T, I>: RepetitionRecog,
     {
-        type Output = RepOk<<<OneOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        type Output = Vec<<<OneOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            let (a, b) = Self::cursor_aware_recog(ctxt);
-            a.map(|a| (a, b))
+            Self::cursor_aware_recog(ctxt).map(|v| v.0)
         }
     }
 
@@ -223,9 +235,10 @@ mod wrapper {
         }
     }
 
-    impl<T: CommonRecog + Spanable> Spanable for AndPredicate<T> {
+    impl<T: CommonRecog<Output: Spanable> + Spanable> Spanable for AndPredicate<T> {
         fn span(&self) -> Slice {
-            0..0
+            let v = self.0.span().start;
+            v..v
         }
     }
 
@@ -233,32 +246,38 @@ mod wrapper {
     pub struct NotPredicate<T>(PhantomData<T>);
 
     impl<T: CommonRecog<Output: Spanable>> CommonRecog for NotPredicate<T> {
-        type Output = ();
+        type Output = Empty;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
             if let Ok(v) = T::recog(ctxt) {
                 Err(CommonError::NotPredicate(v.span()))
             } else {
-                Ok(())
+                Ok(Empty(ctxt.code.cursor))
             }
         }
     }
 
-    impl Spanable for () {
-        fn span(&self) -> Slice {
-            0..0
-        }
+    #[derive(Clone, PartialEq, Debug)]
+    pub enum Opt<T> {
+        Some(T),
+        None(usize),
     }
 
     impl<T: CommonRecog> CommonRecog for Option<T> {
-        type Output = Option<T::Output>;
+        type Output = Opt<T::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            Ok(T::recog(ctxt).ok())
+            Ok(match T::recog(ctxt) {
+                Ok(v) => Opt::Some(v),
+                Err(e) => Opt::None(ctxt.code.cursor),
+            })
         }
     }
 
-    impl<T: Spanable> Spanable for Option<T> {
+    impl<T: Spanable> Spanable for Opt<T> {
         fn span(&self) -> Slice {
-            self.as_ref().map(Spanable::span).unwrap_or_default()
+            match self {
+                Self::Some(v) => v.span(),
+                Self::None(v) => *v..*v,
+            }
         }
     }
 }
@@ -271,6 +290,7 @@ mod token {
     #[derive(Debug, PartialEq, Clone)]
     pub struct Token<T> {
         pub span: Slice,
+        // slice: String,
         pub _marker: PhantomData<T>,
     }
 
@@ -278,6 +298,7 @@ mod token {
         pub const fn new(span: Slice) -> Self {
             Self {
                 span,
+                // slice: String::new(),
                 _marker: PhantomData,
             }
         }
@@ -306,6 +327,7 @@ mod token {
             Self::start_string_aware_recog(&code.source[code.cursor..])
                 .map(|span| Token {
                     _marker: PhantomData,
+                    // slice: code.source[code.cursor + span.start..code.cursor + span.end].into(),
                     span: code.cursor + span.start..code.cursor + span.end,
                 })
                 .map_err(|v1| match v1 {
@@ -340,13 +362,9 @@ mod token {
                 ))
         }
     }
-
     impl<T> Spanable for Token<T> {
         fn span(&self) -> Slice {
             self.span.clone()
-        }
-        fn span_by_cursor(&self, cursor: usize) -> Slice {
-            self.span()
         }
     }
 }
@@ -354,7 +372,6 @@ pub use token::*;
 
 mod sequence {
     use super::*;
-    use macros::spanable;
     use std::process::Output;
 
     pub type Recognized = Vec<std::string::String>;
@@ -407,7 +424,7 @@ mod sequence {
 
     macro_rules! impl_seq {
         (@impl $($a:ident)+) => {
-            // impl_seq!(@spanable $($a)+);
+             impl_seq!(@spanable $($a)+);
             impl<$($a: CommonRecog),+> SequenceRecog for ($($a),+)
             where
                 ($($a),+): CommonTrait,
@@ -439,7 +456,6 @@ mod sequence {
         };
     }
     tuple_impl!(impl_seq! @impl);
-    spanable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15 T16 T17);
 
     use items::*;
     #[test]
@@ -482,9 +498,6 @@ mod sequence {
 }
 pub use sequence::*;
 
-// mod dyn_sequence;
-// use dyn_sequence::*;
-
 mod enum_ {
     use super::*;
     use crate::tuple_impl;
@@ -503,55 +516,6 @@ mod enum_ {
         ) -> Vec<Box<dyn core::ops::Fn() -> Result<Self::Output, CommonError> + 'a>>;
     }
 
-    /// ниже диначиеское представление
-    // trait CommonRecog2 {
-    //     type Output;
-    //     fn recog(ctxt: &Ctxt) -> Result<Self::Output, &'static str>
-    //     where
-    //         Self: Sized;
-    // }
-
-    // impl<T: EnumRecog> CommonRecog2 for Enum<T> {
-    //     type Output = T::Output;
-    //     fn recog(ctxt: &Ctxt) -> Result<Self::Output, &'static str>
-    //     where
-    //         Self: Sized,
-    //     {
-    //         T::cursor_aware_recog(code).map_err(|v| v[0])
-    //     }
-    // }
-
-    // macro_rules! impl_enum_seq {
-    //     ($($a:ident)+) => {
-    //         impl<$($a: CommonRecog + DynSpanable),+> EnumRecog for ($($a),+) {
-    //             impl_enum_seq!(@fn $($a)+);
-    //         }
-    //     };
-    //     (@fn $a:ident $($other:ident)+) => {
-    //         type Output = Box<dyn DynSpanable>;
-    //         fn cursor_aware_recog(ctxt: &Ctxt) -> Result<Self::Output, Vec<&'static str>> {
-    //             let mut errs = vec![];
-    //             $a::recog(code)
-    //                 .map_err(|e| errs.push(e))
-    //                 .map(|v| {
-    //                     Box::new(v) as Box<dyn DynSpanable>
-    //                 })
-    //             $(
-    //                 .or_else(|_| {
-    //                     $other::recog(code)
-    //                         .map_err(|e| errs.push(e))
-    //                         .map(|v| {
-    //                             Box::new(v) as Box<dyn DynSpanable>
-    //                         })
-    //                 })
-    //             )+
-    //                 .map_err(|_| errs)
-
-    //         }
-    //     }
-    // }
-
-    // tuple_impl!(impl_enum_seq!);
     use super::{items::*, *};
     #[test]
     fn test() {
@@ -589,7 +553,9 @@ mod repetiotion {
 
     pub trait RepetitionRecog {
         type Item: CommonRecog<Output: Spanable>;
-        fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output>;
+        fn cursor_aware_recog(
+            ctxt: &Ctxt,
+        ) -> Result<RepOk<<Self::Item as CommonRecog>::Output>, CommonError>;
     }
     pub trait IterRepetition: CommonTrait {
         fn iter(
@@ -606,22 +572,20 @@ mod repetiotion {
         ZeroOrMore<T, I>: RepetitionRecog<Item = T>,
     {
         type Item = T;
-        fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output> {
-            let (vec, coll) = <ZeroOrMore<T, I>>::cursor_aware_recog(ctxt);
-            let vec = vec.unwrap();
+        fn cursor_aware_recog(
+            ctxt: &Ctxt,
+        ) -> Result<RepOk<<Self::Item as CommonRecog>::Output>, CommonError> {
+            let (vec, coll) = <ZeroOrMore<T, I>>::cursor_aware_recog(ctxt)?;
             if vec.is_empty() {
-                (
-                    Err(CommonError::OneOrMore(
-                        ctxt.code.cursor,
-                        coll.clone()
-                            .into_iter()
-                            .map(|v| v.map(|v| format!("{v:?}")))
-                            .collect(),
-                    )),
-                    coll,
-                )
+                Err(CommonError::OneOrMore(
+                    ctxt.code.cursor,
+                    coll.clone()
+                        .into_iter()
+                        .map(|v| v.map(|v| format!("{v:?}")))
+                        .collect(),
+                ))
             } else {
-                (Ok(vec), coll)
+                Ok((vec, coll))
             }
         }
     }
@@ -631,26 +595,18 @@ mod repetiotion {
 
     impl<T: CommonRecog<Output: Spanable>, I: IterRepetition> RepetitionRecog for ZeroOrMore<T, I> {
         type Item = T;
-        fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output> {
+        fn cursor_aware_recog(
+            ctxt: &Ctxt,
+        ) -> Result<RepOk<<Self::Item as CommonRecog>::Output>, CommonError> {
             let (mut pass, mut fail_collection) = (vec![], vec![]);
             let mut ctxt2 = (*ctxt).clone();
             (0..).try_for_each(|_| {
                 if ctxt2.code.cursor >= ctxt2.code.source.len() {
                     return ControlFlow::Break(());
                 }
-                dbg!("next", ctxt2.code.cursor);
                 I::iter(&ctxt2.clone(), || {
                     Self::Item::recog(&ctxt2)
-                        .map_err(|e| {
-                            if let Ok(v) = dbg!(e.end()) {
-                                ctxt2.code.cursor = v;
-                                fail_collection.push(Err(e));
-                                dbg!(&fail_collection);
-                                ControlFlow::Continue(())
-                            } else {
-                                ControlFlow::Break(())
-                            }
-                        })
+                        .map_err(|e| ControlFlow::Break(()))
                         .and_then(|item| {
                             if item.span().len() == 0 {
                                 return Err(ControlFlow::Break(()));
@@ -665,9 +621,62 @@ mod repetiotion {
                         })
                 })
             });
-            (Ok(pass), fail_collection)
+            Ok((pass, fail_collection))
         }
     }
+
+    // #[derive(Debug, Clone)]
+    // pub struct ZeroOrMore<T, I = ()>(PhantomData<T>, PhantomData<I>);
+
+    // impl<T: CommonRecog<Output: Spanable>, I: IterRepetition> RepetitionRecog for ZeroOrMore<T, I> {
+    //     type Item = T;
+    //     fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output> {
+    //         let (mut pass, mut fail_collection) = (vec![], vec![]);
+    //         let mut ctxt2 = (*ctxt).clone();
+    //         (0..).try_for_each(|_| {
+    //             if ctxt2.code.cursor >= ctxt2.code.source.len() {
+    //                 return ControlFlow::Break(());
+    //             }
+    //             I::iter(&ctxt2.clone(), || {
+    //                 Self::Item::recog(&ctxt2)
+    //                     .map_err(|e| {
+    //                         if let Ok(v) = e.end() {
+    //                             let start = e.start().unwrap();
+    //                             let mut end = v;
+
+    //                             while let Err(e) = Self::Item::recog(&ctxt2) {
+    //                                 if let Ok(v) = e.end() {
+    //                                     ctxt2.code.cursor = v;
+    //                                     end = v
+    //                                 } else {
+    //                                     return ControlFlow::Break(());
+    //                                 }
+    //                             }
+    //                             fail_collection.push(Err(CommonError::Coll(start..end)));
+    //                             ctxt2.code.cursor = end;
+
+    //                             ControlFlow::Continue(())
+    //                         } else {
+    //                             ControlFlow::Break(())
+    //                         }
+    //                     })
+    //                     .and_then(|item| {
+    //                         if item.span().len() == 0 {
+    //                             return Err(ControlFlow::Break(()));
+    //                         }
+    //                         ctxt2.code.cursor += item.span().len();
+    //                         if fail_collection.is_empty() {
+    //                             pass.push(item);
+    //                         } else {
+    //                             fail_collection.push(Ok(item));
+    //                         }
+    //                         Ok(())
+    //                     })
+    //             })
+    //         });
+    //         (Ok(pass), fail_collection)
+    //     }
+    // }
 
     impl IterRepetition for () {
         fn iter(
@@ -715,97 +724,49 @@ mod repetiotion {
         }
     }
 
-    impl<T: Spanable> Spanable for RepOk<T> {
+    impl<T: Spanable + CommonTrait> Spanable for RepOk<T> {
         fn span(&self) -> Slice {
-            let v = self.0.span();
-            if v.is_empty() {
+            let a = self.0.span();
+            if !self.1.is_empty() {
                 self.1
                     .last()
                     .map(|v| {
-                        v.as_ref().map(|v| v.span()).unwrap_or_else(|e| {
-                            e.start()
-                                .ok()
-                                .zip(e.end().ok())
-                                .map(|v| v.0..v.1)
-                                .unwrap_or_default()
-                        })
+                        a.start
+                            ..v.as_ref()
+                                .map(|v| v.span().end)
+                                .unwrap_or_else(|e| e.end().unwrap())
                     })
                     .unwrap_or_default()
             } else {
-                v
+                a
             }
-        }
-        fn span_by_cursor(&self, cursor: usize) -> Slice {
-            self.0.span_by_cursor(cursor)
         }
     }
 
     impl<T: Spanable> Spanable for Vec<T> {
         fn span(&self) -> Slice {
-            let v = |v: &T| {
-                let v = v.span();
-                (!(v.start == 0 && v.end == 0)).then_some(v)
-            };
-            self.iter()
-                .find_map(v)
-                .zip(self.iter().rev().find_map(v))
-                .map(|v| v.0.start..v.1.end)
-                .unwrap_or_default()
-        }
-        fn span_by_cursor(&self, cursor: usize) -> Slice {
             self.first()
                 .zip(self.last())
-                .map(|v| v.0.span_by_cursor(cursor).start..v.1.span_by_cursor(cursor).end)
+                .map(|v| v.0.span().start..v.1.span().end)
                 .unwrap_or_default()
         }
     }
 
-    // impl<T: Spanable + Clone + std::fmt::Debug> Spanable for (Vec<T>, Vec<CommonError>) {
-    //     fn span(&self) -> Slice {
-    //         if let Some(error) = self.1.first()
-    //             && let Ok(error_start) = error.start()
-    //         {
-    //             self.0
-    //                 .clone()
-    //                 .into_iter()
-    //                 .take_while(|item| item.span().start < error_start)
-    //                 .collect::<Vec<_>>()
-    //         } else {
-    //             self.0.clone()
-    //         }
-    //         .span()
-    //     }
-    //     fn span_by_cursor(&self, cursor: usize) -> Slice {
-    //         if let Some(error) = self.1.first()
-    //             && let Ok(error_start) = error.start()
-    //         {
-    //             self.0
-    //                 .clone()
-    //                 .into_iter()
-    //                 .take_while(|item| item.span().start < error_start)
-    //                 .collect::<Vec<_>>()
-    //         } else {
-    //             self.0.clone()
-    //         }
-    //         .span_by_cursor(cursor)
-    //     }
-    // }
-
     #[test]
     fn test() {
         assert_eq!(
-            <ZeroOrMore<Item>>::cursor_aware_recog(&r#""n""n""#.into()),
+            <ZeroOrMore<Item>>::cursor_aware_recog(&r#""n""n""#.into()).unwrap(),
             (
-                Ok(vec![
+                vec![
                     Item::String(Token::new(0..3)),
                     Item::String(Token::new(3..6))
-                ]),
+                ],
                 vec![]
             )
         );
         assert_eq!(
             <ZeroOrMore<Token<String>>>::recog(&r#""n""n""#.into()).unwrap(),
-            (vec![Token::new(0..3), Token::new(3..6)], vec![])
+            vec![Token::new(0..3), Token::new(3..6)]
         );
     }
 }
@@ -826,6 +787,7 @@ mod error {
                 CommonError::Seq(SeqError { error, .. }) => error.diag_display(source),
                 CommonError::NotPredicate(v) => tmp(v.clone(), source, "NotPredicate"),
                 CommonError::OneOrMore(v, ..) => tmp(*v..*v + 1, source, "OneOrMore"),
+                _ => "".into(),
             }
         }
     }
@@ -967,7 +929,7 @@ mod model {
     #[derive(EnumRecog, Spanable, PartialEq, Debug, Clone)]
     enum Item {
         #[ty((Literal, Token<Ident>, ZeroOrMore<Literal>))]
-        LiteralIdent((Literal, Token<Ident>, RepOk<Literal>)),
+        LiteralIdent((Literal, Token<Ident>, Vec<Literal>)),
         Literal(Literal),
         Ident(Token<Ident>),
     }
@@ -987,13 +949,10 @@ mod model {
             Item::LiteralIdent((
                 Literal::String(Token::new(0..6)),
                 Token::new(6..9),
-                (
-                    vec![
-                        Literal::String(Token::new(9..15)),
-                        Literal::String(Token::new(15..21))
-                    ],
-                    vec![]
-                )
+                vec![
+                    Literal::String(Token::new(9..15)),
+                    Literal::String(Token::new(15..21))
+                ],
             ))
         );
     }

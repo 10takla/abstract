@@ -7,3 +7,5 @@ edition = "2021"
 parser = { workspace = true }
 tokio = { version = "1.41.1", features = ["full"] }
 tower-lsp = "0.20.0"
+lsp-server-macros = { path = "macros" }
+paste = "1.0.15"

@@ -9,6 +9,7 @@
         "string": "#6a8759",
         "number": "#6897bb",
         "variable": "#9876aa",
-        "keyword": "#cc7832"
+        "keyword": "#cc7832",
+        "error": "red"
     }
 }

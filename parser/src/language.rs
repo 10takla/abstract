@@ -1,14 +1,33 @@
 use crate::{parser::*, Ctxt, *};
-use macros::peg_grammar;
+use macros::{peg_grammar, RegularToken, Spanable};
+use std::{fmt::Display, marker::PhantomData};
+
+pub type ItemError = ErrorRecovery<Item>;
+
+impl Description for Item {
+    const DESCR: Descr = Descr {
+        self_type: "Item",
+        content: "Fn / Struct_ / Ident / WhiteSpaces",
+    };
+}
+
+pub type NextGenericParamError = ErrorRecovery<NextGenericParam>;
+
+impl Description for NextGenericParam {
+    const DESCR: Descr = Descr {
+        self_type: "NextGenericParam",
+        content: r#"(I "," I GenericParam)"#,
+    };
+}
 
 peg_grammar! {
     Items2 ::= I (Item I)*
     Items ::= (Item / ItemError)*
-        ItemError ::= (!Item ".")+
         Item ::= Fn / Struct_ / Ident / WhiteSpaces
             Fn ::= "fn" I Ident I (GenericParams I)? r"\(" I (FunctionParameters I)? r"\)" (I FunctionReturn)? I FunctionBody
                 GenericParams ::= r"<" I GenericParamsBody? I r">"
-                    GenericParamsBody ::= GenericParam (I "," I GenericParam)* (I ",")?
+                    GenericParamsBody ::= GenericParam NextGenericParam* (I ",")?
+                        NextGenericParam ::= (I "," I GenericParam)
                         GenericParam ::= ConstParam / TypeParam
                             ConstParam ::= "const" I Ident I ":" I Type
                             TypeParam ::= Ident (I "=" I Type )?
@@ -26,16 +45,112 @@ peg_grammar! {
     Type ::= Ident
     Value ::= Ident / String
 
-    @Ident ::= TmpIdent
     // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
-    String ::= r#""[^"\\]*(?:\\.[^"\\]*)*""#
+    String ::= BaseString / RawString / Character / Byte / ByteString / RawByteString / CString / RawCString
+        BaseString ::= r#""[^"\\]*(?:\\.[^"\\]*)*""#
+        RawString ::= r##"r#""[^"\\]*(?:\\.[^"\\]*)*"#"##
+        ByteString ::= r#"b""[^"\\]*(?:\\.[^"\\]*)*""#
+        RawByteString ::= r##"br#""[^"\\]*(?:\\.[^"\\]*)*"#"##
+        CString ::=	r#"c""[^"\\]*(?:\\.[^"\\]*)*""#
+        RawCString ::= r##"cr#""[^"\\]*(?:\\.[^"\\]*)*"#"##
+        Character ::= r#"'.*'"#
+        Byte ::= r#"b'.*'"#
+
 
     I ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]*"
         WhiteSpaces ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]+"
 
+    FnKeyword ::= "fn"
+    ConstKeyword ::= "const"
+    StructKeyword ::= "struct"
+
 }
 
-type TmpIdent = crate::parser::constructor::Ident;
+mod tokens {
+    use super::*;
+
+    #[derive(Debug, PartialEq, Clone)]
+    pub struct IdentMarker;
+    pub type Ident = Token<IdentMarker>;
+
+    impl TokenRecog for Ident {
+        type Inner = IdentMarker;
+        fn start_string_aware_recog(code: &str) -> Result<Slice, TokenError> {
+            let mut iter = code.char_indices();
+
+            let (i, char) = iter.next().ok_or(TokenError::LineOver)?;
+
+            let start_rule = |char: char| char.is_alphabetic() || char == '_';
+            if let Some(start) = start_rule(char).then_some(i) {
+                if start == code.len() - 1 {
+                    Ok(start..start + 1)
+                } else {
+                    let end = iter
+                        .find_map(|(i, char)| {
+                            (!(start_rule(char) || char.is_digit(10))).then_some(i - 1)
+                        })
+                        .unwrap_or_else(|| code.len() - 1);
+                    Ok(start..end + 1)
+                }
+            } else {
+                if i == code.len() - 1 {
+                    Err(TokenError::CommonTokenError(
+                        i..i + 1,
+                        CommonTokenError::CurrentErrors("StartsWithAlphabetic"),
+                    ))
+                } else {
+                    let end = iter
+                        .find_map(|(i, char)| {
+                            (!(start_rule(char) || char.is_digit(10))).then_some(i - 1)
+                        })
+                        .unwrap_or_else(|| code.len() - 1);
+                    Err(TokenError::CommonTokenError(
+                        i..end + 1,
+                        CommonTokenError::CurrentErrors("Alphabetic"),
+                    ))
+                }
+            }
+        }
+    }
+
+    #[derive(Debug, PartialEq, Clone)]
+    pub struct StringMarker;
+    pub type String = Token<StringMarker>;
+
+    enum StringError {
+        LineOver,
+        StartsWithQuote,
+        EndsWithQuote,
+    }
+
+    impl TokenRecog for String {
+        type Inner = StringMarker;
+        fn start_string_aware_recog(code: &str) -> Result<Slice, TokenError> {
+            let mut iter = code.char_indices();
+
+            let (i, ch) = iter.next().ok_or(TokenError::LineOver)?;
+            let start = (ch == '"')
+                .then_some(i)
+                .ok_or(TokenError::CommonTokenError(
+                    i..i + ch.len_utf8(),
+                    CommonTokenError::CurrentErrors("StartsWithQuote"),
+                ))?;
+
+            for (i, char) in iter.clone() {
+                if char == '"' {
+                    return Ok(start..i + 1);
+                }
+            }
+
+            let (i, ch) = iter.last().unwrap();
+            Err(TokenError::CommonTokenError(
+                i..i + ch.len_utf8(),
+                CommonTokenError::CurrentErrors("EndsWithQuote"),
+            ))
+        }
+    }
+}
+pub use tokens::*;
 
 #[test]
 fn language() {
@@ -72,6 +187,8 @@ mod tmp {
             Tmp1 ::= Tok1+ (Tok3 Tok1+)+
                 Tok1 ::= "aa"
                 Tok3 ::= ";"
+            R ::= "a" / "a"
+            A ::= "a" / "a" / ("a" / "a" "a" / "b")
         }
 
         #[test]

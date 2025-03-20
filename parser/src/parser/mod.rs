@@ -2,7 +2,7 @@ use super::utils::args::*;
 use colored::Colorize;
 use paste::paste;
 use regex::Regex;
-use std::{any::Any, cell::RefCell, fmt::Arguments, marker::PhantomData, ops::Range};
+use std::{cell::RefCell, fmt::Arguments, marker::PhantomData, ops::Range};
 use std_reset::prelude::Deref;
 
 pub type Slice = Range<usize>;
@@ -225,8 +225,8 @@ mod wrapper {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub struct AndPredicate<T: CommonRecog>(T::Output, PhantomData<T>);
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct AndPredicate<T: CommonRecog>(pub T::Output, pub PhantomData<T>);
 
     impl<T: CommonRecog<Output: Spanable>> CommonRecog for AndPredicate<T> {
         type Output = AndPredicate<T>;
@@ -242,7 +242,7 @@ mod wrapper {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct NotPredicate<T>(PhantomData<T>);
 
     impl<T: CommonRecog<Output: Spanable>> CommonRecog for NotPredicate<T> {
@@ -283,22 +283,85 @@ mod wrapper {
 }
 pub use wrapper::*;
 
+mod exprs {
+    use super::*;
+    use macros::RegularToken;
+
+    #[derive(RegularToken, Clone, Debug)]
+    #[reg_expr = "."]
+    pub struct AnyMarker;
+
+    pub type Any = Token<AnyMarker>;
+}
+pub use exprs::*;
+
+mod error_recovery {
+    use super::*;
+    use std::fmt::Display;
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct ErrorRecovery<T: CommonRecog> {
+        output: T::Output,
+        _marker: PhantomData<T>,
+        pub descr: Descr,
+    }
+
+    type ErrorExpr<T> = OneOrMore<(NotPredicate<T>, Any)>;
+
+    impl<T: CommonRecog + CommonTrait + Description> CommonRecog for ErrorRecovery<T>
+    where
+        ErrorExpr<T>: CommonRecog,
+    {
+        type Output = ErrorRecovery<ErrorExpr<T>>;
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            <ErrorExpr<T>>::recog(ctxt).map(|v| ErrorRecovery {
+                output: v,
+                _marker: PhantomData,
+                descr: <T as Description>::DESCR,
+            })
+        }
+    }
+
+    impl<T: CommonRecog<Output: Spanable>> Spanable for ErrorRecovery<T> {
+        fn span(&self) -> Slice {
+            self.output.span()
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct Descr {
+        pub self_type: &'static str,
+        pub content: &'static str,
+    }
+
+    pub trait Description {
+        const DESCR: Descr;
+    }
+}
+pub use error_recovery::*;
+
 mod token {
     use super::*;
     use core::prelude::v1;
 
-    #[derive(Debug, PartialEq, Clone)]
+    #[derive(Debug, Clone)]
     pub struct Token<T> {
         pub span: Slice,
-        // slice: String,
+        slice: String,
         pub _marker: PhantomData<T>,
+    }
+
+    impl<T> PartialEq for Token<T> {
+        fn eq(&self, other: &Self) -> bool {
+            (&self.span).eq(&other.span) && (&self._marker).eq(&other._marker)
+        }
     }
 
     impl<T> Token<T> {
         pub const fn new(span: Slice) -> Self {
             Self {
                 span,
-                // slice: String::new(),
+                slice: String::new(),
                 _marker: PhantomData,
             }
         }
@@ -327,7 +390,7 @@ mod token {
             Self::start_string_aware_recog(&code.source[code.cursor..])
                 .map(|span| Token {
                     _marker: PhantomData,
-                    // slice: code.source[code.cursor + span.start..code.cursor + span.end].into(),
+                    slice: code.source[code.cursor + span.start..code.cursor + span.end].into(),
                     span: code.cursor + span.start..code.cursor + span.end,
                 })
                 .map_err(|v1| match v1 {
@@ -416,7 +479,7 @@ mod sequence {
             tuple_impl!(@named $macros! $(@$key)? $a $($other)+);
         };
         (@named $macros:ident! $(@$key:ident)? $($a:ident)+) => {
-            paste!(
+            paste::paste!(
                 $macros!($(@$key)? $([<$a ${index()}>])+);
             );
         };
@@ -424,7 +487,7 @@ mod sequence {
 
     macro_rules! impl_seq {
         (@impl $($a:ident)+) => {
-             impl_seq!(@spanable $($a)+);
+            impl_seq!(@spanable $($a)+);
             impl<$($a: CommonRecog),+> SequenceRecog for ($($a),+)
             where
                 ($($a),+): CommonTrait,
@@ -564,7 +627,7 @@ mod repetiotion {
         ) -> ControlFlow<()>;
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct OneOrMore<T, I = ()>(PhantomData<T>, PhantomData<I>);
 
     impl<T: CommonRecog<Output: Spanable>, I: IterRepetition> RepetitionRecog for OneOrMore<T, I>

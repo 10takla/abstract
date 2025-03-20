@@ -75,20 +75,4 @@ impl SequenceRecog for IdentString {
     }
 }
 
-// pub struct IdentStringMarker;
-
-// impl MarkerConversion for IdentStringMarker {
-//     type Output = IdentString;
-// }
-
 struct IdentCache;
-
-// impl Cachable for Token<Ident> {
-//     fn get_cache(&self) {
-
-//     }
-// }
-
-// fn tmp() {
-//     <Token<Ident>>::check_cache(&"".into(), &vec![TypeId::of::<Token<Ident>>()]);
-// }

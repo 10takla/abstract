@@ -1,24 +1,30 @@
 use super::SYMBOL;
-use crate::BLOCK;
-use parser::{language::*, parser::{CommonRecog, Spanable}};
+use crate::{BLOCK, ERROR};
+use lsp_server_macros::distruct;
+use parser::{
+    language::*,
+    parser::{AndPredicate, CommonRecog, Empty, ErrorRecovery, Opt, Spanable, Token},
+    tuple_impl,
+};
+use std::ops::Range;
 use tower_lsp::lsp_types::SemanticTokenType;
 
 type DistrIter = Vec<DistrItem>;
-type DistrItem = ([usize; 2], SemanticTokenType);
+pub type DistrItem = (Range<usize>, SemanticTokenType);
 
 // итератор для ленивого на всех вложенных уровнях
-pub fn distruct_items(items: &Vec<Item>) -> impl Iterator<Item = DistrItem> {
+pub fn distruct_items(items: &Vec<Item>) -> impl Iterator<Item = DistrItem> + std::fmt::Debug {
     let mut vec = vec![];
     items.distruct(&mut vec);
     vec.into_iter()
 }
 
 trait DI {
-    fn push_t(&mut self, value: &impl StartEnd, t: SemanticTokenType);
+    fn push_t(&mut self, value: &impl Spanable, t: SemanticTokenType);
 }
 impl DI for DistrIter {
-    fn push_t(&mut self, value: &impl StartEnd, t: SemanticTokenType) {
-        Vec::push(self, (value.start_end(), t));
+    fn push_t(&mut self, value: &impl Spanable, t: SemanticTokenType) {
+        Vec::push(self, (value.span(), t));
     }
 }
 
@@ -26,57 +32,95 @@ pub trait Distruct {
     fn distruct(&self, vec: &mut DistrIter);
 }
 
-impl Distruct for Vec<Item> {
+impl<T> Distruct for Token<T> {
+    default fn distruct(&self, _: &mut DistrIter) {}
+}
+
+impl Distruct for WhiteSpaces {
+    fn distruct(&self, _: &mut DistrIter) {}
+}
+
+impl Distruct for I {
+    fn distruct(&self, _: &mut DistrIter) {}
+}
+
+impl Distruct for Ident {
     fn distruct(&self, vec: &mut DistrIter) {
-        // self.iter().for_each(|v| {
-            // v.distruct(vec);
-        // });
+        vec.push_t(self, SemanticTokenType::VARIABLE);
     }
 }
 
-// impl Distruct for Item {
-//     fn distruct(&self, vec: &mut DistrIter) {
-//         use Item::*;
-//         match self {
-//             FnC(v) => v.distruct(vec),
-//             StructC(v) => v.distruct(vec),
-//             TraitC(v) => v.distruct(vec),
-//             ImplV(v) => v.distruct(vec),
-//             AnyBlock(v) => v.distruct(vec),
-//             ConstC(v) => v.distruct(vec),
-//             AssignExpr(v) => v.distruct(vec),
-//             Literal(v) => v.distruct(vec),
-//             Ident(v) => v.distruct(vec),
-//         }
-//     }
+impl Distruct for String {
+    fn distruct(&self, vec: &mut DistrIter) {
+        vec.push_t(self, SemanticTokenType::STRING);
+    }
+}
+
+impl<T: Distruct> Distruct for Vec<T> {
+    fn distruct(&self, vec: &mut DistrIter) {
+        self.into_iter().for_each(|v| {
+            v.distruct(vec);
+        });
+    }
+}
+
+distruct!(enum_ Enum0 2);
+distruct!(enum_ Enum1 4);
+distruct!(enum_ Enum2 2);
+distruct!(enum_ Enum3 2);
+distruct!(enum_ Enum4 2);
+distruct!(enum_ Enum5 2);
+distruct!(enum_ Enum6 2);
+distruct!(enum_ Enum7 2);
+// distruct!(enum_ Enum8 2);
+
+impl<T: CommonRecog<Output: Spanable>> Distruct for ErrorRecovery<T> {
+    fn distruct(&self, vec: &mut DistrIter) {
+        vec.push_t(self, ERROR);
+    }
+}
+
+impl<T: Distruct> Distruct for Opt<T> {
+    fn distruct(&self, vec: &mut DistrIter) {
+        match self {
+            Self::Some(v) => {
+                v.distruct(vec);
+            }
+            Self::None(..) => {}
+        };
+    }
+}
+
+impl<T: CommonRecog<Output: Distruct>> Distruct for AndPredicate<T> {
+    fn distruct(&self, vec: &mut DistrIter) {
+        self.0.distruct(vec);
+    }
+}
+
+impl Distruct for Empty {
+    fn distruct(&self, _: &mut DistrIter) {}
+}
+
+distruct!(struct_ 18);
+// impl<T> Distruct for T {
+//     default fn distruct(&self, _: &mut DistrIter) {}
 // }
 
-// mod fn_c {
+// mod fn_ {
+//     use parser::tuple_impl;
 //     use super::*;
-//     use lexer::lexer2::FnHead;
 
-//     impl Distruct for FnC {
-//         fn distruct(&self, vec: &mut DistrIter) {
-//             self.0.distruct(vec);
-//             self.1.distruct(vec);
-//         }
-//     }
-
-//     impl Distruct for FnHead {
-//         fn distruct(&self, vec: &mut DistrIter) {
-//             self.0.distruct(vec);
-//             vec.push_t(&self.1, SemanticTokenType::FUNCTION);
-//             use Args::*;
-//             match &self.2 {
-//                 StructArgsC(v) => {
-//                     v.bracket(vec, SemanticTokenType::FUNCTION);
-//                 }
-//                 TupleType(v) => {
-//                     v.bracket(vec, SemanticTokenType::FUNCTION);
+//     macro_rules! d {
+//         ($($a:ident)+) => {
+//             impl<$($a: Distruct),+> Distruct for ($($a),+)
+//                 fn distruct(&self, vec: &mut DistrIter) {
+//                     distruct!(struct_ 4);
 //                 }
 //             }
-//         }
+//         };
 //     }
+
+//     tuple_impl!(d);
 // }
 
 // mod trait_ {
@@ -290,63 +334,54 @@ impl Distruct for Vec<Item> {
 //     fn distruct(&self, _: &mut DistrIter) {}
 // }
 
-// macro_rules! fast {
-//     (@symbls $($ident:ident)*) => {
-//         $(
-//             impl Distruct for $ident {
-//                 fn distruct(&self, vec: &mut DistrIter) {
-//                     vec.push_t(self, SYMBOL);
-//                 }
-//             }
-//         )*
-//     };
-//     (@items $($ident:ident)*) => {
-//         $(
-//             impl Distruct for $ident {
-//                 fn distruct(&self, vec: &mut DistrIter) {
-//                     self.iter().for_each(|v| {
-//                         v.distruct(vec);
-//                     });
-//                 }
-//             }
-//         )*
-//     };
-//     (@brakets $($ident:ident)*) => {
-//         $(
-//             impl Bracketable for $ident {
-//                 fn bracket(&self, vec: &mut DistrIter, type_: SemanticTokenType) {
-//                     vec.push_t(&self.0, type_.clone());
-//                     self.1.distruct(vec);
-//                     vec.push_t(&self.2, type_);
-//                 }
-//             }
-//         )*
-//     };
-//     (@keywords $($ident:ident)*) => {
-//         $(
-//             impl Distruct for $ident {
-//                 fn distruct(&self, vec: &mut DistrIter) {
-//                     vec.push_t(self, SemanticTokenType::KEYWORD);
-//                 }
-//             }
-//         )*
-//     };
-// }
+macro_rules! fast {
+    // (@symbls $($ident:ident)*) => {
+    //     $(
+    //         impl Distruct for $ident {
+    //             fn distruct(&self, vec: &mut DistrIter) {
+    //                 vec.push_t(self, SYMBOL);
+    //             }
+    //         }
+    //     )*
+    // };
+    // (@items $($ident:ident)*) => {
+    //     $(
+    //         impl Distruct for $ident {
+    //             fn distruct(&self, vec: &mut DistrIter) {
+    //                 self.iter().for_each(|v| {
+    //                     v.distruct(vec);
+    //                 });
+    //             }
+    //         }
+    //     )*
+    // };
+    // (@brakets $($ident:ident)*) => {
+    //     $(
+    //         impl Bracketable for $ident {
+    //             fn bracket(&self, vec: &mut DistrIter, type_: SemanticTokenType) {
+    //                 vec.push_t(&self.0, type_.clone());
+    //                 self.1.distruct(vec);
+    //                 vec.push_t(&self.2, type_);
+    //             }
+    //         }
+    //     )*
+    // };
+    (@keywords $($ident:ident)*) => {
+        $(
+            impl Distruct for $ident {
+                fn distruct(&self, vec: &mut DistrIter) {
+                    vec.push_t(self, SemanticTokenType::KEYWORD);
+                }
+            }
+        )*
+    };
+}
 
 // fast!(@items StructArgsI TupleTypeI);
 // fast!(@symbls Eq OpEq Colon Comma);
 // fast!(@brakets StructArgsC TupleType);
-// fast!(@keywords Crate Fn Const Struct Trait Let Impl For);
+fast!(@keywords FnKeyword ConstKeyword StructKeyword);
 
 // trait Bracketable {
 //     fn bracket(&self, vec: &mut DistrIter, type_: SemanticTokenType);
 // }
-
-trait StartEnd: Spanable {
-    fn start_end(&self) -> [usize; 2] {
-        let v = self.span();
-        [v.start, v.end]
-    }
-}
-
-impl<T: Spanable> StartEnd for T {}

@@ -22,9 +22,6 @@ fn exprs(
     ),
 ) -> Ident {
     let mut expr = |v| {
-        let tmp_enum_count = *enum_count;
-        *enum_count += 1;
-
         let mut expr_other = |v| {
             let tmp_reps_count = *reps_count;
             *reps_count += 1;
@@ -125,7 +122,8 @@ fn exprs(
 
                 let key = v.iter().map(ToString::to_string).collect();
                 maps.1.get(&key).cloned().unwrap_or_else(|| {
-                    let ident = Ident::new(&format!("Enum{tmp_enum_count}"), Span::call_site());
+                    let ident = Ident::new(&format!("Enum{enum_count}"), Span::call_site());
+                    *enum_count += 1;
                     maps.1.insert(key, ident.clone());
                     {
                         let v = quote! {

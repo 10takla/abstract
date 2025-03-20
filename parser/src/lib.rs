@@ -21,7 +21,7 @@
     trait_upcasting
 )]
 
-use language::{Enum5, Item, ItemError, Items};
+use language::*;
 use parser::{CommonError, CommonRecog};
 pub use utils::{args::*, print::*};
 
@@ -33,10 +33,10 @@ pub fn parse(source: &str) -> (Vec<Item>, Vec<<ItemError as CommonRecog>::Output
     let v = Items::recog(&source.into()).unwrap();
     v.into_iter().fold(Default::default(), |mut acc, v| {
         match v {
-            Enum5::V0(v) => {
+            Enum0::V0(v) => {
                 acc.0.push(v);
             }
-            Enum5::V1(v) => {
+            Enum0::V1(v) => {
                 acc.1.push(v);
             }
         }

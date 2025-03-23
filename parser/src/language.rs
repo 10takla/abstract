@@ -63,7 +63,6 @@ peg_grammar! {
     FnKeyword ::= "fn"
     ConstKeyword ::= "const"
     StructKeyword ::= "struct"
-
 }
 
 mod tokens {
@@ -260,5 +259,13 @@ mod recovery {
             dbg!("error");
             dbg!(e);
         });
+    }
+}
+
+mod k {
+    use super::*;
+
+    peg_grammar! {
+        R ::= "a" / ("b" "a")
     }
 }

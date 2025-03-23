@@ -1,5 +1,6 @@
 #![feature(let_chains)]
 #![allow(unused)]
+#![feature(type_alias_impl_trait)]
 
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -120,7 +121,7 @@ pub fn enum_recog(input: TokenStream) -> TokenStream {
                 unreachable!()
             }
             let v = v.unnamed[0].clone();
-
+            
             attrs
                 .iter()
                 .find_map(|attr| {

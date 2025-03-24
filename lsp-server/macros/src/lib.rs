@@ -6,10 +6,10 @@ use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Ident, Lit,
+    parse_macro_input, Ident, Lit, Path
 };
 
-struct T(Ident, Option<Ident>, Lit);
+struct T(Ident, Option<Path>, Lit);
 impl Parse for T {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self(

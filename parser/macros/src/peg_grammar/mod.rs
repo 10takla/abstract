@@ -186,20 +186,53 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
 
     for Formula {
         is_cachable,
+        is_wraped,
         name,
         exprs: v,
     } in items.0
     {
-        let v1 = exprs(v.clone(), &mut output, [a, b], map, Some(name.clone()));
+        let mut v1 = exprs(
+            v.clone(),
+            &mut output,
+            [a, b],
+            map,
+            if is_cachable {
+                None
+            } else {
+                Some(name.clone())
+            },
+        );
+        if is_cachable {
+            v1 = quote! {Cachable<#v1>};
+        }
+
         if let Exprs::Expr(v) = v
             && let Expr::OrderingChoice(..) = *v
+            && !is_cachable
         {
         } else {
-            output.extend(if is_cachable {
-                quote! {pub type #name = Cachable<#v1>;}
-            } else {
-                quote! {pub type #name = #v1;}
-            });
+            output.extend(
+                if is_wraped {
+                    quote! {
+                        #[derive(std_reset::prelude::Deref, Debug, PartialEq, Clone)]
+                        pub struct #name(<#v1 as CommonRecog>::Output);
+
+                        impl CommonRecog for #name {
+                            type Output = Self;
+                            fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+                                #v1::recog(ctxt).map(Self)
+                            }
+                        }
+                        impl Spanable for #name {
+                            fn span(&self) -> Slice {
+                                self.0.span()
+                            }
+                        }
+                    }
+                } else {
+                    quote! {pub type #name = #v1;}
+                }
+            );
         }
     }
     // panic!("{}", output.to_string());

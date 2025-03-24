@@ -176,8 +176,7 @@ impl Backend {
             return Default::default();
         };
         let (items, diags) = parse(&code);
-        let tokens = tokenize(&items, &code);
-
+        let tokens = tokenize(&dbg!(items), &code);
         self.client
             .publish_diagnostics(
                 uri,

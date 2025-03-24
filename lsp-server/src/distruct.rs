@@ -64,15 +64,19 @@ impl<T: Distruct> Distruct for Vec<T> {
     }
 }
 
+impl Distruct for Type {
+    fn distruct(&self, _: &mut DistrIter) {
+    }
+}
+
 distruct!(enum_ Enum0 2);
-distruct!(enum_ Enum1 4);
 distruct!(enum_ Enum2 2);
-distruct!(enum_ Enum3 2);
-distruct!(enum_ Enum4 2);
-distruct!(enum_ Enum5 2);
-distruct!(enum_ Enum6 2);
-distruct!(enum_ Enum7 2);
-// distruct!(enum_ Enum8 2);
+distruct!(enum_ StructParam 2);
+distruct!(enum_ Enum1 2);
+distruct!(enum_ FunctionParam 2);
+distruct!(enum_ GenericParam 2);
+distruct!(enum_ Item 4);
+distruct!(enum_ Value 2);
 
 impl<T: CommonRecog<Output: Spanable>> Distruct for ErrorRecovery<T> {
     fn distruct(&self, vec: &mut DistrIter) {

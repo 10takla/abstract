@@ -6,6 +6,7 @@ use std::{
     iter::{from_fn, once},
 };
 use syn::{
+    parenthesized,
     parse::{discouraged::Speculative, Parse},
     parse_macro_input,
     punctuated::Punctuated,
@@ -37,6 +38,7 @@ impl Parse for Formulas {
 #[derive(Clone, Debug)]
 pub struct Formula {
     pub is_cachable: bool,
+    pub is_wraped: bool,
     pub name: Ident,
     pub exprs: Exprs,
 }
@@ -47,6 +49,7 @@ impl Parse for Formula {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         Ok(Self {
             is_cachable: <Token![@]>::parse(input).is_ok(),
+            is_wraped: <Token![#]>::parse(input).is_ok(),
             name: Parse::parse(input)?,
             exprs: {
                 LeftArrow::parse(input)?;

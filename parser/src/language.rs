@@ -42,19 +42,22 @@ peg_grammar! {
                     StructParam ::= DefaultStructField / StructField
                         DefaultStructField ::= StructField I "=" I Value
                             @StructField ::= (Ident I ":" I Type) / Type
-    Type ::= Ident
-    Value ::= Ident / String
+    #Type ::= Ident
+    Value ::= String / Ident
 
+    
     // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
+    // https://doc.rust-lang.org/reference/tokens.html#characters-and-strings
     String ::= BaseString / RawString / Character / Byte / ByteString / RawByteString / CString / RawCString
         BaseString ::= r#""[^"\\]*(?:\\.[^"\\]*)*""#
-        RawString ::= r##"r#""[^"\\]*(?:\\.[^"\\]*)*"#"##
-        ByteString ::= r#"b""[^"\\]*(?:\\.[^"\\]*)*""#
-        RawByteString ::= r##"br#""[^"\\]*(?:\\.[^"\\]*)*"#"##
-        CString ::=	r#"c""[^"\\]*(?:\\.[^"\\]*)*""#
-        RawCString ::= r##"cr#""[^"\\]*(?:\\.[^"\\]*)*"#"##
-        Character ::= r#"'.*'"#
-        Byte ::= r#"b'.*'"#
+        RawString ::= "r" (WrappedString / BaseString)
+        ByteString ::= "b" BaseString
+        RawByteString ::= "br" (WrappedString / BaseString)
+        CString ::=	"c" BaseString
+        RawCString ::= "cr" (WrappedString / BaseString)
+        Character ::= r"'.*'"
+        Byte ::= "b" Character
+            WrappedString ::= "#" BaseString "#"
 
 
     I ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]*"
@@ -165,6 +168,22 @@ fn language() {
     "#,
     );
     let b = Items::recog(&v);
+    b.map(|b| {
+        dbg!("pass");
+        dbg!(b.clone());
+        dbg!(&v.code.source[dbg!(b.span().end)..]);
+    })
+    .map_err(|e| {
+        dbg!("error");
+        dbg!(e);
+    });
+}
+
+#[test]
+fn string() {
+    let a = cr"sdfsf";
+    let v = Ctxt::from(r##"r#"a"#"##);
+    let b = String::recog(&v);
     b.map(|b| {
         dbg!("pass");
         dbg!(b.clone());

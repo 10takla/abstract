@@ -24,7 +24,7 @@ peg_grammar! {
     Items2 ::= I (Item I)*
     Items ::= (Item / ItemError)*
         Item ::= Fn / Struct_ / Ident / WhiteSpaces
-            Fn ::= "fn" I Ident I (GenericParams I)? r"\(" I (FunctionParameters I)? r"\)" (I FunctionReturn)? I FunctionBody
+            Fn ::= "fn" I Ident I (GenericParams I)? r"\(" I (FunctionParameters I)? r"\)" (I FunctionReturn)? I Block
                 GenericParams ::= r"<" I GenericParamsBody? I r">"
                     GenericParamsBody ::= GenericParam NextGenericParam* (I ",")?
                         NextGenericParam ::= (I "," I GenericParam)
@@ -36,16 +36,19 @@ peg_grammar! {
                         DefaultField ::= Field I "=" I Value
                             @Field ::= (Ident I ":" I Type) / Ident
                 FunctionReturn ::= "->" I Type
-                FunctionBody ::= r"\{" I r"\}"
+
+                Block ::= r"\{" I (BlockContent I)* r"\}"
+                    BlockContent ::= Assign / Item
+                        Assign ::= "let" I Ident I "=" I Value
+
             Struct_ ::= "struct" I Ident I (GenericParams I)? r"\{" I (StructFields I)? r"\}"
                 StructFields ::= StructParam (I "," I StructParam)* (I ",")?
                     StructParam ::= DefaultStructField / StructField
                         DefaultStructField ::= StructField I "=" I Value
                             @StructField ::= (Ident I ":" I Type) / Type
     #Type ::= Ident
-    Value ::= String / Ident
+    Value ::= Block / String / Ident
 
-    
     // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
     // https://doc.rust-lang.org/reference/tokens.html#characters-and-strings
     String ::= BaseString / RawString / Character / Byte / ByteString / RawByteString / CString / RawCString
@@ -66,6 +69,7 @@ peg_grammar! {
     FnKeyword ::= "fn"
     ConstKeyword ::= "const"
     StructKeyword ::= "struct"
+    Let ::= "let"
 }
 
 mod tokens {
@@ -180,8 +184,29 @@ fn language() {
 }
 
 #[test]
+fn block() {
+    let v = Ctxt::from(
+        r#"{
+            let a = {
+                fn sdf<T = Type, T, const T: Type>(a: A = "a", b: C, c = "c") -> Type {
+                }
+            }
+        }"#,
+    );
+    let b = Block::recog(&v);
+    b.map(|b| {
+        dbg!("pass");
+        dbg!(b.clone());
+        dbg!(&v.code.source[dbg!(b.span().end)..]);
+    })
+    .map_err(|e| {
+        dbg!("error");
+        dbg!(e);
+    });
+}
+
+#[test]
 fn string() {
-    let a = cr"sdfsf";
     let v = Ctxt::from(r##"r#"a"#"##);
     let b = String::recog(&v);
     b.map(|b| {

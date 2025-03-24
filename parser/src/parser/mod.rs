@@ -164,6 +164,16 @@ mod wrapper {
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError>;
     }
 
+    #[derive(Debug, Clone, PartialEq, Deref)]
+    pub struct Box_<T>(Box<T>);
+
+    impl<T: CommonRecog> CommonRecog for Box_<T> {
+        type Output = Box<T::Output>;
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            T::recog(ctxt).map(|v| Box::new(v))
+        }
+    }
+
     impl<T: EnumRecog> CommonRecog for T {
         type Output = T::Output;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {

@@ -53,7 +53,13 @@ fn exprs(
     let mut expr = |v| {
         let mut expr_other = |v| {
             let mut expr_token = |v| match v {
-                ExprToken::Ident(v) => v.to_token_stream(),
+                ExprToken::Ident { is_boxed, ident } => {
+                    if is_boxed {
+                        quote! {Box_<#ident>}
+                    } else {
+                        ident.to_token_stream()
+                    }
+                }
                 ExprToken::Literal(reg) => {
                     let ident = maps.0.get(&reg.to_string()).cloned().unwrap_or_else(|| {
                         let ident = Ident::new(
@@ -211,28 +217,26 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
             && !is_cachable
         {
         } else {
-            output.extend(
-                if is_wraped {
-                    quote! {
-                        #[derive(std_reset::prelude::Deref, Debug, PartialEq, Clone)]
-                        pub struct #name(<#v1 as CommonRecog>::Output);
+            output.extend(if is_wraped {
+                quote! {
+                    #[derive(std_reset::prelude::Deref, Debug, PartialEq, Clone)]
+                    pub struct #name(<#v1 as CommonRecog>::Output);
 
-                        impl CommonRecog for #name {
-                            type Output = Self;
-                            fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-                                #v1::recog(ctxt).map(Self)
-                            }
-                        }
-                        impl Spanable for #name {
-                            fn span(&self) -> Slice {
-                                self.0.span()
-                            }
+                    impl CommonRecog for #name {
+                        type Output = Self;
+                        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+                            #v1::recog(ctxt).map(Self)
                         }
                     }
-                } else {
-                    quote! {pub type #name = #v1;}
+                    impl Spanable for #name {
+                        fn span(&self) -> Slice {
+                            self.0.span()
+                        }
+                    }
                 }
-            );
+            } else {
+                quote! {pub type #name = #v1;}
+            });
         }
     }
     // panic!("{}", output.to_string());

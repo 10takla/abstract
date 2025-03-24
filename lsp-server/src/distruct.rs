@@ -65,7 +65,12 @@ impl<T: Distruct> Distruct for Vec<T> {
 }
 
 impl Distruct for Type {
-    fn distruct(&self, _: &mut DistrIter) {
+    fn distruct(&self, _: &mut DistrIter) {}
+}
+
+impl<T: Distruct> Distruct for Box<T> {
+    fn distruct(&self, vec: &mut DistrIter) {
+        (**self).distruct(vec);
     }
 }
 
@@ -76,7 +81,8 @@ distruct!(enum_ Enum1 2);
 distruct!(enum_ FunctionParam 2);
 distruct!(enum_ GenericParam 2);
 distruct!(enum_ Item 4);
-distruct!(enum_ Value 2);
+distruct!(enum_ BlockContent 2);
+distruct!(enum_ Value 3);
 
 impl<T: CommonRecog<Output: Spanable>> Distruct for ErrorRecovery<T> {
     fn distruct(&self, vec: &mut DistrIter) {
@@ -384,7 +390,7 @@ macro_rules! fast {
 // fast!(@items StructArgsI TupleTypeI);
 // fast!(@symbls Eq OpEq Colon Comma);
 // fast!(@brakets StructArgsC TupleType);
-fast!(@keywords FnKeyword ConstKeyword StructKeyword);
+fast!(@keywords FnKeyword ConstKeyword StructKeyword Let);
 
 // trait Bracketable {
 //     fn bracket(&self, vec: &mut DistrIter, type_: SemanticTokenType);

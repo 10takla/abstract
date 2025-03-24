@@ -235,7 +235,10 @@ impl Parse for Reps {
 pub enum ExprToken {
     /// Group: (e)
     Group(Exprs),
-    Ident(Ident),
+    Ident {
+        is_boxed: bool,
+        ident: Ident,
+    },
     Literal(Literal),
 }
 
@@ -254,8 +257,9 @@ impl Parse for ExprToken {
                 }
             })
         } else {
+            let is_boxed = <Token![$]>::parse(input).is_ok();
             Parse::parse(input)
-                .map(Self::Ident)
+                .map(|ident| Self::Ident { is_boxed, ident })
                 .or_else(|_| Parse::parse(input).map(Self::Literal))
         }
     }

@@ -14,6 +14,13 @@ pub trait Spanable {
 mod types {
     use super::*;
 
+    #[derive(Debug, Clone, PartialEq, Deref)]
+    pub struct Start<T> {
+        pub cursor: usize,
+        #[deref]
+        pub data: T,
+    }
+
     #[derive(Debug, Clone, PartialEq)]
     pub struct Empty(pub usize);
 
@@ -220,7 +227,7 @@ mod wrapper {
     where
         Self: RepetitionRecog,
     {
-        type Output = Vec<<<ZeroOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        type Output = RepVec<<<ZeroOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
             Self::cursor_aware_recog(ctxt).map(|v| v.0)
         }
@@ -229,7 +236,7 @@ mod wrapper {
     where
         OneOrMore<T, I>: RepetitionRecog,
     {
-        type Output = Vec<<<OneOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
+        type Output = RepVec<<<OneOrMore<T, I> as RepetitionRecog>::Item as CommonRecog>::Output>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
             Self::cursor_aware_recog(ctxt).map(|v| v.0)
         }
@@ -621,7 +628,8 @@ mod repetiotion {
         }
     }
 
-    pub type RepOk<T> = (Vec<T>, Vec<Result<T, CommonError>>);
+    pub type RepVec<T> = Start<Vec<T>>;
+    pub type RepOk<T> = (RepVec<T>, Vec<Result<T, CommonError>>);
     pub type RepOutput<T> = (Result<Vec<T>, CommonError>, (Vec<Result<T, CommonError>>));
 
     pub trait RepetitionRecog {
@@ -694,62 +702,15 @@ mod repetiotion {
                         })
                 })
             });
-            Ok((pass, fail_collection))
+            Ok((
+                Start {
+                    cursor: ctxt.code.cursor,
+                    data: pass,
+                },
+                fail_collection,
+            ))
         }
     }
-
-    // #[derive(Debug, Clone)]
-    // pub struct ZeroOrMore<T, I = ()>(PhantomData<T>, PhantomData<I>);
-
-    // impl<T: CommonRecog<Output: Spanable>, I: IterRepetition> RepetitionRecog for ZeroOrMore<T, I> {
-    //     type Item = T;
-    //     fn cursor_aware_recog(ctxt: &Ctxt) -> RepOutput<<Self::Item as CommonRecog>::Output> {
-    //         let (mut pass, mut fail_collection) = (vec![], vec![]);
-    //         let mut ctxt2 = (*ctxt).clone();
-    //         (0..).try_for_each(|_| {
-    //             if ctxt2.code.cursor >= ctxt2.code.source.len() {
-    //                 return ControlFlow::Break(());
-    //             }
-    //             I::iter(&ctxt2.clone(), || {
-    //                 Self::Item::recog(&ctxt2)
-    //                     .map_err(|e| {
-    //                         if let Ok(v) = e.end() {
-    //                             let start = e.start().unwrap();
-    //                             let mut end = v;
-
-    //                             while let Err(e) = Self::Item::recog(&ctxt2) {
-    //                                 if let Ok(v) = e.end() {
-    //                                     ctxt2.code.cursor = v;
-    //                                     end = v
-    //                                 } else {
-    //                                     return ControlFlow::Break(());
-    //                                 }
-    //                             }
-    //                             fail_collection.push(Err(CommonError::Coll(start..end)));
-    //                             ctxt2.code.cursor = end;
-
-    //                             ControlFlow::Continue(())
-    //                         } else {
-    //                             ControlFlow::Break(())
-    //                         }
-    //                     })
-    //                     .and_then(|item| {
-    //                         if item.span().len() == 0 {
-    //                             return Err(ControlFlow::Break(()));
-    //                         }
-    //                         ctxt2.code.cursor += item.span().len();
-    //                         if fail_collection.is_empty() {
-    //                             pass.push(item);
-    //                         } else {
-    //                             fail_collection.push(Ok(item));
-    //                         }
-    //                         Ok(())
-    //                     })
-    //             })
-    //         });
-    //         (Ok(pass), fail_collection)
-    //     }
-    // }
 
     impl IterRepetition for () {
         fn iter(
@@ -797,7 +758,7 @@ mod repetiotion {
         }
     }
 
-    impl<T: Spanable + CommonTrait> Spanable for RepOk<T> {
+    impl<T: Spanable> Spanable for RepOk<T> {
         fn span(&self) -> Slice {
             let a = self.0.span();
             if !self.1.is_empty() {
@@ -816,12 +777,12 @@ mod repetiotion {
         }
     }
 
-    impl<T: Spanable> Spanable for Vec<T> {
+    impl<T: Spanable> Spanable for RepVec<T> {
         fn span(&self) -> Slice {
             self.first()
                 .zip(self.last())
                 .map(|v| v.0.span().start..v.1.span().end)
-                .unwrap_or_default()
+                .unwrap_or(self.cursor..self.cursor)
         }
     }
 
@@ -830,16 +791,22 @@ mod repetiotion {
         assert_eq!(
             <ZeroOrMore<Item>>::cursor_aware_recog(&r#""n""n""#.into()).unwrap(),
             (
-                vec![
-                    Item::String(Token::new(0..3)),
-                    Item::String(Token::new(3..6))
-                ],
+                Start {
+                    cursor: 0,
+                    data: vec![
+                        Item::String(Token::new(0..3)),
+                        Item::String(Token::new(3..6))
+                    ]
+                },
                 vec![]
             )
         );
         assert_eq!(
             <ZeroOrMore<Token<String>>>::recog(&r#""n""n""#.into()).unwrap(),
-            vec![Token::new(0..3), Token::new(3..6)]
+            Start {
+                cursor: 0,
+                data: vec![Token::new(0..3), Token::new(3..6)]
+            }
         );
     }
 }
@@ -1002,7 +969,7 @@ mod model {
     #[derive(EnumRecog, Spanable, PartialEq, Debug, Clone)]
     enum Item {
         #[ty((Literal, Token<Ident>, ZeroOrMore<Literal>))]
-        LiteralIdent((Literal, Token<Ident>, Vec<Literal>)),
+        LiteralIdent((Literal, Token<Ident>, Start<Vec<Literal>>)),
         Literal(Literal),
         Ident(Token<Ident>),
     }
@@ -1022,10 +989,13 @@ mod model {
             Item::LiteralIdent((
                 Literal::String(Token::new(0..6)),
                 Token::new(6..9),
-                vec![
-                    Literal::String(Token::new(9..15)),
-                    Literal::String(Token::new(15..21))
-                ],
+                Start {
+                    cursor: 9,
+                    data: vec![
+                        Literal::String(Token::new(9..15)),
+                        Literal::String(Token::new(15..21))
+                    ]
+                },
             ))
         );
     }

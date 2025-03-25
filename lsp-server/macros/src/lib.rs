@@ -51,7 +51,7 @@ pub fn distruct(input: TokenStream) -> TokenStream {
                 quote! {
                     paste::paste! {
                         impl<#([<T #a>]: Distruct),*> Distruct for  (#([<T #a>]),*) {
-                            fn distruct(&self, vec: &mut DistrIter) {
+                            default fn distruct(&self, vec: &mut DistrIter) {
                                 #(
                                     self.#a.distruct(vec);
                                 )*

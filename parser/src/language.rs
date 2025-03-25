@@ -23,7 +23,7 @@ impl Description for NextGenericParam {
 peg_grammar! {
     Items2 ::= I (Item I)*
     Items ::= (Item / ItemError)*
-        Item ::= Fn / Struct_ / Ident / WhiteSpaces
+        Item ::= Fn / Struct_ / Ident / Comments / WhiteSpaces
             Fn ::= "fn" I Ident I (GenericParams I)? r"\(" I (FunctionParameters I)? r"\)" (I FunctionReturn)? I Block
                 GenericParams ::= r"<" I GenericParamsBody? I r">"
                     GenericParamsBody ::= GenericParam NextGenericParam* (I ",")?
@@ -38,7 +38,7 @@ peg_grammar! {
                 FunctionReturn ::= "->" I Type
 
                 Block ::= r"\{" I (BlockContent I)* r"\}"
-                    BlockContent ::= Assign / Item
+                    BlockContent ::= Assign / Item / Value
                         Assign ::= "let" I Ident I "=" I Value
 
             Struct_ ::= "struct" I Ident I (GenericParams I)? r"\{" I (StructFields I)? r"\}"
@@ -46,8 +46,14 @@ peg_grammar! {
                     StructParam ::= DefaultStructField / StructField
                         DefaultStructField ::= StructField I "=" I Value
                             @StructField ::= (Ident I ":" I Type) / Type
+    
+    
     #Type ::= Ident
-    Value ::= Block / String / Ident
+    Value ::= Block / Literal
+    Literal ::= String / Ident
+
+    Comments ::= Comment ("\n" Comment)*
+        Comment ::= r"//" Any[* "\n"]
 
     // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
     // https://doc.rust-lang.org/reference/tokens.html#characters-and-strings
@@ -61,7 +67,6 @@ peg_grammar! {
         Character ::= r"'.*'"
         Byte ::= "b" Character
             WrappedString ::= "#" BaseString "#"
-
 
     I ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]*"
         WhiteSpaces ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]+"
@@ -198,6 +203,21 @@ fn block() {
         dbg!("pass");
         dbg!(b.clone());
         dbg!(&v.code.source[dbg!(b.span().end)..]);
+    })
+    .map_err(|e| {
+        dbg!("error");
+        dbg!(e);
+    });
+}
+
+#[test]
+fn comment() {
+    let v = Ctxt::from("// sdfsfs\n// sdfsfs\n");
+    let b = Comments::recog(&v);
+    b.map(|b| {
+        dbg!("pass");
+        dbg!(b.clone());
+        dbg!(&v.code.source[b.span().end..]);
     })
     .map_err(|e| {
         dbg!("error");

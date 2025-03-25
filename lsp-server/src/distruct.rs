@@ -3,7 +3,9 @@ use crate::{BLOCK, ERROR};
 use lsp_server_macros::distruct;
 use parser::{
     language::*,
-    parser::{AndPredicate, CommonRecog, Empty, ErrorRecovery, Opt, Spanable, Token},
+    parser::{
+        AndPredicate, AnyMarker, CommonRecog, Empty, ErrorRecovery, Opt, RepVec, Spanable, Token,
+    },
     tuple_impl,
 };
 use std::ops::Range;
@@ -56,9 +58,15 @@ impl Distruct for String {
     }
 }
 
+impl<T: Distruct> Distruct for RepVec<T> {
+    fn distruct(&self, vec: &mut DistrIter) {
+        self.data.distruct(vec);
+    }
+}
+
 impl<T: Distruct> Distruct for Vec<T> {
     fn distruct(&self, vec: &mut DistrIter) {
-        self.into_iter().for_each(|v| {
+        self.iter().for_each(|v| {
             v.distruct(vec);
         });
     }
@@ -80,10 +88,17 @@ distruct!(enum_ StructParam 2);
 distruct!(enum_ Enum1 2);
 distruct!(enum_ FunctionParam 2);
 distruct!(enum_ GenericParam 2);
-distruct!(enum_ Item 4);
-distruct!(enum_ BlockContent 2);
-distruct!(enum_ Value 3);
+distruct!(enum_ Item 5);
+distruct!(enum_ BlockContent 3);
+distruct!(enum_ Value 2);
+distruct!(enum_ Literal 2);
 
+impl Distruct for (Token<Token15Marker>, RepVec<Token<AnyMarker>>) {
+    fn distruct(&self, vec: &mut DistrIter) {
+        vec.push_t(self, SemanticTokenType::COMMENT);
+    }
+}
+// sfsf sdf +)_
 impl<T: CommonRecog<Output: Spanable>> Distruct for ErrorRecovery<T> {
     fn distruct(&self, vec: &mut DistrIter) {
         vec.push_t(self, ERROR);

@@ -61,6 +61,7 @@ const TOKENS: LazyLock<Vec<SemanticTokenType>> = LazyLock::new(|| {
         SemanticTokenType::FUNCTION,
         SemanticTokenType::STRUCT,
         SemanticTokenType::TYPE,
+        SemanticTokenType::COMMENT
     ]
 });
 

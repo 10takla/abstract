@@ -31,7 +31,7 @@ mod utils;
 
 pub fn parse(source: &str) -> (Vec<Item>, Vec<<ItemError as CommonRecog>::Output>) {
     let v = Items::recog(&source.into()).unwrap();
-    v.into_iter().fold(Default::default(), |mut acc, v| {
+    v.data.into_iter().fold(Default::default(), |mut acc, v| {
         match v {
             Enum0::V0(v) => {
                 acc.0.push(v);

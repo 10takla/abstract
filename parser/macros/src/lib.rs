@@ -104,6 +104,13 @@ pub fn peg_grammar(input: TokenStream) -> TokenStream {
     peg_grammar::peg_grammar(input)
 }
 
+mod parse_from_peg_file;
+#[proc_macro]
+pub fn parse_from_peg_file(input: TokenStream) -> TokenStream {
+    parse_from_peg_file::parse_from_peg_file(input)
+}
+
+
 #[proc_macro_derive(EnumRecog, attributes(ty))]
 pub fn enum_recog(input: TokenStream) -> TokenStream {
     let ItemEnum {

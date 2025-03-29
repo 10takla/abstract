@@ -1,0 +1,53 @@
+Items2 ::= I (Item I)*
+    Items ::= (Item / ItemError)*
+        Item ::= Fn / Struct_ / Ident / Comments / WhiteSpaces
+            Fn ::= "fn" I Ident I (GenericParams I)? r"\(" I (FunctionParameters I)? r"\)" (I FunctionReturn)? I Block
+                GenericParams ::= r"<" I GenericParamsBody? I r">"
+                    GenericParamsBody ::= GenericParam NextGenericParam* (I ",")?
+                        NextGenericParam ::= (I "," I GenericParam)
+                        GenericParam ::= ConstParam / TypeParam
+                            ConstParam ::= "const" I Ident I ":" I Type
+                            TypeParam ::= Ident (I "=" I Type )?
+                FunctionParameters ::= FunctionParam (I "," I FunctionParam)[* r"\)"] (I ",")?
+                    FunctionParam ::= DefaultField / Field
+                        DefaultField ::= Field I "=" I Value
+                            @Field ::= (Ident I ":" I Type) / Ident
+                FunctionReturn ::= "->" I Type
+
+                Block ::= r"\{" I (BlockContent I)* r"\}"
+                    BlockContent ::= Assign / Item / Value
+                        Assign ::= "let" I Ident I "=" I Value
+
+            Struct_ ::= "struct" I Ident I (GenericParams I)? r"\{" I (StructFields I)? r"\}"
+                StructFields ::= StructParam (I "," I StructParam)* (I ",")?
+                    StructParam ::= DefaultStructField / StructField
+                        DefaultStructField ::= StructField I "=" I Value
+                            @StructField ::= (Ident I ":" I Type) / Type
+    
+    #Type ::= Ident
+    Value ::= Block / Literal
+    Literal ::= String / Ident
+
+    Comments ::= Comment ("\n" Comment)*
+        Comment ::= r"//" Any[* "\n"]
+
+    // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
+    // https://doc.rust-lang.org/reference/tokens.html#characters-and-strings
+    String ::= BaseString / RawString / Character / Byte / ByteString / RawByteString / CString / RawCString
+        BaseString ::= r#""[^"\\]*(?:\\.[^"\\]*)*""#
+        RawString ::= "r" (WrappedString / BaseString)
+        ByteString ::= "b" BaseString
+        RawByteString ::= "br" (WrappedString / BaseString)
+        CString ::=	"c" BaseString
+        RawCString ::= "cr" (WrappedString / BaseString)
+        Character ::= r"'.*'"
+        Byte ::= "b" Character
+            WrappedString ::= "#" BaseString "#"
+
+    I ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]*"
+        WhiteSpaces ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]+"
+
+    FnKeyword ::= "fn"
+    ConstKeyword ::= "const"
+    StructKeyword ::= "struct"
+    Let ::= "let"

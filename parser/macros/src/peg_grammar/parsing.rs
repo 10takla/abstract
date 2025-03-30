@@ -1,17 +1,19 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Literal, Span};
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::{
     collections::{HashMap, VecDeque},
     iter::{from_fn, once},
 };
 use syn::{
+    custom_keyword,
+    ext::IdentExt,
     parenthesized,
     parse::{discouraged::Speculative, Parse},
     parse_macro_input,
     punctuated::Punctuated,
     token::{Brace, Paren},
-    Token,
+    Error, Token,
 };
 
 #[derive(Clone, Debug)]
@@ -37,24 +39,52 @@ impl Parse for Formulas {
 
 #[derive(Clone, Debug)]
 pub struct Formula {
-    pub is_cachable: bool,
-    pub is_wraped: bool,
-    pub name: Ident,
+    pub head: FormulaHead,
     pub exprs: Exprs,
 }
 
-/// Sequence: e1 e2
-// Sequence(Vec<Expr>)
-impl Parse for Formula {
+#[derive(Clone, Debug)]
+pub struct FormulaHead {
+    pub is_cachable: bool,
+    pub is_wrapped: bool,
+    pub is_error: bool,
+    pub name: Ident,
+}
+
+mod kw {
+    use syn::custom_keyword;
+    custom_keyword!(error);
+}
+
+impl Parse for FormulaHead {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         Ok(Self {
             is_cachable: <Token![@]>::parse(input).is_ok(),
-            is_wraped: <Token![#]>::parse(input).is_ok(),
-            name: Parse::parse(input)?,
-            exprs: {
-                LeftArrow::parse(input)?;
-                Parse::parse(input)?
+            is_error: if input.peek(kw::error) {
+                input.parse::<kw::error>()?;
+                true
+            } else {
+                false
             },
+            name: Parse::parse(input)?,
+            is_wrapped: {
+                let v = input.peek(Paren) && {
+                    let content;
+                    parenthesized!(content in input);
+                    content.is_empty()
+                };
+                LeftArrow::parse(input)?;
+                v
+            },
+        })
+    }
+}
+
+impl Parse for Formula {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            head: FormulaHead::parse(input)?,
+            exprs: Parse::parse(input)?,
         })
     }
 }
@@ -62,9 +92,12 @@ impl Parse for Formula {
 pub struct LeftArrow;
 impl Parse for LeftArrow {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        <Token![:]>::parse(input)?;
-        <Token![:]>::parse(input)?;
-        <Token![=]>::parse(input)?;
+        if input.peek(Token![::]) {
+            <Token![::]>::parse(input)?;
+            <Token![=]>::parse(input)?;
+        } else if !(<Token![->]>::parse(input).is_ok() || <Token![<-]>::parse(input).is_ok()) {
+            return Err(Error::new(input.span(), "expexct ::= | -> | <-"));
+        }
         Ok(Self)
     }
 }
@@ -84,11 +117,7 @@ impl Parse for Exprs {
             if let Ok(v) = Expr::parse(input) {
                 vec.push(v);
                 let lookahead = input.fork();
-                <Token![@]>::parse(&lookahead);
-                if Ident::parse(&lookahead)
-                    .and_then(|_| LeftArrow::parse(&lookahead))
-                    .is_ok()
-                {
+                if FormulaHead::parse(&lookahead).is_ok() {
                     break;
                 }
             } else {

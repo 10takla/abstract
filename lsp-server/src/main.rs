@@ -188,7 +188,7 @@ impl Backend {
                         .cloned()
                         .map(|diag| Diagnostic {
                             range: {
-                                let slice = diag_split(diag.span().clone(), iter);
+                                let slice = diag_split(diag.0, iter);
                                 tower_lsp::lsp_types::Range {
                                     start: Position::new(
                                         slice.start[1] as u32,
@@ -200,7 +200,7 @@ impl Backend {
                             severity: Some(DiagnosticSeverity::ERROR),
                             code: None,
                             source: Some("abstract".to_string()),
-                            message: format!("Ошибка парсера: {} {}", diag.descr.self_type, diag.descr.content),
+                            message: format!("Ошибка парсера: {}", diag.1),
                             ..Default::default()
                         })
                         .collect()
@@ -272,7 +272,7 @@ fn diag() {
             parse(source)
                 .1
                 .into_iter()
-                .map(|v| diag_split(dbg!(v).span().clone(), &mut get_iter(source)))
+                .map(|v| diag_split(dbg!(v).0, &mut get_iter(source)))
                 .collect::<Vec<_>>(),
             b
         );

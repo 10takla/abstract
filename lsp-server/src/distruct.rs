@@ -2,13 +2,13 @@ use super::SYMBOL;
 use crate::{BLOCK, ERROR};
 use lsp_server_macros::distruct;
 use parser::{
-    language::*,
+    language::{self, *},
     parser::{
-        AndPredicate, AnyMarker, CommonRecog, Empty, ErrorRecovery, Opt, RepVec, Spanable, Token,
+        AndPredicate, AnyMarker, CommonRecog, Empty, Opt, Recovery, RepVec, Spanable, Token
     },
     tuple_impl,
 };
-use std::ops::Range;
+use std::{fmt::Error, ops::Range};
 use tower_lsp::lsp_types::SemanticTokenType;
 
 type DistrIter = Vec<DistrItem>;
@@ -82,10 +82,23 @@ impl<T: Distruct> Distruct for Box<T> {
     }
 }
 
+impl<T: CommonRecog<Output: Spanable>> Distruct for parser::parser::Error<T> {
+    fn distruct(&self, vec: &mut DistrIter) {
+        vec.push_t(&self.0, ERROR);
+    }
+}
+
 distruct!(enum_ Enum0 2);
-distruct!(enum_ Enum2 2);
-distruct!(enum_ StructParam 2);
 distruct!(enum_ Enum1 2);
+distruct!(enum_ Enum2 2);
+distruct!(enum_ Enum3 2);
+distruct!(enum_ Enum4 2);
+distruct!(enum_ Enum5 2);
+distruct!(enum_ Enum6 2);
+distruct!(enum_ Enum7 2);
+distruct!(enum_ Enum8 2);
+distruct!(enum_ Enum9 2);
+distruct!(enum_ StructParam 2);
 distruct!(enum_ FunctionParam 2);
 distruct!(enum_ GenericParam 2);
 distruct!(enum_ Item 5);
@@ -99,7 +112,7 @@ impl Distruct for (Token<Token15Marker>, RepVec<Token<AnyMarker>>) {
     }
 }
 // sfsf sdf +)_
-impl<T: CommonRecog<Output: Spanable>> Distruct for ErrorRecovery<T> {
+impl<T: CommonRecog<Output: Spanable>> Distruct for Recovery<T> {
     fn distruct(&self, vec: &mut DistrIter) {
         vec.push_t(self, ERROR);
     }

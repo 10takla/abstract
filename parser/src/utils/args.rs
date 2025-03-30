@@ -1,4 +1,4 @@
-use crate::parser::CommonError;
+use crate::parser::{CommonError, Slice};
 use std::{
     any::{Any, TypeId},
     cell::RefCell,
@@ -11,7 +11,7 @@ use std::{
 pub struct Ctxt<'a> {
     pub code: Code<'a>,
     // pub logger: Box<(Print, RefCell<usize>)>,
-    pub errors: Rc<Vec<Result<Box<dyn std::fmt::Debug>, CommonError>>>,
+    pub errors: Rc<RefCell<Vec<(Slice, String)>>>,
     pub cache: Rc<RefCell<Cache>>,
 }
 

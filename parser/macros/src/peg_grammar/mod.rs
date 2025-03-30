@@ -14,7 +14,7 @@ use syn::{
     parse_macro_input,
     punctuated::Punctuated,
     token::{Brace, Paren},
-    Token,
+    Lit, Token,
 };
 
 /// Есть 2 типа:
@@ -39,15 +39,111 @@ use syn::{
 /// }
 ///
 
+use syn::spanned::Spanned;
+
+pub fn peg_grammar(input: TokenStream) -> TokenStream {
+    let Formulas(items) = {
+        let input = input.clone();
+        parse_macro_input!(input)
+    };
+
+    let mut output = proc_macro2::TokenStream::new();
+    let [a, b] = [&mut 0, &mut 0];
+    let map = &mut Default::default();
+
+    for Formula {
+        head:
+            FormulaHead {
+                is_cachable,
+                is_wrapped: is_wraped,
+                is_error,
+                mut name,
+            },
+        exprs: parsed_exprs,
+    } in items
+    {
+        let mut v1 = exprs(
+            parsed_exprs.clone(),
+            &mut output,
+            [a, b],
+            map,
+            if is_cachable {
+                None
+            } else {
+                Some(name.clone())
+            },
+            if is_cachable {
+                None
+            } else {
+                Some(name.clone())
+            },
+        );
+        if is_error {
+            let lit = Literal::string(&name.to_string());
+            output.extend(quote! {
+                impl Description for #v1 {
+                    const DESCR: Descr = Descr {
+                        self_type: #lit,
+                        content: r#"Some expetion"#,
+                    };
+                }
+            });
+            v1 = quote! {Error<#v1>};
+        }
+        if is_cachable {
+            v1 = quote! {Cachable<#v1>};
+        }
+
+        if let Exprs::Expr(v) = parsed_exprs
+            && let Expr::OrderingChoice(..) = *v
+            && !is_cachable
+        {
+        } else {
+            output.extend(if is_wraped {
+                quote! {
+                    #[derive(std_reset::prelude::Deref, Debug, PartialEq, Clone)]
+                    pub struct #name(<#v1 as CommonRecog>::Output);
+
+                    impl CommonRecog for #name {
+                        type Output = Self;
+                        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+                            #v1::recog(ctxt).map(Self)
+                        }
+                    }
+                    impl Spanable for #name {
+                        fn span(&self) -> Slice {
+                            self.0.span()
+                        }
+                    }
+                }
+            } else {
+                quote! {pub type #name = #v1;}
+            });
+        }
+    }
+    // panic!("{}", output.to_string());
+    output.into()
+}
+
 fn exprs(
     v: Exprs,
     output: &mut proc_macro2::TokenStream,
     [token_marker_count, enum_count]: [&mut i32; 2],
     maps: &mut (HashMap<String, Ident>, HashMap<Vec<String>, Ident>),
-    mut use_name: Option<Ident>,
+    mut ordering_name: Option<Ident>,
+    mut token_marker_name: Option<Ident>,
 ) -> proc_macro2::TokenStream {
-    if let Exprs::Sequence(..) = v {
-        use_name = None;
+    if let Exprs::Expr(v) = &v
+        && let Expr::OrderingChoice(..) = **v
+    {
+    } else {
+        ordering_name = None;
+    }
+    if let Exprs::Expr(v) = &v
+        && let Expr::ExprOther(ExprOther::ExprToken(ExprToken::Literal(..))) = **v
+    {
+    } else {
+        token_marker_name = None;
     }
 
     let mut expr = |v| {
@@ -61,12 +157,7 @@ fn exprs(
                     }
                 }
                 ExprToken::Literal(reg) => {
-                    let ident = maps.0.get(&reg.to_string()).cloned().unwrap_or_else(|| {
-                        let ident = Ident::new(
-                            &format!("Token{token_marker_count}Marker"),
-                            Span::call_site(),
-                        );
-                        *token_marker_count += 1;
+                    let mut tmp = |ident: Ident| {
                         output.extend(quote! {
                             paste::paste! {
                                 #[derive(macros::RegularToken, Clone, Debug, PartialEq)]
@@ -74,16 +165,37 @@ fn exprs(
                                 pub struct #ident;
                             }
                         });
-                        maps.0.insert(reg.to_string(), ident.clone());
                         ident
-                    });
+                    };
+
+                    let ident = if let Some(v) = token_marker_name.clone() {
+                        let ident = Ident::new(&format!("{v}Marker"), Span::call_site());
+                        maps.0.insert(reg.to_string(), ident.clone());
+                        tmp(ident)
+                    } else {
+                        maps.0.get(&reg.to_string()).cloned().unwrap_or_else(|| {
+                            let ident = Ident::new(
+                                &format!("Token{token_marker_count}Marker"),
+                                Span::call_site(),
+                            );
+                            maps.0.insert(reg.to_string(), ident.clone());
+                            *token_marker_count += 1;
+                            tmp(ident)
+                        })
+                    };
+
                     quote! {
                         paste::paste! {Token<#ident>}
                     }
                 }
-                ExprToken::Group(v) => {
-                    exprs(v, output, [token_marker_count, enum_count], maps, None)
-                }
+                ExprToken::Group(v) => exprs(
+                    v,
+                    output,
+                    [token_marker_count, enum_count],
+                    maps,
+                    None,
+                    None,
+                ),
             };
             match v {
                 ExprOther::ExprToken(v) => expr_token(v),
@@ -157,7 +269,7 @@ fn exprs(
                 };
 
                 let key = v.iter().map(ToString::to_string).collect();
-                if let Some(v) = use_name.clone() {
+                if let Some(v) = ordering_name.clone() {
                     maps.1.insert(key, v.clone());
                     tmp(v)
                 } else {
@@ -181,64 +293,4 @@ fn exprs(
         }
         Exprs::Expr(v) => expr(*v),
     }
-}
-
-pub fn peg_grammar(input: TokenStream) -> TokenStream {
-    let items = syn::parse::<Formulas>(input).unwrap();
-
-    let mut output = proc_macro2::TokenStream::new();
-    let [a, b] = [&mut 0, &mut 0];
-    let map = &mut Default::default();
-
-    for Formula {
-        is_cachable,
-        is_wraped,
-        name,
-        exprs: v,
-    } in items.0
-    {
-        let mut v1 = exprs(
-            v.clone(),
-            &mut output,
-            [a, b],
-            map,
-            if is_cachable {
-                None
-            } else {
-                Some(name.clone())
-            },
-        );
-        if is_cachable {
-            v1 = quote! {Cachable<#v1>};
-        }
-
-        if let Exprs::Expr(v) = v
-            && let Expr::OrderingChoice(..) = *v
-            && !is_cachable
-        {
-        } else {
-            output.extend(if is_wraped {
-                quote! {
-                    #[derive(std_reset::prelude::Deref, Debug, PartialEq, Clone)]
-                    pub struct #name(<#v1 as CommonRecog>::Output);
-
-                    impl CommonRecog for #name {
-                        type Output = Self;
-                        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-                            #v1::recog(ctxt).map(Self)
-                        }
-                    }
-                    impl Spanable for #name {
-                        fn span(&self) -> Slice {
-                            self.0.span()
-                        }
-                    }
-                }
-            } else {
-                quote! {pub type #name = #v1;}
-            });
-        }
-    }
-    // panic!("{}", output.to_string());
-    output.into()
 }

@@ -314,24 +314,51 @@ pub use exprs::*;
 
 mod error_recovery {
     use super::*;
-    use std::fmt::Display;
+    use std::{fmt::Display, process::Output};
+
+    #[derive(Debug, Clone)]
+    pub struct Error<T: CommonRecog>(pub T::Output, PhantomData<T>);
+
+    impl<T: CommonRecog<Output: PartialEq>> PartialEq for Error<T> {
+        fn eq(&self, other: &Self) -> bool {
+            self.0.eq(&other.0)
+        }
+    }
+
+    impl<T: CommonRecog<Output: Spanable> + CommonTrait + Description> CommonRecog for Error<T> {
+        type Output = Self;
+        fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
+            T::recog(ctxt).map(|v| {
+                ctxt.errors
+                    .borrow_mut()
+                    .push((v.span(), format!("{}", T::DESCR.self_type)));
+                Self(v, PhantomData)
+            })
+        }
+    }
+
+    impl<T: CommonRecog<Output: Spanable>> Spanable for Error<T> {
+        fn span(&self) -> Slice {
+            self.0.span()
+        }
+    }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub struct ErrorRecovery<T: CommonRecog> {
+    pub struct Recovery<T: CommonRecog> {
         output: T::Output,
         _marker: PhantomData<T>,
         pub descr: Descr,
     }
 
-    type ErrorExpr<T> = OneOrMore<(NotPredicate<T>, Any)>;
+    type RecoveryExpr<T> = OneOrMore<(NotPredicate<T>, Any)>;
 
-    impl<T: CommonRecog + CommonTrait + Description> CommonRecog for ErrorRecovery<T>
+    impl<T: CommonRecog + CommonTrait + Description> CommonRecog for Recovery<T>
     where
-        ErrorExpr<T>: CommonRecog,
+        RecoveryExpr<T>: CommonRecog,
     {
-        type Output = ErrorRecovery<ErrorExpr<T>>;
+        type Output = Recovery<RecoveryExpr<T>>;
         fn recog(ctxt: &Ctxt) -> Result<Self::Output, CommonError> {
-            <ErrorExpr<T>>::recog(ctxt).map(|v| ErrorRecovery {
+            <RecoveryExpr<T>>::recog(ctxt).map(|v| Recovery {
                 output: v,
                 _marker: PhantomData,
                 descr: <T as Description>::DESCR,
@@ -339,7 +366,7 @@ mod error_recovery {
         }
     }
 
-    impl<T: CommonRecog<Output: Spanable>> Spanable for ErrorRecovery<T> {
+    impl<T: CommonRecog<Output: Spanable>> Spanable for Recovery<T> {
         fn span(&self) -> Slice {
             self.output.span()
         }
@@ -680,7 +707,10 @@ mod repetiotion {
             ctxt: &Ctxt,
         ) -> Result<RepOk<<Self::Item as CommonRecog>::Output>, CommonError> {
             let (mut pass, mut fail_collection) = (vec![], vec![]);
-            let mut ctxt2 = (*ctxt).clone();
+            let mut ctxt2 = Ctxt {
+                errors: Default::default(),
+                ..(*ctxt).clone()
+            };
             (0..).try_for_each(|_| {
                 if ctxt2.code.cursor >= ctxt2.code.source.len() {
                     return ControlFlow::Break(());
@@ -702,6 +732,11 @@ mod repetiotion {
                         })
                 })
             });
+            {
+                let v = ctxt2.errors.borrow().clone();
+                let v = &v[0..v.len().saturating_sub(1)].into_iter().cloned();
+                ctxt.errors.borrow_mut().extend((*v).clone());
+            }
             Ok((
                 Start {
                     cursor: ctxt.code.cursor,

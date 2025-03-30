@@ -2,7 +2,7 @@ use crate::{parser::*, Ctxt, *};
 use macros::{parse_from_peg_file, peg_grammar, RegularToken, Spanable};
 use std::{fmt::Display, marker::PhantomData};
 
-pub type ItemError = ErrorRecovery<Item>;
+pub type ItemRecover = Recovery<Item>;
 
 impl Description for Item {
     const DESCR: Descr = Descr {
@@ -11,16 +11,79 @@ impl Description for Item {
     };
 }
 
-pub type NextGenericParamError = ErrorRecovery<NextGenericParam>;
+// peg_grammar! {
+//     R ::= NextGenericParam /
+// }
 
-impl Description for NextGenericParam {
-    const DESCR: Descr = Descr {
-        self_type: "NextGenericParam",
-        content: r#"(I "," I GenericParam)"#,
-    };
+// pub type NextGenericParamError = ErrorRecovery<NextGenericParam>;
+
+// impl Description for NextGenericParam {
+//     const DESCR: Descr = Descr {
+//         self_type: "NextGenericParam",
+//         content: r#"(I "," I GenericParam)"#,
+//     };
+// }
+
+// parse_from_peg_file!(r"src\grammars\base.peg");
+
+peg_grammar! {
+    FnKeyword ::= "fn"
+    ConstKeyword ::= "const"
+    StructKeyword ::= "struct"
+    Let ::= "let"    
+
+    Items2 ::= I (Item I)*
+    Items ::= (Item / ItemError)*
+            error ItemError ::= ItemRecover
+        Item ::= Fn / Struct_ / Ident / Comments / WhiteSpaces
+            Fn ::= "fn" I Ident I (GenericParams I)? r"\(" I (FunctionParams I)? r"\)" (I FunctionReturn)? I Block
+                GenericParams ::= r"<" I GenericParamsBody? I r">"
+                    GenericParamsBody ::= GenericParam (NextGenericParam / NextGenericParamError)* (I ",")?
+                        GenericParam ::= ConstParam / TypeParam
+                            ConstParam ::= "const" I Ident I ":" I Type
+                            TypeParam ::= Ident (I "=" I Type )?
+                        NextGenericParam ::= (I "," I GenericParam)
+                            error NextGenericParamError ::= (!(NextGenericParam / r">") Any)*
+                FunctionParams ::= FunctionParam (NextFunctionParam / NextFunctionParamError)* (I ",")?
+                    FunctionParam ::= DefaultField / Field
+                        DefaultField ::= Field I "=" I Value
+                            @Field ::= (Ident I ":" I Type) / Ident
+                    NextFunctionParam ::= (I "," I FunctionParam)
+                        error NextFunctionParamError ::= (!(NextFunctionParam /  r"\)") Any)*
+                FunctionReturn ::= "->" I Type
+                Block ::= r"\{" I (BlockContent / BlockContentError I)* r"\}"
+                        error BlockContentError ::= (!(BlockContent / r"\}") Any)*
+                    BlockContent ::= Assign / Item / Value
+                        Assign ::= "let" I Ident I "=" I Value
+            Struct_ ::= "struct" I Ident I (GenericParams I)? r"\{" I (StructFields I)? r"\}"
+                StructFields ::= StructParam (I "," I StructParam)* (I ",")?
+                    StructParam ::= DefaultStructField / StructField
+                        DefaultStructField ::= StructField I "=" I Value
+                            @StructField ::= (Ident I ":" I Type) / Type
+
+    Type() ::= Ident
+    Value ::= Block / Literal
+    Literal ::= String / Ident
+
+    Comments ::= Comment ("\n" Comment)*
+        Comment ::= r"//" Any[* "\n"]
+
+    // r"\b[_a-zA-Z][_a-zA-Z0-9]*\b"
+    // https://doc.rust-lang.org/reference/tokens.html#characters-and-strings
+    String ::= BaseString / RawString / Character / Byte / ByteString / RawByteString / CString / RawCString
+        BaseString ::= r#""[^"\\]*(?:\\.[^"\\]*)*""#
+        RawString ::= "r" (WrappedString / BaseString)
+        ByteString ::= "b" BaseString
+        RawByteString ::= "br" (WrappedString / BaseString)
+        CString ::=	"c" BaseString
+        RawCString ::= "cr" (WrappedString / BaseString)
+        Character ::= r"'.*'"
+        Byte ::= "b" Character
+            WrappedString ::= "#" BaseString "#"
+
+    I ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]*"
+        WhiteSpaces ::= r"[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u200E\u200F\u2028\u2029]+"
 }
-
-parse_from_peg_file!(r"src\grammars\base.peg");
 
 mod tokens {
     use super::*;
@@ -107,6 +170,41 @@ mod tokens {
     }
 }
 pub use tokens::*;
+
+#[test]
+fn generics() {
+    let ctxt = Ctxt::from(r#"<T = Type, T, const 22: Type>"#);
+    let b = GenericParams::recog(&ctxt);
+    b.map(|b| {
+        dbg!("pass");
+        dbg!(b.clone());
+        dbg!(&ctxt.errors);
+        dbg!(&ctxt.code.source[dbg!(b.span().end)..]);
+    })
+    .map_err(|e| {
+        dbg!("error");
+        dbg!(e);
+    });
+}
+
+mod error_recovery {
+    use super::*;
+
+    #[test]
+    fn fn_error() {
+        let v = Ctxt::from(r#"fn sdf<T = Type, 2, const T: Type>(){}"#);
+        let b = Fn::recog(&v);
+        b.map(|b| {
+            dbg!("pass");
+            dbg!(b.clone());
+            dbg!(&v.code.source[dbg!(b.span().end)..]);
+        })
+        .map_err(|e| {
+            dbg!("error");
+            dbg!(e);
+        });
+    }
+}
 
 #[test]
 fn language() {
@@ -246,23 +344,25 @@ mod recovery {
     use super::*;
 
     peg_grammar! {
-        Tmp2 ::= Tmp3 "str"
-            Tmp3 ::= (Tok / (!Tok !"str" ".")+)+
+        Items ::= (Tmp1 / Tmp1Error)*
+            error Tmp1Error ::= (!Tmp1 ".")+
         Tmp1 ::= Tmp "fn"
-            Tmp ::= (Tok / (!Tok !"fn" ".")+)+
+            Tmp ::= (Tok / TokError)+
+                error TokError ::= (!(Tok / "fn") ".")+
         Tok ::= "aa;"
     }
 
     #[test]
     fn test1() {
-        let s = r#"aa;aa;ca;aa;aa;fn"#;
-        let v = Ctxt::from(s);
-        let b = Tmp1::recog(&v);
+        let s = r#"aa;aa;ca;aa;aa;fnaa;aa;ca;aa;aa;fn"#;
+        let ctxt = Ctxt::from(s);
+        let b = Items::recog(&ctxt);
 
         b.map(|b| {
             dbg!("pass");
             dbg!(b.clone());
-            dbg!(&v.code.source[dbg!(b.span().end)..]);
+            dbg!(&ctxt.errors);
+            dbg!(&ctxt.code.source[dbg!(b.span().end)..]);
         })
         .map_err(|e| {
             dbg!("error");

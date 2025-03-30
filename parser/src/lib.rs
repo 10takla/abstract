@@ -22,24 +22,29 @@
 )]
 
 use language::*;
-use parser::{CommonError, CommonRecog};
+use parser::{CommonError, CommonRecog, Slice};
 pub use utils::{args::*, print::*};
 
 pub mod language;
 pub mod parser;
 mod utils;
 
-pub fn parse(source: &str) -> (Vec<Item>, Vec<<ItemError as CommonRecog>::Output>) {
-    let v = Items::recog(&source.into()).unwrap();
-    v.data.into_iter().fold(Default::default(), |mut acc, v| {
-        match v {
-            Enum0::V0(v) => {
-                acc.0.push(v);
+pub fn parse(source: &str) -> (Vec<Item>, Vec<(Slice, std::string::String)>) {
+    let ctxt = source.into();
+    let v = Items::recog(&ctxt).unwrap();
+    (
+        v.data.into_iter().fold(Default::default(), |mut acc, v| {
+            match v {
+                Enum0::V0(v) => {
+                    acc.push(v);
+                }
+                Enum0::V1(v) => {}
             }
-            Enum0::V1(v) => {
-                acc.1.push(v);
-            }
-        }
-        acc
-    })
+            acc
+        }),
+        {
+            let v = ctxt.errors.borrow().clone();
+            v
+        },
+    )
 }
